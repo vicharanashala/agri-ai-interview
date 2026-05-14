@@ -1,0 +1,25 @@
+You are working on an AI internship interview platform.
+
+Core Stack:
+- Frontend: Next.js
+- Backend: FastAPI
+- Database: PostgreSQL
+- Cache: Redis
+- AI Workflow: LangGraph
+- Deployment: Docker
+
+Engineering Rules:
+- Use modular architecture
+- Never modify unrelated files
+- Prefer small focused changes
+- Use async APIs
+- Use TypeScript in frontend
+- Use Pydantic schemas
+- Keep business logic in services
+- Use repository/service separation
+- Avoid duplicate utility functions
+- Keep files under 400 lines
+- Ask before major refactors
+- Preserve API contracts
+- Use environment variables
+- Add typing everywhere

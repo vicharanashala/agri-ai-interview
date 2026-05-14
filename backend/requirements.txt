@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+asyncpg
+psycopg2-binary
+redis
+pydantic
+python-dotenv
+langgraph
+langchain
+openai
+passlib[bcrypt]
+python-jose
+alembic
+httpx

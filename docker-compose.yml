@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   backend:
     build:
@@ -8,14 +6,15 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./backend:/app
+      - backend_uploads:/app/uploads
+    env_file:
+      - .env.prod
     environment:
-      - DATABASE_URL=sqlite:///./annam_interviews.db
       - REDIS_URL=redis://redis:6379
     depends_on:
-      - redis
-    env_file:
-      - ./backend/.env
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
 
   frontend:
     build:
@@ -24,31 +23,45 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
-    depends_on:
-      - backend
+      - frontend_prisma:/app/prisma
     env_file:
-      - ./frontend/.env
+      - .env.prod
+    depends_on:
+      backend:
+        condition: service_started
+    restart: unless-stopped
 
-  # Optional: uncomment for production deployment
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Optional: uncomment for production deployment with PostgreSQL
   # postgres:
-  #   image: postgres:16
+  #   image: postgres:16-alpine
   #   environment:
-  #     POSTGRES_USER: admin
-  #     POSTGRES_PASSWORD: admin
-  #     POSTGRES_DB: ai_interview
+  #     POSTGRES_USER: ${POSTGRES_USER}
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  #     POSTGRES_DB: ${POSTGRES_DB}
   #   ports:
   #     - "5432:5432"
   #   volumes:
   #     - postgres_data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 3
 
-  redis:
-    image: redis:7
-    ports:
-      - "6379:6379"
-
-# volumes:
-#   postgres_data:
+volumes:
+  backend_uploads:
+  frontend_prisma:
+  redis_data:
+  # postgres_data:

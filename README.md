@@ -9,12 +9,18 @@ AI-powered interview platform for agriculture domain candidates. Handles end-to-
 ```bash
 git clone https://github.com/vicharanashala/agri-ai-interview.git
 cd agri-ai-interview
-./setup.sh --docker
+
+# Create production env file from template
+cp .env.prod.example .env.prod
+# Edit .env.prod and fill in your real secrets
+
+docker-compose up -d
 ```
 
 Opens at **http://localhost:3000** (frontend) · **http://localhost:8000/docs** (API)
 
-To stop: `./setup.sh --docker down`
+To stop: `docker-compose down`
+To rebuild: `docker-compose build --no-cache && docker-compose up -d`
 
 ### Option 2 — Local (no Docker)
 
@@ -35,7 +41,7 @@ Requires: **Python 3.11+** and **Node 20+**
   - Email: `admin@annam.com`
   - Password: `admin123`
 
-> ⚠️ Change `ADMIN_PASSWORD` in `backend/.env` before deploying.
+> ⚠️ Never commit `.env.prod` — it is gitignored. Use `.env.prod.example` as a template.
 
 ---
 
@@ -89,24 +95,34 @@ Requires: **Python 3.11+** and **Node 20+**
 
 ## ⚙️ Environment Variables
 
-### Backend (`backend/.env`)
+All secrets are stored in `.env.prod` (gitignored — never pushed to GitHub).
 
-```env
-DATABASE_URL=sqlite:///./annam_interviews.db    # or postgresql://...
-REDIS_URL=redis://localhost:6379
-OPENAI_API_KEY=***                            # required
-SECRET_KEY=change…cret
-ADMIN_EMAIL=admin@annam.com
-ADMIN_PASSWORD=admin123
+### Setup
+
+```bash
+# 1. Create .env.prod from the template
+cp .env.prod.example .env.prod
+
+# 2. Fill in your real values
+nano .env.prod
+
+# 3. For GCP Secret Manager (optional — production)
+gcloud secrets create OPENAI_API_KEY --data-file=- <<< "sk-..."
 ```
 
-### Frontend (`frontend/.env.local`)
+### `.env.prod` Variables
 
-```env
-DATABASE_URL=file:./prisma/dev.db
-NEXTAUTH_SECRET=***
-NEXTAUTH_URL=http://localhost:3000
-```
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `OPENAI_API_KEY` | OpenAI API key | `sk-...` |
+| `DATABASE_URL` | SQLite path or PostgreSQL | `sqlite:///./annam_interviews.db` |
+| `SECRET_KEY` | FastAPI auth signing key | 64-char random string |
+| `ADMIN_EMAIL` | Admin login email | `admin@annam.com` |
+| `ADMIN_PASSWORD` | Admin login password | `change-this` |
+| `NEXTAUTH_URL` | Frontend URL | `http://localhost:3000` |
+| `NEXTAUTH_SECRET` | NextAuth signing secret | 32-char random string |
+
+> **For production on GCP**: store secrets in [GCP Secret Manager](https://cloud.google.com/security/products/secret-manager) and fetch at container startup — see [GCP Secret Manager integration](#gcp-secret-manager) below.
 
 ---
 
@@ -128,11 +144,16 @@ NEXTAUTH_URL=http://localhost:3000
 ```
 
 **Interview Flow:**
-1. Candidate completes onboarding → stored in Prisma
+1. Candidate completes onboarding → stored in Prisma (SQLite dev / PostgreSQL prod)
 2. `POST /api/interview/start` → initializes LangGraph workflow
 3. Each answer → `POST /api/interview/message` → `process_answer()` → phase transition
 4. End of interview → evaluation scored via LLM
 5. Admin reviews in dashboard → extends offer
+
+**Named Volumes (Docker):**
+- `backend_uploads` — uploaded resumes and files
+- `frontend_prisma` — Prisma SQLite database
+- `redis_data` — Redis cache
 
 ---
 
@@ -157,7 +178,7 @@ Full docs at **http://localhost:8000/docs**
 ## 🐳 Docker Cheat Sheet
 
 ```bash
-# Start everything
+# Start everything (first time — builds images)
 docker-compose up -d
 
 # View logs
@@ -165,13 +186,16 @@ docker-compose logs -f backend
 docker-compose logs -f frontend
 
 # Rebuild after code changes
-docker-compose build --no-cache
+docker-compose build --no-cache && docker-compose up -d
 
 # Stop everything
 docker-compose down
 
 # Restart a specific service
 docker-compose restart backend
+
+# Clean slate (removes volumes — WARNING: deletes data)
+docker-compose down -v
 ```
 
 ---
@@ -196,6 +220,47 @@ cd frontend && npm test
 cd backend && flake8 .
 cd frontend && npm run lint
 ```
+
+---
+
+## 🔐 Secrets & Security
+
+### Local Development
+
+- `.env` / `.env.local` — gitignored, never pushed
+- `.env.prod.example` — template with placeholder values, pushed to GitHub
+
+### Production (GCP)
+
+Store secrets in **GCP Secret Manager**:
+
+```bash
+# Create secrets
+gcloud secrets create OPENAI_API_KEY --data-file=- <<< "sk-..."
+gcloud secrets create ADMIN_PASSWORD --data-file=- <<< "your-secure-password"
+gcloud secrets create NEXTAUTH_SECRET --data-file=- <<< "your-32-char-secret"
+```
+
+Fetch at container startup via init container or entrypoint script:
+
+```bash
+# In your Cloud Run / GKE deployment
+kubectl create secret generic app-secrets \
+  --from-literal=OPENAI_API_KEY=$(gcloud secrets versions access latest --secret=OPENAI_API_KEY)
+```
+
+### GitHub Actions → GCP (OIDC — no secrets stored)
+
+```yaml
+# .github/workflows/deploy.yml
+- id: auth
+  uses: google-github-actions/auth@v2
+  with:
+    workload_identity_provider: "projects/xxx/locations/global/workloadIdentityPools/yyy"
+    service_account: "deploy@xxx.iam.gserviceaccount.com"
+```
+
+No long-lived tokens needed — uses OIDC token exchange.
 
 ---
 

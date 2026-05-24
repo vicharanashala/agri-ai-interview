@@ -149,8 +149,19 @@ export default function AdminDashboard() {
 
   const loadData = async () => {
     setLoading(true);
-    await Promise.all([loadStats(), loadActiveInterviews(), loadCandidates(), loadGuidelines(), loadCriteria(), loadGeoStats(), loadStateFunnel()]);
-    setLoading(false);
+    try {
+      await Promise.all([
+        loadStats().catch(err => console.error("loadStats error:", err)),
+        loadActiveInterviews().catch(err => console.error("loadActiveInterviews error:", err)),
+        loadCandidates().catch(err => console.error("loadCandidates error:", err)),
+        loadGuidelines().catch(err => console.error("loadGuidelines error:", err)),
+        loadCriteria().catch(err => console.error("loadCriteria error:", err)),
+        loadGeoStats().catch(err => console.error("loadGeoStats error:", err)),
+        loadStateFunnel().catch(err => console.error("loadStateFunnel error:", err)),
+      ]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const loadStats = async () => {
@@ -481,7 +492,7 @@ export default function AdminDashboard() {
                         </td>
                         <td>
                           <div className={styles.phaseProgress}>
-                            {candidate.phases.map((p, idx) => (
+                            {(candidate.phases || []).map((p, idx) => (
                               <div
                                 key={idx}
                                 className={`${styles.phaseDot} ${

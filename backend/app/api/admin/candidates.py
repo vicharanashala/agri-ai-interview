@@ -461,8 +461,6 @@ async def get_stats(
     # Count by phase
     phase_counts = {p: 0 for p in PHASES}
     for r in rows:
-        notes_raw = r.get("notes")
-        notes = json.loads(notes_raw) if isinstance(notes_raw, str) else (notes_raw or {})
         phase = r.get("currentPhase", "onboarding") or "onboarding"
         if phase in phase_counts:
             phase_counts[phase] += 1
@@ -510,9 +508,9 @@ async def get_state_funnel(
     state_data: Dict[str, Dict[str, Any]] = {}
 
     for r in rows:
+        current = r.get("currentPhase", "onboarding") or "onboarding"
         notes_raw = r.get("notes")
         notes = json.loads(notes_raw) if isinstance(notes_raw, str) else (notes_raw or {})
-        current = r.get("currentPhase", "onboarding") or "onboarding"
         cand_state = r.get("state") or "Unknown"
 
         if cand_state not in state_data:
@@ -520,10 +518,10 @@ async def get_state_funnel(
                 "passed": 0, "failed": 0, "offerExtended": 0, "offerAccepted": 0}
 
         state_data[cand_state]["onboarding"] += 1
-        phase_idx = PHASE_ORDER.index(current) if current in PHASE_ORDER else 0
-        if phase_idx >= PHASE_ORDER.index("interview"):
+        phase_idx = PHASE_ORDER.get(current, 0)
+        if phase_idx >= PHASE_ORDER.get("interview", 1):
             state_data[cand_state]["interviewed"] += 1
-        if phase_idx >= PHASE_ORDER.index("offer"):
+        if phase_idx >= PHASE_ORDER.get("offer", 3):
             state_data[cand_state]["offerExtended"] += 1
         if notes.get("acceptedOffer") if isinstance(notes, dict) else False:
             state_data[cand_state]["offerAccepted"] += 1

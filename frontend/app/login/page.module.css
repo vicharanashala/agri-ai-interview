@@ -1,0 +1,248 @@
+.container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: linear-gradient(135deg, #0f172a 0%, #020617 100%);
+  padding: 60px 20px 20px;
+}
+
+.header {
+  position: relative;
+  width: 100%;
+  max-width: 800px;
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.headerTitle {
+  font-size: 36px;
+  font-weight: 700;
+  color: white;
+  margin: 0;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.faqCard {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  background: rgba(8, 203, 0, 0.12);
+  backdrop-filter: blur(12px);
+  border: 1.5px solid rgba(8, 203, 0, 0.35);
+  border-radius: 16px;
+  padding: 24px 28px;
+  margin-bottom: 32px;
+  width: 100%;
+  max-width: 620px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, transform 0.15s;
+}
+
+.faqCard:hover {
+  background: rgba(8, 203, 0, 0.2);
+  border-color: rgba(8, 203, 0, 0.6);
+  transform: translateY(-2px);
+}
+
+.faqIcon {
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  background: rgba(8, 203, 0, 0.15);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+}
+
+.faqContent {
+  flex: 1;
+}
+
+.faqTitle {
+  font-size: 20px;
+  font-weight: 700;
+  color: white;
+  margin: 0 0 6px 0;
+}
+
+.faqDesc {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.75);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.faqArrow {
+  flex-shrink: 0;
+  color: rgba(8, 203, 0, 0.7);
+}
+
+.loginBox {
+  background: white;
+  border-radius: 12px;
+  padding: 48px 40px;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 8px 0;
+  text-align: center;
+}
+
+.subtitle {
+  font-size: 14px;
+  color: #64748b;
+  margin: 0 0 32px 0;
+  text-align: center;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.input {
+  padding: 12px 16px;
+  font-size: 15px;
+  border: 1.5px solid #d1d5db;
+  border-radius: 8px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.input:focus {
+  border-color: #08CB00;
+  box-shadow: 0 0 0 3px rgba(8, 203, 0, 0.15);
+}
+
+.input::placeholder {
+  color: #9ca3af;
+}
+
+.button {
+  margin-top: 8px;
+  padding: 14px;
+  font-size: 16px;
+  font-weight: 600;
+  color: white;
+  background: linear-gradient(135deg, #08CB00 0%, #059669 100%);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(8, 203, 0, 0.4);
+}
+
+.button:active {
+  transform: translateY(0);
+}
+
+.footer {
+  margin-top: 16px;
+  text-align: center;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.forgotPassword {
+  margin-top: 16px;
+  text-align: center;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  margin: 24px 0;
+  color: #9ca3af;
+  font-size: 14px;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #e5e7eb;
+}
+
+.divider span {
+  padding: 0 16px;
+}
+
+.googleButton {
+  width: 100%;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+  background: white;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+.googleButton:hover {
+  background: #f9fafb;
+  border-color: #9ca3af;
+}
+
+.googleButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.link {
+  color: #08CB00;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.error {
+  color: #ef4444;
+  font-size: 14px;
+  text-align: center;
+  margin: 0;
+  padding: 8px 12px;
+  background: #fef2f2;
+  border-radius: 6px;
+  border: 1px solid #fecaca;
+}
+
+.loading {
+  text-align: center;
+  color: #08CB00;
+  font-size: 16px;
+  padding: 40px 0;
+}

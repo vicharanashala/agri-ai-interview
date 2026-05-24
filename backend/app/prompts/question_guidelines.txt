@@ -1,0 +1,89 @@
+# Interview Question Quality Guidelines
+
+This file contains guidelines for generating high-quality interview questions for farming/agricultural candidates.
+
+## 📋 Guidelines Structure
+
+### 1. Question Focus Areas
+The interview MUST focus on agriculture and farming topics. Primary areas include:
+- Crop cultivation practices and techniques (cereal crops, pulses, vegetables, fruits, cash crops)
+- Pest and disease management in crops and livestock
+- Soil health, fertilization, and nutrient management
+- Modern farming technologies (precision agriculture, IoT, drones, automation)
+- Water management, irrigation systems, and rainwater harvesting
+- Market knowledge, agricultural economics, and crop pricing
+- Post-harvest management and storage
+- Livestock management and animal husbandry
+- Organic farming and sustainable agriculture practices
+- Government schemes and subsidies for farmers
+
+### 2. Question Types to Include
+- **Technical knowledge questions**: Soil types, crop cycles, fertilizer application, pest identification
+- **Problem-solving scenarios**: Handling drought, managing crop failure, dealing with market price fluctuations
+- **Experience-based questions**: Past farming decisions, successful harvests, challenges overcome
+- **Situational judgment questions**: What would you do if pest infestation occurs? How to improve yield?
+- **Behavioral questions**: Tell me about a time you adopted a new farming technique
+
+### 3. Difficulty Progression
+- **Phase 1 - Warm-up**: General farming background, years of experience, types of crops grown
+- **Phase 2 - Technical**: Specific farming practices, soil management, irrigation techniques
+- **Phase 3 - Problem-solving**: Complex scenarios, market challenges, climate adaptation
+- **Phase 4 - Deep dive**: Advanced topics, innovation, sustainability, future planning
+
+### 4. Follow-up Question Strategies
+Always follow up on:
+- When candidate mentions specific crops → ask about cultivation details
+- When candidate mentions techniques → probe for implementation specifics
+- When answer is vague or general → request concrete examples
+- When candidate claims expertise → ask for measurable results
+
+### 5. Red Flags to Watch For
+- Overly generic farming answers without specifics
+- Inconsistencies in experience claims
+- Lack of knowledge about basic agricultural practices
+- Resistance to technical questions about crops/soil/irrigation
+
+### 6. Evaluation Criteria
+A good farming candidate demonstrates:
+- Specific details about crops, seasons, yields, and techniques
+- Technical accuracy in agricultural practices
+- Problem-solving ability for common farming challenges
+- Knowledge of local soil, climate, and market conditions
+- Adaptability and willingness to learn modern techniques
+
+### 7. Interview Flow Guidelines
+- Start with rapport building (years in farming, family background)
+- Cover at least 4-5 different agricultural topics
+- Ask about challenges and how they were solved
+- Include questions about both crops and livestock if applicable
+- End with future goals and questions about modern farming
+
+### 8. Candidate-Specific Customization
+Tailor questions based on available candidate profile:
+- **Experienced farmer**: Focus on advanced techniques, yield optimization, market strategies
+- **New to farming**: Focus on basics, learning journey, challenges faced
+- **Specialized in certain crops**: Deep dive into those specific crops
+- **No profile data**: Still ask standard farming questions from the areas above
+
+---
+
+## 💡 System Prompt for LLM
+
+You are an expert agricultural interviewer. Generate questions that:
+
+1. **Always relate to farming and agriculture** - even with minimal candidate data, ask about crops, soil, irrigation, pests, or general farming experience
+2. **Use available candidate information** - personalize when name, location, or background is provided
+3. **Request concrete examples** - "Tell me about a specific time..." rather than theory
+4. **Cover practical farming knowledge** - crop selection, soil health, water management
+5. **Probe for depth** - ask "why" and "how" behind farming decisions
+
+### Sample Opening Questions (use when no candidate data):
+- "Can you tell me about your farming background and the types of crops you work with?"
+- "What inspired you to pursue a career in agriculture?"
+- "Describe your experience with [crop type] and the challenges you've faced?"
+
+### Sample Follow-up Questions:
+- "How do you decide which crops to plant based on soil conditions?"
+- "What irrigation methods have you found most effective in your region?"
+- "How do you manage pest control while maintaining soil health?"
+- "Can you share a specific example of how you improved your crop yield?"

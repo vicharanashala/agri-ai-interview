@@ -1,25 +1,628 @@
-You are working on an AI internship interview platform.
+# Cursor Rules - AI Interview Platform
 
-Core Stack:
-- Frontend: Next.js
-- Backend: FastAPI
-- Database: PostgreSQL
-- Cache: Redis
-- AI Workflow: LangGraph
-- Deployment: Docker
+## PURPOSE
+This file contains MANDATORY rules for all agent operations. Every response MUST follow these rules. No exceptions without explicit user approval.
 
-Engineering Rules:
-- Use modular architecture
-- Never modify unrelated files
-- Prefer small focused changes
-- Use async APIs
-- Use TypeScript in frontend
-- Use Pydantic schemas
-- Keep business logic in services
-- Use repository/service separation
-- Avoid duplicate utility functions
-- Keep files under 400 lines
-- Ask before major refactors
-- Preserve API contracts
-- Use environment variables
-- Add typing everywhere
+---
+
+## SECTION 1: MANDATORY EXECUTION PROTOCOL
+
+### 1.1 ALWAYS Follow This Order
+1. Read the task file (tasks/TASK-XXX.md)
+2. Read these cursor rules
+3. Read relevant documentation (docs/*.md)
+4. Read relevant source files
+5. Execute task
+6. Validate against checklist
+7. Complete
+
+### 1.2 Task File Handling
+- Parse TASK-XXX.md completely before any action
+- Task file is the SOURCE OF TRUTH for requirements
+- Cursor rules define HOW to implement, not WHAT to implement
+- If task conflicts with cursor rules, ASK the user
+- Never skip steps in task file
+- Never add features not in task file
+
+### 1.3 Exit Criteria (ALL must be met)
+- [ ] Task requirements satisfied (per task file)
+- [ ] All checks in VALIDATION CHECKLIST passed
+- [ ] No files modified outside task scope
+- [ ] TypeScript types valid (if frontend)
+- [ ] Python types valid (if backend)
+- [ ] No linter errors
+- [ ] Tests pass (if applicable)
+
+---
+
+## SECTION 2: FILE MODIFICATION RULES
+
+### 2.1 Allowed Operations
+- MODIFY only files listed in task scope
+- CREATE new files only if task explicitly requires
+- DELETE never (ask user first)
+- RENAME never
+
+### 2.2 Forbidden Operations
+- NEVER modify files not in task scope
+- NEVER modify generated files (node_modules, __pycache__, .next)
+- NEVER modify .env files directly
+- NEVER modify package-lock.json or yarn.lock
+- NEVER modify docker-compose.yml unless in task scope
+- NEVER modify .gitignore
+- NEVER modify docs/*.md unless explicitly in task
+
+### 2.3 Scope Enforcement
+- If a file isn't in the task scope, DO NOT touch it
+- If you need to modify a file outside scope, STOP and ASK
+- Exception: Adding imports to existing files if required for task
+
+---
+
+## SECTION 3: PROJECT ARCHITECTURE
+
+### 3.1 Directory Structure (STRICT)
+```
+/
+├── frontend/                    # Next.js application
+│   ├── app/                     # App router pages
+│   │   ├── [page]/page.tsx      # Page component
+│   │   ├── [page]/page.module.css
+│   │   └── api/                 # API routes (client-side)
+│   ├── components/              # Reusable components
+│   ├── hooks/                   # Custom hooks
+│   ├── lib/                     # Utilities
+│   ├── services/                # API clients
+│   ├── types/                   # TypeScript types
+│   └── prisma/                  # Database schema
+│
+├── backend/                     # FastAPI application
+│   ├── app/
+│   │   ├── api/                 # API endpoints
+│   │   ├── core/                # Config
+│   │   ├── db/                  # Database models
+│   │   ├── llm/                 # LLM service
+│   │   ├── models/              # Pydantic schemas
+│   │   ├── prompts/             # Prompt files
+│   │   ├── schemas/             # Request/Response schemas
+│   │   ├── services/            # Business logic
+│   │   ├── utils/               # Utilities
+│   │   ├── workflows/           # LangGraph workflows
+│   │   └── main.py              # FastAPI app
+│   └── requirements.txt
+│
+├── docs/                        # Documentation (READ ONLY)
+├── infra/                       # Infrastructure
+└── tasks/                       # Task definitions
+```
+
+### 3.2 Dependency Rules
+- Frontend CANNOT access database directly
+- Frontend CAN only call frontend/app/api/* routes
+- Backend CAN access all backend services
+- Frontend API routes proxy to backend
+- NEVER import backend code in frontend
+
+---
+
+## SECTION 4: FRONTEND RULES
+
+### 4.1 File Naming
+- Pages: `page.tsx` + `page.module.css`
+- Components: `PascalCase.tsx` + `PascalCase.module.css`
+- Hooks: `useCamelCase.ts`
+- Services: `camelCase.ts`
+- Types: `types.ts` or `camelCase.ts`
+
+### 4.2 Page Structure
+```typescript
+// frontend/app/[route]/page.tsx
+'use client'  // If uses client-side state
+
+import styles from './page.module.css'
+
+// Types at top
+interface Props {
+  // ...
+}
+
+// Default export is page component
+export default function Page({ params }: Props) {
+  return (
+    <div className={styles.container}>
+      {/* JSX */}
+    </div>
+  )
+}
+```
+
+### 4.3 Component Rules
+- Components go in frontend/components/
+- Use 'use client' only when needed (hooks, state, event handlers)
+- Default to server components
+- Use CSS modules, not inline styles or Tailwind
+- Types MUST be defined, never use 'any'
+
+### 4.4 API Route Rules
+```typescript
+// frontend/app/api/[resource]/route.ts
+import { NextResponse } from 'next/server'
+
+export async function GET(request: Request) {
+  // Implementation
+}
+
+export async function POST(request: Request) {
+  // Implementation
+}
+```
+
+### 4.5 State Management
+- Use React useState for local state
+- Use React useContext for shared state
+- Do NOT use Redux or Zustand without approval
+- Do NOT use global state for component-local data
+
+### 4.6 TypeScript Rules
+- NEVER use `any` type
+- Always define interfaces for props
+- Use strict TypeScript
+- Types can be defined inline in components OR in types/ directory
+- Example:
+```typescript
+// GOOD
+interface Candidate {
+  id: string
+  name: string
+  email: string
+}
+
+// BAD
+const candidate: any = response
+```
+
+---
+
+## SECTION 5: BACKEND RULES
+
+### 5.1 File Naming
+- API routes: `camelCase.py` (e.g., `interview.py`)
+- Services: `camel_case.py` in services/
+- Models: `snake_case.py` in models/
+- Pydantic schemas: `snake_case.py` in schemas/
+- DB models: `snake_case.py` in db/models/
+
+### 5.2 API Route Structure
+Pydantic schemas can be inline or imported from `app.schemas`. Services are optional for simple projects.
+```python
+# backend/app/api/[resource]/route.py
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel
+
+# Inline schema (simpler projects)
+class RequestSchema(BaseModel):
+    field: str
+
+# OR import from schemas/ (complex projects)
+# from app.schemas.resource import SchemaName
+
+router = APIRouter()
+
+@router.post("/endpoint")
+async def endpoint(schema: RequestSchema) -> dict:
+    return {"status": "ok"}
+```
+
+### 5.3 Pydantic Schema Rules
+Pydantic schemas can be defined either:
+- Inline within route files (common for simpler projects)
+- In `backend/app/schemas/` directory (for complex projects)
+
+```python
+# Inline in route file (frontend/app/api/interview/route.py)
+from pydantic import BaseModel
+
+class StartInterviewRequest(BaseModel):
+    candidate_id: str
+    job_role: str
+
+# OR in schemas directory (backend/app/schemas/resource.py)
+from pydantic import BaseModel, EmailStr
+from typing import Optional
+
+class SchemaName(BaseModel):
+    field: str
+    optional_field: Optional[str] = None
+    
+    class Config:
+        from_attributes = True
+```
+
+### 5.4 Service Layer Rules
+- Business logic typically goes in services/
+- Services handle business rules
+- Routes handle HTTP only
+- For simpler projects, business logic can remain in routes
+- Use async/await for all service methods
+
+```python
+# backend/app/services/candidate.py
+from typing import List
+from app.db.models.candidate import Candidate
+
+class CandidateService:
+    async def create(self, data: CreateCandidate) -> Candidate:
+        # Business logic here
+        pass
+```
+
+### 5.5 Database Models
+This project uses **Prisma** for database management. Schema is defined in:
+- `frontend/prisma/schema.prisma`
+
+For projects using SQLAlchemy:
+```python
+# backend/app/db/models/candidate.py
+from sqlalchemy import Column, String, DateTime
+from sqlalchemy.orm import DeclarativeBase
+
+class Base(DeclarativeBase):
+    pass
+
+class Candidate(Base):
+    __tablename__ = "candidates"
+    
+    id = Column(String, primary_key=True)
+    name = Column(String, nullable=False)
+```
+
+### 5.6 Type Hints
+- All functions MUST have type hints
+- Return types MUST be specified
+- Never use bare `Any`
+- Example:
+```python
+# GOOD
+async def get_candidate(candidate_id: str) -> Candidate:
+    pass
+
+# BAD
+async def get_candidate(candidate_id):
+    pass
+```
+
+---
+
+## SECTION 6: AI / LANGGRAPH RULES
+
+### 6.1 Workflow Structure
+```python
+# backend/app/workflows/interview_workflow.py
+from langgraph.graph import StateGraph
+from pydantic import BaseModel
+from typing import TypedDict
+
+class InterviewState(TypedDict):
+    messages: list
+    current_question: str
+    evaluation_score: float
+
+def create_interview_workflow() -> StateGraph:
+    graph = StateGraph(InterviewState)
+    # Add nodes and edges
+    return graph.compile()
+```
+
+### 6.2 Node Implementation
+- Each node is a function: `def node_name(state: State) -> dict`
+- Nodes modify state and return dict of changes
+- Use type hints for state
+- Keep nodes focused (one responsibility)
+
+### 6.3 Prompt Management
+- Prompts go in backend/app/prompts/
+- Never hardcode prompts in code
+- Load prompts from files
+- Follow template pattern
+
+### 6.4 Evaluation Rules
+- Use structured evaluation criteria
+- Store evaluation results in database
+- Include confidence scores
+- Log evaluation decisions
+
+---
+
+## SECTION 7: APPROVAL REQUIREMENTS
+
+### 7.1 MUST Request Approval For
+- Deleting any files
+- Modifying docker-compose.yml
+- Modifying database schema
+- Modifying authentication code
+- Modifying environment files
+- Any infrastructure changes
+- Modifying docs/*.md files
+- Large refactors (>5 files)
+
+### 7.2 Risk Classification
+
+| Risk | Examples | Approval |
+|------|----------|----------|
+| LOW | UI styling, docs | Not required |
+| MEDIUM | API changes, services | Recommended |
+| HIGH | Auth, schema, infra | Required |
+| CRITICAL | Production, secrets | Mandatory |
+
+### 7.3 Forbidden Autonomous Actions
+- NEVER deploy to production
+- NEVER delete databases
+- NEVER modify secrets
+- NEVER disable auth
+- NEVER bypass validation
+
+---
+
+## SECTION 8: CODE STYLE RULES
+
+### 8.1 General Principles
+- Clarity over cleverness
+- Explicit over implicit
+- Small focused changes
+- Single responsibility
+- No premature optimization
+
+### 8.2 File Size Limits
+- Maximum 400 lines per file
+- If file exceeds limit, decompose
+- Exceptions require approval
+
+### 8.3 Naming Conventions
+
+| Type | Convention | Example |
+|------|------------|---------|
+| TypeScript variables | camelCase | `userName` |
+| TypeScript functions | camelCase | `getUser()` |
+| TypeScript classes | PascalCase | `UserService` |
+| Python variables | snake_case | `user_name` |
+| Python functions | snake_case | `get_user()` |
+| Python classes | PascalCase | `UserService` |
+| Files (TS) | camelCase | `userService.ts` |
+| Files (Python) | snake_case | `user_service.py` |
+
+### 8.4 Import Order
+
+**TypeScript:**
+1. React/Next.js imports
+2. Third-party imports
+3. Internal imports
+4. Types/interfaces
+5. Styles
+
+**Python:**
+1. Standard library
+2. Third-party
+3. Local application
+
+---
+
+## SECTION 9: ERROR HANDLING
+
+### 9.1 Backend Errors
+```python
+from fastapi import HTTPException
+
+async def endpoint():
+    try:
+        result = await service.operation()
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Internal error")
+```
+
+### 9.2 Frontend Errors
+```typescript
+try {
+  const response = await fetch('/api/resource')
+  if (!response.ok) throw new Error('Request failed')
+  const data = await response.json()
+} catch (error) {
+  console.error('Error:', error)
+  // Show user-friendly message
+}
+```
+
+### 9.3 Error Messages
+- Never expose internal details
+- Log errors server-side
+- Show generic messages to users
+- Include error codes for debugging
+
+---
+
+## SECTION 10: VALIDATION CHECKLIST
+
+### 10.1 Pre-Implementation
+- [ ] Task file read completely
+- [ ] Affected files identified
+- [ ] No scope creep identified
+- [ ] Dependencies understood
+
+### 10.2 Post-Implementation
+
+**Frontend:**
+- [ ] `npm run build` passes
+- [ ] No TypeScript errors
+- [ ] All imports resolve
+- [ ] Types are correct
+
+**Backend:**
+- [ ] `python -m py_compile` passes
+- [ ] No type errors
+- [ ] All imports resolve
+- [ ] Pydantic models valid
+
+### 10.3 General
+- [ ] No unrelated files modified
+- [ ] No linter errors
+- [ ] Task requirements met
+- [ ] Documentation updated (if required)
+
+---
+
+## SECTION 11: MODE-SPECIFIC RULES
+
+### 11.1 PLAN MODE
+When in PLAN MODE:
+1. Gather information via read_file
+2. Analyze requirements
+3. Create implementation plan
+4. Present plan via plan_mode_respond
+5. Wait for user approval
+6. If approved, user switches to ACT MODE
+7. Do NOT implement in PLAN MODE
+
+### 11.2 ACT MODE
+When in ACT MODE:
+1. Read task file
+2. Read cursor rules
+3. Implement according to plan
+4. Follow validation checklist
+5. Complete task
+
+### 11.3 Mode Switching
+- You CANNOT switch modes yourself
+- User must manually switch
+- Wait for user to toggle mode
+- Never implement in PLAN MODE
+
+---
+
+## SECTION 12: FORBIDDEN PATTERNS
+
+### 12.1 Never Do These
+
+**Frontend:**
+```typescript
+// NEVER: Use any
+const data: any = response
+
+// NEVER: Inline styles
+<div style={{ color: 'red' }}>
+
+// NEVER: Default exports without types
+export default function Page() {
+
+// NEVER: Console.log in production
+console.log(data)
+
+// NEVER: Hardcoded URLs
+fetch('http://localhost:8000/api')
+
+// NEVER: Passwords in code
+const password = 'secret'
+```
+
+**Backend:**
+```python
+# NEVER: Use Any without reason
+def func(x: Any) -> Any:
+
+# NEVER: Global state
+global_candidate = None
+
+# NEVER: Print in production
+print(data)
+
+# NEVER: Hardcoded secrets
+api_key = 'secret-key'
+
+# NEVER: SQL in routes
+cursor.execute(f"SELECT * FROM {table}")
+
+# NEVER: Synchronous blocking calls
+result = requests.get(url)  # Use httpx async
+```
+
+### 12.2 Security Never-Do List
+- Never commit secrets
+- Never expose internal error details
+- Never skip input validation
+- Never trust user input
+- Never disable CORS without reason
+
+---
+
+## SECTION 13: TASK EXECUTION EXAMPLES
+
+### Example 1: Adding a New API Route
+1. Read task file
+2. Create file at `backend/app/api/[resource]/route.py`
+3. Use template from Section 5.2
+4. Create Pydantic schema in `schemas/`
+5. Create/update service in `services/`
+6. Register route in `main.py`
+7. Validate (py_compile, types)
+8. Complete
+
+### Example 2: Adding a Frontend Page
+1. Read task file
+2. Create `frontend/app/[route]/page.tsx`
+3. Create `frontend/app/[route]/page.module.css`
+4. Use template from Section 4.2
+5. Create API route in `frontend/app/api/[resource]/route.ts`
+6. Add types to `types.ts`
+7. Validate (build, types)
+8. Complete
+
+### Example 3: Modifying LangGraph Workflow
+1. Read task file
+2. Read existing workflow in `workflows/`
+3. Add/update nodes following Section 6.2
+4. Update state definition if needed
+5. Load prompts from `prompts/` files
+6. Validate (py_compile, types)
+7. Test workflow manually
+8. Complete
+
+---
+
+## SECTION 14: QUICK REFERENCE
+
+### Commands
+
+**Frontend:**
+```bash
+npm run dev     # Development
+npm run build   # Production build
+npm run lint    # Lint check
+```
+
+**Backend:**
+```bash
+python -m uvicorn app.main:app --reload  # Development
+python -m py_compile app/               # Syntax check
+```
+
+### Key Files by Feature
+
+| Feature | Frontend | Backend |
+|---------|----------|---------|
+| Auth | app/login, app/api/auth | api/admin/auth.py |
+| Interview | app/interview | api/interview/route.py |
+| Evaluation | - | api/interview/evaluate.py |
+| Admin | app/admin | api/admin/*.py |
+| Workflows | - | workflows/*.py |
+| Prompts | - | prompts/*.txt |
+
+---
+
+## ENFORCEMENT
+
+These rules are MANDATORY. Violations may result in:
+- Rejected code reviews
+- Rollback of changes
+- Additional approval requirements
+
+When in doubt: ASK before ACT.

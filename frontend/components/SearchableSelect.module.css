@@ -1,0 +1,136 @@
+.wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.hiddenSelect {
+  display: none;
+}
+
+/* ─── Search box (replaces a normal input) ─────────────────── */
+.searchBox {
+  display: flex;
+  align-items: center;
+  padding: 11px 14px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  cursor: text;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  min-height: 46px;
+  box-sizing: border-box;
+}
+
+.searchBox:focus-within,
+.searchBox.open {
+  border-color: #08CB00;
+  box-shadow: 0 0 0 3px rgba(8, 203, 0, 0.15);
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.searchBox.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.searchInput {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 15px;
+  color: white;
+  min-width: 0;
+  padding: 0;
+  width: 100%;
+}
+
+.searchInput::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.searchInput:disabled {
+  cursor: not-allowed;
+}
+
+/* ─── Dropdown list ─────────────────────────────────────────── */
+.dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: #1e293b;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  max-height: 280px;
+  overflow-y: auto;
+  z-index: 200;
+  animation: dropIn 0.15s ease;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.15) transparent;
+}
+
+.dropdown::-webkit-scrollbar {
+  width: 5px;
+}
+.dropdown::-webkit-scrollbar-track {
+  background: transparent;
+}
+.dropdown::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.15);
+  border-radius: 3px;
+}
+
+@keyframes dropIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Dropdown option items ─────────────────────────────────── */
+.option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14.5px;
+  color: rgba(255, 255, 255, 0.85);
+  transition: background 0.1s, color 0.1s;
+}
+
+.option:hover,
+.option.highlighted {
+  background: rgba(8, 203, 0, 0.12);
+  color: white;
+}
+
+.option.selected {
+  color: #08CB00;
+  font-weight: 600;
+}
+
+.optionHighlight mark {
+  background: rgba(255, 193, 7, 0.25);
+  color: #fbbf24;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+.noResults {
+  padding: 14px 12px;
+  text-align: center;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.35);
+  font-style: italic;
+}
+
+.checkIcon {
+  flex-shrink: 0;
+  color: #08CB00;
+}

@@ -1,29 +1,56 @@
 # Python
 __pycache__/
-*.pyc
+*.py[cod]
 .venv/
 venv/
+*.egg-info/
+dist/
+build/
 
 # Node
 node_modules/
 .next/
+out/
 
-# Env
+# Env secrets — NEVER commit
 .env
-
-# Mac
-.DS_Store
+.env.local
+.env.*.local
 
 # Logs
 *.log
+npm-debug.log*
 
-# Build
-dist/
-build/
+# OS
+.DS_Store
+Thumbs.db
 
-# Cursor
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Database — local SQLite/Prisma files
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# TypeScript build cache
+*.tsbuildinfo
+
+# Cursor / AI tooling
 .cursor/
+.cursorrules
 
 # Testing
 .coverage
 pytest_cache/
+htmlcov/
+
+# PIDs
+*.pid
+
+# Prisma
+frontend/prisma/migrations/

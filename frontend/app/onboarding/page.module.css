@@ -1,0 +1,543 @@
+.container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #0f172a 0%, #020617 100%);
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.header {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 20px 40px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.logo {
+  font-size: 22px;
+  font-weight: 700;
+  color: white;
+}
+
+.logoAccent {
+  color: #08CB00;
+}
+
+.backLink {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.7);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.backLink:hover {
+  color: #08CB00;
+}
+
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+}
+
+.stepIndicator {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 40px;
+}
+
+.step {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.5);
+  transition: all 0.3s ease;
+}
+
+.step.active {
+  background: #08CB00;
+  border-color: #08CB00;
+  color: white;
+  box-shadow: 0 0 0 4px rgba(8, 203, 0, 0.2);
+}
+
+.step.completed {
+  background: rgba(8, 203, 0, 0.2);
+  border-color: #08CB00;
+  color: #08CB00;
+}
+
+.stepConnector {
+  width: 60px;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.stepConnector.active {
+  background: #08CB00;
+}
+
+.card {
+  background: white;
+  border-radius: 20px;
+  padding: 48px;
+  width: 100%;
+  max-width: 560px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: fadeIn 0.4s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.stepTitle {
+  font-size: 28px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 8px 0;
+}
+
+.stepSubtitle {
+  font-size: 15px;
+  color: #64748b;
+  margin: 0 0 32px 0;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.input {
+  padding: 12px 16px;
+  font-size: 15px;
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  background: rgba(255, 255, 255, 0.07);
+  color: white;
+}
+
+.input:focus {
+  border-color: #08CB00;
+  box-shadow: 0 0 0 3px rgba(8, 203, 0, 0.12);
+}
+
+.input::placeholder {
+  color: #9ca3af;
+}
+
+.select {
+  padding: 12px 16px;
+  font-size: 15px;
+  border: 1.5px solid #d1d5db;
+  border-radius: 10px;
+  outline: none;
+  background: white;
+  cursor: pointer;
+  transition: border-color 0.2s;
+  appearance: none;
+}
+
+.select:focus {
+  border-color: #08CB00;
+  box-shadow: 0 0 0 3px rgba(8, 203, 0, 0.12);
+}
+
+.buttons {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.backButton {
+  padding: 14px 28px;
+  font-size: 15px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.backButton:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: white;
+}
+
+.nextButton {
+  flex: 1;
+  padding: 14px 28px;
+  font-size: 15px;
+  font-weight: 600;
+  color: white;
+  background: linear-gradient(135deg, #08CB00 0%, #059669 100%);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(8, 203, 0, 0.3);
+}
+
+.nextButton:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(8, 203, 0, 0.4);
+}
+
+.nextButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.error {
+  color: #fca5a5;
+  font-size: 14px;
+  padding: 10px 14px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 8px;
+}
+
+.success {
+  color: #86efac;
+  font-size: 14px;
+  padding: 10px 14px;
+  background: rgba(5, 150, 105, 0.12);
+  border: 1px solid rgba(5, 150, 105, 0.3);
+  border-radius: 8px;
+}
+
+/* ─── Shared / layout ─────────────────────────────────────────── */
+.formBox {
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 20px;
+  padding: 48px;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  backdrop-filter: blur(16px);
+  animation: fadeIn 0.4s ease;
+}
+
+.title {
+  font-size: 26px;
+  font-weight: 700;
+  color: white;
+  margin: 0 0 8px 0;
+}
+
+.subtitle {
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.5);
+  margin: 0 0 32px 0;
+}
+
+/* ─── Form sections ───────────────────────────────────────────── */
+.section {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 24px;
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.section:first-of-type {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
+}
+
+.sectionTitle {
+  font-size: 16px;
+  font-weight: 700;
+  color: #08CB00;
+  margin: 0 0 4px 0;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.required {
+  color: #ef4444;
+  margin-left: 2px;
+}
+
+/* ─── Input / textarea / select ───────────────────────────────── */
+.input:focus {
+  border-color: #08CB00;
+  box-shadow: 0 0 0 3px rgba(8, 203, 0, 0.15);
+}
+
+.select:focus {
+  border-color: #08CB00;
+  box-shadow: 0 0 0 3px rgba(8, 203, 0, 0.15);
+}
+
+.textarea {
+  padding: 12px 16px;
+  font-size: 15px;
+  font-family: inherit;
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  outline: none;
+  background: rgba(255, 255, 255, 0.06);
+  color: white;
+  resize: vertical;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.textarea::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.textarea:focus {
+  border-color: #08CB00;
+  box-shadow: 0 0 0 3px rgba(8, 203, 0, 0.15);
+}
+
+/* Select arrow (chevron) */
+.input:has(option) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 38px;
+}
+
+/* Fix option colours inside select */
+.input option {
+  background: #1e293b;
+  color: white;
+}
+
+/* ─── Field error ─────────────────────────────────────────────── */
+.fieldError {
+  font-size: 13px;
+  color: #ef4444;
+  margin-top: -4px;
+}
+
+/* ─── Frozen view ─────────────────────────────────────────────── */
+.frozenBanner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px;
+  background: rgba(8, 203, 0, 0.1);
+  border: 1px solid rgba(8, 203, 0, 0.3);
+  border-radius: 10px;
+  margin-bottom: 28px;
+}
+
+.frozenIcon {
+  font-size: 20px;
+}
+
+.frozenText {
+  font-size: 14px;
+  font-weight: 600;
+  color: #08CB00;
+}
+
+.frozenForm {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.displayField {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.displayLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.45);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.displayValue {
+  font-size: 15px;
+  color: white;
+  font-weight: 500;
+}
+
+/* ─── Resume section ──────────────────────────────────────────── */
+.resumeSection {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.resumePreview {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  background: rgba(8, 203, 0, 0.08);
+  border: 1px solid rgba(8, 203, 0, 0.25);
+  border-radius: 10px;
+}
+
+.resumeIcon {
+  font-size: 24px;
+}
+
+.resumeInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.resumeName {
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.resumeSize {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 2px;
+}
+
+.resumeActions {
+  flex-shrink: 0;
+}
+
+.resumeInput {
+  display: none;
+}
+
+.removeButton {
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.removeButton:hover {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+.resumeUpload {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 32px 20px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1.5px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.resumeUpload:hover {
+  border-color: #08CB00;
+  background: rgba(8, 203, 0, 0.05);
+}
+
+.uploadIcon {
+  font-size: 28px;
+}
+
+.uploadText {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.uploadHint {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+/* ─── Submit button (non-form view) ───────────────────────────── */
+.button {
+  padding: 14px 28px;
+  font-size: 15px;
+  font-weight: 700;
+  color: white;
+  background: linear-gradient(135deg, #08CB00 0%, #059669 100%);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(8, 203, 0, 0.35);
+  transition: all 0.2s;
+  margin-top: 8px;
+}
+
+.button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(8, 203, 0, 0.45);
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ─── Responsive ──────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .row { grid-template-columns: 1fr; }
+  .card { padding: 32px 24px; }
+  .formBox { padding: 28px 20px; }
+}

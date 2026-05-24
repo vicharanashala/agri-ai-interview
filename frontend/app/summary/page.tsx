@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import styles from './page.module.css';
+import { syncPhaseToDb } from '@/lib/phaseSync';
 
 interface MetricScore {
   score: number;
@@ -117,14 +118,15 @@ export default function SummaryPage() {
     fetchEvaluation();
   }, []);
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     localStorage.setItem('interviewPhase', '4');
-    
+
     // If student passed, mark as passed and visited summary to unlock offer letter phase
     if (evaluation && evaluation.overall_score > 1) {
       localStorage.setItem('passedAndVisitedSummary', 'true');
     }
-    
+
+    await syncPhaseToDb(4);
     router.push('/dashboard');
   };
 

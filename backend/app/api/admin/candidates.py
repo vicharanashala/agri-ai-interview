@@ -121,7 +121,7 @@ def _candidate_row_to_response(row: Dict[str, Any]) -> CandidateResponse:
     else:
         notes = notes_raw or {}
 
-    current_phase = notes.get("current_phase", "onboarding") if isinstance(notes, dict) else "onboarding"
+    current_phase = row.get("currentPhase", "onboarding") or "onboarding"
 
     phases = [
         PhaseStatus(
@@ -457,7 +457,7 @@ async def get_stats(
     for r in rows:
         notes_raw = r.get("notes")
         notes = json.loads(notes_raw) if isinstance(notes_raw, str) else (notes_raw or {})
-        phase = notes.get("current_phase", "onboarding") if isinstance(notes, dict) else "onboarding"
+        phase = r.get("currentPhase", "onboarding") or "onboarding"
         if phase in phase_counts:
             phase_counts[phase] += 1
 
@@ -506,7 +506,7 @@ async def get_state_funnel(
     for r in rows:
         notes_raw = r.get("notes")
         notes = json.loads(notes_raw) if isinstance(notes_raw, str) else (notes_raw or {})
-        current = notes.get("current_phase", "onboarding") if isinstance(notes, dict) else "onboarding"
+        current = r.get("currentPhase", "onboarding") or "onboarding"
         cand_state = r.get("state") or "Unknown"
 
         if cand_state not in state_data:

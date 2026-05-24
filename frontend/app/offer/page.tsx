@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import styles from './page.module.css';
+import { syncPhaseToDb } from '@/lib/phaseSync';
 
 export default function OfferPage() {
   const [isLoading, setIsLoading] = useState(true);
@@ -17,26 +18,28 @@ export default function OfferPage() {
   const [isOfferSigned, setIsOfferSigned] = useState(false);
 
   useEffect(() => {
-    const currentPhase = localStorage.getItem('interviewPhase');
-    const offerSigned = localStorage.getItem('offerSigned') === 'true';
-    setIsOfferSigned(offerSigned);
+    (async () => {
+      const currentPhase = localStorage.getItem('interviewPhase');
+      const offerSigned = localStorage.getItem('offerSigned') === 'true';
+      setIsOfferSigned(offerSigned);
 
-    if (currentPhase && parseInt(currentPhase) < 3) {
-      router.push('/dashboard');
-    } else {
-      // Update phase to 5 (View Offer Letter completed, Submit Signed Offer in progress)
-      // Only update phase if offer is not already signed
-      if (!offerSigned) {
-        localStorage.setItem('interviewPhase', '5');
+      if (currentPhase && parseInt(currentPhase) < 3) {
+        router.push('/dashboard');
+      } else {
+        // Phase 4 (View Offer Letter) — only update phase if offer is not already signed
+        if (!offerSigned) {
+          localStorage.setItem('interviewPhase', '4');
+          await syncPhaseToDb(4); // Sync to DB so admin sees correct phase
+        }
+
+        // Get candidate info from localStorage
+        const name = localStorage.getItem('candidateName') || 'Candidate';
+        const email = localStorage.getItem('candidateEmail') || 'candidate@email.com';
+        const phone = localStorage.getItem('candidatePhone') || '+91 9876543210';
+        setCandidateInfo({ name, email, phone });
+        setIsLoading(false);
       }
-      
-      // Get candidate info from localStorage
-      const name = localStorage.getItem('candidateName') || 'Candidate';
-      const email = localStorage.getItem('candidateEmail') || 'candidate@email.com';
-      const phone = localStorage.getItem('candidatePhone') || '+91 9876543210';
-      setCandidateInfo({ name, email, phone });
-      setIsLoading(false);
-    }
+    })();
   }, [router]);
 
   const fetchPdfUrl = async () => {
@@ -97,7 +100,9 @@ export default function OfferPage() {
     document.body.removeChild(link);
   };
 
-  const handleESign = () => {
+  const handleESign = async () => {
+    // Advance to Phase 5 (Submit Signed Offer)
+    await syncPhaseToDb(5);
     router.push('/dashboard');
   };
 

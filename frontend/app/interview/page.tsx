@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import styles from './page.module.css';
+import { syncPhaseToDb } from '@/lib/phaseSync';
 
 interface Message {
   role: 'ai' | 'user';
@@ -235,7 +236,8 @@ export default function InterviewPage() {
         localStorage.setItem('interviewJustCompleted', 'true');
         sessionStorage.setItem('interviewPhase', '3');
         localStorage.setItem('interviewPhase', '3');
-        
+        await syncPhaseToDb(3);
+
         // Save conversation history for summary page
         const evaluationData = {
           average_score: data.cumulative_evaluation?.average_score || 0,
@@ -373,6 +375,9 @@ export default function InterviewPage() {
     // Mark Start Interview (Phase 2) as completed
     sessionStorage.setItem('phase2_completed', 'true');
     localStorage.setItem('phase2_completed', 'true');
+
+    // Sync to DB so admin dashboard sees the correct phase
+    await syncPhaseToDb(3);
 
     // Call the end interview API
     await handleEndInterview();

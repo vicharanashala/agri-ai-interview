@@ -92,8 +92,9 @@ local_setup() {
   # =============================================================================
   section "Backend Setup"
 
-  BACKEND_DIR="$(pwd)/backend"
-  cd "$BACKEND_DIR"
+  ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+  BACKEND_DIR="$ROOT_DIR/backend"
+  FRONTEND_DIR="$ROOT_DIR/frontend"
 
   # Python virtual env
   if [ ! -d "venv" ]; then
@@ -134,16 +135,15 @@ else:
   cd "$BACKEND_DIR"
   info "Starting backend on port 8000..."
   source venv/bin/activate
-  nohup uvicorn app.main:app --host 127.0.0.1 --port 8000 > ../backend.log 2>&1 &
-  echo $! > ../backend.pid
-  info "Backend PID: $(cat ../backend.pid)"
+  nohup uvicorn app.main:app --host 127.0.0.1 --port 8000 > "$ROOT_DIR/backend.log" 2>&1 &
+  echo $! > "$ROOT_DIR/backend.pid"
+  info "Backend PID: $(cat "$ROOT_DIR/backend.pid")"
 
   # =============================================================================
   # Frontend
   # =============================================================================
   section "Frontend Setup"
 
-  FRONTEND_DIR="$(pwd)/frontend"
   cd "$FRONTEND_DIR"
 
   # Node modules
@@ -172,9 +172,9 @@ EOF
   npx prisma db push --quiet
 
   info "Starting frontend on port 3000..."
-  nohup npm start > ../frontend.log 2>&1 &
-  echo $! > ../frontend.pid
-  info "Frontend PID: $(cat ../frontend.pid)"
+  nohup npm start > "$ROOT_DIR/frontend.log" 2>&1 &
+  echo $! > "$ROOT_DIR/frontend.pid"
+  info "Frontend PID: $(cat "$ROOT_DIR/frontend.pid")"
 
   # =============================================================================
   # Done

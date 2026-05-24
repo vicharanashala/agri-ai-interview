@@ -79,6 +79,9 @@ model Candidate {
   interviewSessions InterviewSession[]
   phaseHistory      PhaseHistory[]
   
+  // Current pipeline phase (onboarding | interview | summary | offer | signing | joining)
+  currentPhase      String   @default("onboarding")
+  
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 }

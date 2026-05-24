@@ -113,6 +113,42 @@ export async function GET(request: NextRequest) {
   }
 }
 
+const PHASE_MAP: Record<number, string> = {
+  1: "onboarding",
+  2: "interview",
+  3: "summary",
+  4: "offer",
+  5: "signing",
+  6: "joining",
+};
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { phase } = await request.json();
+    const phaseLabel = PHASE_MAP[phase];
+
+    const user = await prisma.user.findUnique({ where: { email: session.user.email } });
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    const candidate = await prisma.candidate.update({
+      where: { userId: user.id },
+      data: { currentPhase: phaseLabel },
+    });
+
+    return NextResponse.json({ currentPhase: candidate.currentPhase }, { status: 200 });
+  } catch (error) {
+    console.error("Error updating candidate phase:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+
 export async function DELETE(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);

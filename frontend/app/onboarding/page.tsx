@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import styles from './page.module.css';
+import { syncPhaseToDb } from '@/lib/phaseSync';
 import { INDIA_STATES_DISTRICTS, INDIAN_STATES } from '@/data/india-states-districts';
 import SearchableSelect from '@/components/SearchableSelect';
 
@@ -264,7 +265,10 @@ export default function OnboardingPage() {
       
       // Save phase as completed to sessionStorage and redirect
       sessionStorage.setItem('interviewPhase', '2');
-      
+
+      // Sync to DB so admin dashboard sees the correct phase
+      await syncPhaseToDb(2);
+
       // Redirect to dashboard
       window.location.href = '/dashboard';
     } catch (err) {

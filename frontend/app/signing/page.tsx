@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import styles from './page.module.css';
+import { syncPhaseToDb } from '@/lib/phaseSync';
 
 interface CandidateInfo {
   name: string;
@@ -71,17 +72,18 @@ export default function SigningPage() {
     }
   };
 
-  const handleSign = () => {
+  const handleSign = async () => {
     if (!hasSigned) {
       alert('Please enter your full legal name and agree to the terms to sign.');
       return;
     }
     // Update phase to 6 (Signing complete, Joining Details in progress)
-    // Also update sessionStorage to ensure dashboard picks up the change
     localStorage.setItem('interviewPhase', '6');
     sessionStorage.setItem('interviewPhase', '6');
     localStorage.setItem('offerSigned', 'true');
     setIsOfferSigned(true);
+    // Sync to DB so admin dashboard sees the correct phase
+    await syncPhaseToDb(6);
   };
 
   const handleDownloadSignedOfferLetter = () => {

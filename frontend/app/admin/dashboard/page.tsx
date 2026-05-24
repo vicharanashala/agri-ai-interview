@@ -66,10 +66,10 @@ const CHART_COLORS = ["#08CB00", "#10b981", "#f59e0b", "#ef4444", "#059669", "#2
 
 const PHASE_LABELS: Record<string, string> = {
   onboarding: "Onboarding",
-  signing: "Signing",
   interview: "Interview",
   summary: "Summary",
   offer: "Offer",
+  signing: "Signing",
   joining: "Joining",
 };
 

@@ -21,7 +21,8 @@ from app.api.admin.middleware import require_admin_auth
 router = APIRouter(prefix="/api/admin", tags=["admin-candidates"])
 
 # Phase definitions in order
-PHASES = ["onboarding", "signing", "interview", "summary", "offer", "joining"]
+PHASES = ["onboarding", "interview", "summary", "offer", "signing", "joining"]
+PHASE_ORDER = {p: i for i, p in enumerate(PHASES)}  # {"onboarding": 0, "interview": 1, ...}
 PHASE_DISPLAY = {
     "onboarding": "Onboarding",
     "signing": "Signing",
@@ -123,18 +124,23 @@ def _candidate_row_to_response(row: Dict[str, Any]) -> CandidateResponse:
 
     current_phase = row.get("currentPhase", "onboarding") or "onboarding"
 
-    phases = [
-        PhaseStatus(
+    # Derive phase statuses from currentPhase — phases before current are completed,
+    # the current phase is in_progress, rest are pending
+    current_idx = PHASE_ORDER.get(current_phase, 0)
+    phases = []
+    for i, p in enumerate(PHASES):
+        if i < current_idx:
+            status = "completed"
+        elif i == current_idx:
+            status = "in_progress"
+        else:
+            status = "pending"
+        phases.append(PhaseStatus(
             phase=p,
-            status=(
-                notes.get("phases", {}).get(p, {}).get("status", "pending")
-                if isinstance(notes, dict) else "pending"
-            ),
-            timestamp=notes.get("phases", {}).get(p, {}).get("timestamp") if isinstance(notes, dict) else None,
-            completedAt=notes.get("phases", {}).get(p, {}).get("completedAt") if isinstance(notes, dict) else None,
-        )
-        for p in PHASES
-    ]
+            status=status,
+            timestamp=None,
+            completedAt=None,
+        ))
 
     return CandidateResponse(
         id=str(row["id"]),

@@ -42,8 +42,8 @@ class PhaseStatus(BaseModel):
 
 class CandidateResponse(BaseModel):
     id: str
-    fullName: str
-    email: Optional[str] = None
+    fullName: Optional[str] = None   # may be null before onboarding is completed
+    email: Optional[str] = None      # from User table (JOIN)
     phone: Optional[str] = None
     # Geographic location
     state: Optional[str] = None
@@ -69,11 +69,6 @@ class ActiveInterviewResponse(BaseModel):
     messages: List[Dict[str, str]]
     currentPhase: str
 
-
-class RegisterInterviewRequest(BaseModel):
-    interview_id: str
-    candidate_id: str
-    candidate_name: str
 
 
 # ============ Candidate Management ============
@@ -111,7 +106,14 @@ def _query_prisma(sql: str, params: tuple = ()) -> List[Dict[str, Any]]:
 
 
 def _candidate_row_to_response(row: Dict[str, Any]) -> CandidateResponse:
-    """Convert a Prisma Candidate row dict to a CandidateResponse."""
+    """
+    Convert a Prisma Candidate row dict (augmented with userEmail/userName from JOIN)
+    to a CandidateResponse.
+
+    For candidates who just signed up but haven't filled onboarding yet:
+    - fullName comes from User.name (the signup name) until Candidate.fullName is set
+    - currentPhase defaults to 'onboarding'
+    """
     import json as _json
     notes_raw = row.get("notes") or "{}"
     if isinstance(notes_raw, str):
@@ -123,6 +125,9 @@ def _candidate_row_to_response(row: Dict[str, Any]) -> CandidateResponse:
         notes = notes_raw or {}
 
     current_phase = row.get("currentPhase", "onboarding") or "onboarding"
+    # fullName may be null (pre-onboarding) — fall back to User.name or User.email
+    raw_full_name = row.get("fullName") or row.get("userName")
+    user_email = row.get("userEmail")
 
     # Derive phase statuses from currentPhase — phases before current are completed,
     # the current phase is in_progress, rest are pending
@@ -144,7 +149,8 @@ def _candidate_row_to_response(row: Dict[str, Any]) -> CandidateResponse:
 
     return CandidateResponse(
         id=str(row["id"]),
-        fullName=row.get("fullName") or "Unknown",
+        fullName=raw_full_name,
+        email=user_email,
         phone=row.get("phone"),
         state=row.get("state"),
         district=row.get("district"),
@@ -169,21 +175,32 @@ async def get_candidates(
 ):
     """
     Get all candidates from Prisma's SQLite file.
+    LEFT JOINs with User to surface email even before onboarding is filled.
     """
-    rows = _query_prisma("SELECT * FROM Candidate")
+    rows = _query_prisma("""
+        SELECT c.*, u.email as userEmail, u.name as userName
+        FROM Candidate c
+        LEFT JOIN User u ON c.userId = u.id
+    """)
 
     candidates = []
     for row in rows:
         response = _candidate_row_to_response(row)
-        # Apply filters
+        # Apply filters — search checks both fullName and email
         if phase and response.currentPhase != phase:
             continue
-        if search and search.lower() not in response.fullName.lower():
+        search_lower = search.lower() if search else None
+        if search_lower and (
+            search_lower not in (response.fullName or "").lower() and
+            search_lower not in (response.email or "").lower()
+        ):
             continue
-        if state and response.state and state.lower() not in response.state.lower():
-            continue
-        if district and response.district and district.lower() not in response.district.lower():
-            continue
+        if state:
+            if not response.state or state.lower() not in response.state.lower():
+                continue
+        if district:
+            if not response.district or district.lower() not in response.district.lower():
+                continue
         candidates.append(response)
 
     return {"candidates": candidates, "total": len(candidates)}
@@ -194,7 +211,12 @@ async def get_candidate(candidate_id: str, _admin=Depends(require_admin_auth)):
     """
     Get a specific candidate by ID.
     """
-    rows = _query_prisma("SELECT * FROM Candidate WHERE id = ?", (candidate_id,))
+    rows = _query_prisma("""
+        SELECT c.*, u.email as userEmail, u.name as userName
+        FROM Candidate c
+        LEFT JOIN User u ON c.userId = u.id
+        WHERE c.id = ?
+    """, (candidate_id,))
     if not rows:
         raise HTTPException(status_code=404, detail="Candidate not found")
     return _candidate_row_to_response(rows[0])
@@ -272,32 +294,19 @@ async def create_candidate(
 
 # ============ Active Interviews (in-memory for real-time monitoring) ============
 
-_active_interviews: Dict[str, Dict[str, Any]] = {}
 
 
 def _build_active_response(interview_id: str, state) -> ActiveInterviewResponse:
-    """Build ActiveInterviewResponse from an InterviewState or dict."""
-    if hasattr(state, "messages"):
-        # InterviewState from interview_workflow
-        msgs = state.messages[-20:]
-        candidate_name = (
-            state.candidate_data.get("name")
-            if state.candidate_data
-            else "Unknown"
-        )
-        started_at = state.created_at.isoformat() if hasattr(state, "created_at") else datetime.now().isoformat()
-        current_phase = getattr(state, "current_phase", "interview") if hasattr(state, "current_phase") else "interview"
-        status = state.status
-    else:
-        # Plain dict from _active_interviews
-        msgs = state.get("messages", [])[-20:]
-        candidate_name = state.get("candidate_name", "Unknown")
-        started_at = state.get("started_at", datetime.now().isoformat())
-        current_phase = state.get("current_phase", "interview")
-        status = state.get("status", "active")
+    """Build ActiveInterviewResponse from an InterviewState."""
+    msgs = state.messages[-20:]
+    candidate_name = (
+        state.candidate_data.get("name") if state.candidate_data else "Unknown"
+    )
+    started_at = state.created_at.isoformat() if hasattr(state, "created_at") else datetime.now().isoformat()
+    current_phase = getattr(state, "current_phase", "interview")
     return ActiveInterviewResponse(
         id=interview_id,
-        candidateId=state.candidate_data.get("candidate_id", "") if hasattr(state, "candidate_data") else state.get("candidate_id", ""),
+        candidateId=state.candidate_data.get("candidate_id", "") if state.candidate_data else "",
         candidateName=candidate_name,
         startedAt=started_at,
         messagesCount=len(msgs),
@@ -310,25 +319,15 @@ def _build_active_response(interview_id: str, state) -> ActiveInterviewResponse:
 async def get_active_interviews(_admin=Depends(require_admin_auth)):
     """
     Get all currently active interview sessions.
-    Reads from both the workflow's _interviews (primary) and _active_interviews (fallback).
+    Reads from the workflow's _interviews (the single source of truth).
     """
-    active = []
+    from app.workflows.interview_workflow import _interviews
 
-    # Primary: read from the live interview workflow
-    try:
-        from app.workflows.interview_workflow import _interviews as workflow_interviews
-        for interview_id, state in workflow_interviews.items():
-            status = state.status if hasattr(state, "status") else state.get("status", "active")
-            if status == "active":
-                active.append(_build_active_response(interview_id, state))
-    except Exception:
-        pass
-
-    # Fallback: also check _active_interviews
-    for interview_id, data in _active_interviews.items():
-        if data.get("status") == "active":
-            active.append(_build_active_response(interview_id, data))
-
+    active = [
+        _build_active_response(interview_id, state)
+        for interview_id, state in _interviews.items()
+        if state.status == "active"
+    ]
     return {"interviews": active, "total": len(active)}
 
 
@@ -337,103 +336,36 @@ async def get_interview(interview_id: str, _admin=Depends(require_admin_auth)):
     """
     Get a specific interview session with full chat history.
     """
-    data = _active_interviews.get(interview_id)
-    
-    if not data:
+    from app.workflows.interview_workflow import _interviews
+
+    state = _interviews.get(interview_id)
+    if not state:
         raise HTTPException(status_code=404, detail="Interview not found")
-    
+
     return {
         "id": interview_id,
-        "candidateId": data.get("candidate_id", ""),
-        "candidateName": data.get("candidate_name", "Unknown"),
-        "startedAt": data.get("started_at"),
-        "completedAt": data.get("completed_at"),
-        "status": data.get("status", "active"),
-        "messages": data.get("messages", []),
-        "messagesCount": len(data.get("messages", [])),
-        "currentPhase": data.get("current_phase", "interview")
+        "candidateId": state.candidate_data.get("candidate_id", "") if state.candidate_data else "",
+        "candidateName": state.candidate_data.get("name", "Unknown") if state.candidate_data else "Unknown",
+        "startedAt": state.created_at.isoformat(),
+        "completedAt": None,
+        "status": state.status,
+        "messages": state.messages,
+        "messagesCount": len(state.messages),
+        "currentPhase": getattr(state, "current_phase", "interview")
     }
 
-
-@router.post("/interviews/register")
-async def register_interview(body: RegisterInterviewRequest, _admin=Depends(require_admin_auth)):
-    """
-    Register an interview session with a specific interview ID (from interview workflow).
-    This allows the admin dashboard to track the same interview.
-    """
-    interview_id = body.interview_id
-    candidate_id = body.candidate_id
-    candidate_name = body.candidate_name
-    if interview_id in _active_interviews:
-        # Already registered, update just in case
-        _active_interviews[interview_id].update({
-            "candidate_id": candidate_id,
-            "candidate_name": candidate_name,
-            "status": "active"
-        })
-    else:
-        _active_interviews[interview_id] = {
-            "candidate_id": candidate_id,
-            "candidate_name": candidate_name,
-            "started_at": datetime.now().isoformat(),
-            "status": "active",
-            "messages": [],
-            "current_phase": "interview"
-        }
-    
-    return {"interviewId": interview_id, "status": "active"}
-
-
-# Keep old endpoint for backwards compatibility
-@router.post("/interviews/start")
-async def create_interview_session(candidate_id: str, candidate_name: str, _admin=Depends(require_admin_auth)):
-    """
-    Register a new interview session (called when candidate starts interview).
-    """
-    interview_id = str(uuid.uuid4())
-    
-    _active_interviews[interview_id] = {
-        "candidate_id": candidate_id,
-        "candidate_name": candidate_name,
-        "started_at": datetime.now().isoformat(),
-        "status": "active",
-        "messages": [],
-        "current_phase": "interview"
-    }
-    
-    return {"interviewId": interview_id, "status": "active"}
-
-
-@router.post("/interviews/{interview_id}/message")
-async def add_interview_message(interview_id: str, role: str, content: str, _admin=Depends(require_admin_auth)):
-    """
-    Add a message to an interview session (for live monitoring).
-    """
-    if interview_id not in _active_interviews:
-        raise HTTPException(status_code=404, detail="Interview not found")
-    
-    message = {
-        "role": role,
-        "content": content,
-        "timestamp": datetime.now().isoformat()
-    }
-    
-    _active_interviews[interview_id]["messages"].append(message)
-    
-    return {"success": True, "message": message}
 
 
 @router.post("/interviews/{interview_id}/end")
 async def end_interview_session(interview_id: str, _admin=Depends(require_admin_auth)):
     """
-    End an interview session.
+    End an interview session — removes it from the live workflow store.
     """
-    if interview_id not in _active_interviews:
+    from app.workflows.interview_workflow import interview_workflow
+
+    if not interview_workflow.end_interview(interview_id):
         raise HTTPException(status_code=404, detail="Interview not found")
-    
-    _active_interviews[interview_id]["status"] = "completed"
-    _active_interviews[interview_id]["completed_at"] = datetime.now().isoformat()
-    
+
     return {"success": True, "message": "Interview ended"}
 
 
@@ -504,7 +436,7 @@ async def get_state_funnel(
     if state:
         rows = [r for r in rows if r.get("state") and state.lower() in r["state"].lower()]
 
-    PHASE_ORDER = ["onboarding", "signing", "interview", "summary", "offer", "joining"]
+    PHASE_ORDER = {"onboarding": 0, "signing": 1, "interview": 2, "summary": 3, "offer": 4, "joining": 5}
     state_data: Dict[str, Dict[str, Any]] = {}
 
     for r in rows:
@@ -608,4 +540,209 @@ async def get_state_districts(
     return {
         "state": state,
         "districts": [r["district"] for r in rows if r["district"]]
+    }
+
+
+# ─────────────────────────── Anti-Cheat Event Logging ───────────────────────────
+
+
+class AntiCheatEventCreate(BaseModel):
+    candidateId: str
+    interviewId: Optional[str] = None
+    eventType: str  # 'tab_switch' | 'copy' | 'paste' | 'right_click' | 'window_blur' | 'fullscreen_exit'
+    severity: str = "warning"  # 'warning' | 'critical'
+    message: Optional[str] = None
+    metadata: Optional[str] = None  # JSON string
+
+
+class AntiCheatEventResponse(BaseModel):
+    id: str
+    candidateId: str
+    interviewId: Optional[str]
+    eventType: str
+    severity: str
+    message: Optional[str]
+    metadata: Optional[str]
+    createdAt: Optional[str]
+
+
+def _write_prisma(sql: str, params: tuple = ()) -> str:
+    """Execute a write/delete SQL query against Prisma's SQLite file. Returns last row id."""
+    db_path = _get_prisma_db_path()
+    conn = sqlite3.connect(db_path)
+    cur = conn.execute(sql, params)
+    conn.commit()
+    last_id = cur.lastrowid
+    conn.close()
+    return last_id
+
+
+@router.post("/anti-cheat/events", response_model=AntiCheatEventResponse)
+async def log_anti_cheat_event(
+    event: AntiCheatEventCreate,
+    _admin=Depends(require_admin_auth),
+):
+    """
+    Log an anti-cheating violation event from the candidate frontend.
+    Called by the interview client whenever a violation is detected.
+    """
+    event_id = _write_prisma(
+        """INSERT INTO AntiCheatEvent
+           (id, candidateId, interviewId, eventType, severity, message, metadata, createdAt)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            str(uuid.uuid4()),
+            event.candidateId,
+            event.interviewId,
+            event.eventType,
+            event.severity,
+            event.message,
+            event.metadata,
+            datetime.now().isoformat(),
+        ),
+    )
+    return AntiCheatEventResponse(
+        id=str(event_id),
+        candidateId=event.candidateId,
+        interviewId=event.interviewId,
+        eventType=event.eventType,
+        severity=event.severity,
+        message=event.message,
+        metadata=event.metadata,
+        createdAt=datetime.now().isoformat(),
+    )
+
+
+@router.get("/anti-cheat/events", response_model=List[AntiCheatEventResponse])
+async def get_anti_cheat_events(
+    candidateId: Optional[str] = Query(None, description="Filter by candidate ID"),
+    interviewId: Optional[str] = Query(None, description="Filter by interview ID"),
+    eventType: Optional[str] = Query(None, description="Filter by event type"),
+    limit: int = Query(100, ge=1, le=1000, description="Max events to return"),
+    _admin=Depends(require_admin_auth),
+):
+    """
+    Fetch anti-cheat event logs for the admin dashboard.
+    Optionally filtered by candidate, interview, or event type.
+    """
+    conditions = []
+    params = []
+    if candidateId:
+        conditions.append("candidateId = ?")
+        params.append(candidateId)
+    if interviewId:
+        conditions.append("interviewId = ?")
+        params.append(interviewId)
+    if eventType:
+        conditions.append("eventType = ?")
+        params.append(eventType)
+
+    where_clause = f" WHERE {' AND '.join(conditions)}" if conditions else ""
+    order_clause = " ORDER BY createdAt DESC"
+
+    rows = _query_prisma(
+        f"SELECT * FROM AntiCheatEvent{where_clause}{order_clause} LIMIT ?",
+        [*params, limit],
+    )
+    return [
+        AntiCheatEventResponse(
+            id=str(row["id"]),
+            candidateId=row["candidateId"],
+            interviewId=row.get("interviewId"),
+            eventType=row["eventType"],
+            severity=row.get("severity", "warning"),
+            message=row.get("message"),
+            metadata=row.get("metadata"),
+            createdAt=_format_datetime(row.get("createdAt")),
+        )
+        for row in rows
+    ]
+
+
+class AntiCheatViolationResponse(BaseModel):
+    id: str
+    candidateId: str
+    candidateName: str
+    email: str
+    eventType: str
+    severity: str
+    message: Optional[str]
+    createdAt: Optional[str]
+    autoClosed: bool  # True if interview was auto-terminated (severity=critical)
+
+
+@router.get("/anti-cheat/violations")
+async def get_anti_cheat_violations(
+    limit: int = Query(100, ge=1, le=500),
+    _admin=Depends(require_admin_auth),
+):
+    """
+    Return all anti-cheat events enriched with candidate name, email,
+    and whether the interview was auto-closed (critical = interview terminated).
+    """
+    rows = _query_prisma(
+        """SELECT e.*, u.name as userName, u.email as userEmail
+           FROM AntiCheatEvent e
+           LEFT JOIN Candidate c ON e.candidateId = c.id
+           LEFT JOIN User u ON c.userId = u.id
+           ORDER BY e.createdAt DESC
+           LIMIT ?""",
+        (limit,),
+    )
+    violations = []
+    for row in rows:
+        name = (row.get("userName") or row.get("fullName") or "Unknown").strip()
+        email = row.get("userEmail") or row.get("email") or "—"
+        violations.append({
+            "id": str(row["id"]),
+            "candidateId": row["candidateId"],
+            "candidateName": name,
+            "email": email,
+            "eventType": row["eventType"],
+            "severity": row.get("severity", "warning"),
+            "message": row.get("message"),
+            "createdAt": _format_datetime(row.get("createdAt")),
+            "autoClosed": row.get("severity") == "critical",
+        })
+    return {"violations": violations, "total": len(violations)}
+
+
+@router.get("/anti-cheat/summary")
+async def get_anti_cheat_summary(
+    _admin=Depends(require_admin_auth),
+):
+    """
+    Get a summary of anti-cheat events: counts by type, recent critical events,
+    and candidates with the most violations.
+    """
+    total_rows = _query_prisma("SELECT COUNT(*) as count FROM AntiCheatEvent")
+    total = total_rows[0]["count"] if total_rows else 0
+
+    by_type_rows = _query_prisma(
+        "SELECT eventType, COUNT(*) as count FROM AntiCheatEvent GROUP BY eventType ORDER BY count DESC"
+    )
+    critical_rows = _query_prisma(
+        "SELECT * FROM AntiCheatEvent WHERE severity = 'critical' ORDER BY createdAt DESC LIMIT 10"
+    )
+    top_candidates_rows = _query_prisma(
+        """SELECT candidateId, COUNT(*) as count FROM AntiCheatEvent
+           GROUP BY candidateId ORDER BY count DESC LIMIT 10"""
+    )
+
+    return {
+        "total": total,
+        "byType": {row["eventType"]: row["count"] for row in by_type_rows},
+        "criticalEvents": [
+            {
+                "id": str(row["id"]),
+                "candidateId": row["candidateId"],
+                "eventType": row["eventType"],
+                "createdAt": _format_datetime(row.get("createdAt")),
+            }
+            for row in critical_rows
+        ],
+        "topCandidates": [
+            {"candidateId": row["candidateId"], "count": row["count"]}
+            for row in top_candidates_rows
+        ],
     }

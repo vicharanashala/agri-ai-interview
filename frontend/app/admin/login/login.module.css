@@ -1,54 +1,91 @@
 /* Admin login page — matches candidate login design language */
 
-.container {
+.page {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
-  background: linear-gradient(135deg, #0f172a 0%, #020617 100%);
-  padding: 60px 20px 20px;
+  background: linear-gradient(160deg, #0a2e0a 0%, #020617 60%, #0f172a 100%);
+  padding: 20px 20px 40px;
+  overflow-x: hidden;
 }
 
-.formWrapper {
+/* ─── Top bar — logo top-left, always visible ─────────────── */
+.topBar {
+  position: fixed;
+  top: 28px;
+  left: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 10;
+}
+
+.logo {
+  height: 40px;
+  width: auto;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.brandSub {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.5);
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* ─── Hero heading ────────────────────────────────────────── */
+.hero {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  margin-top: 80px;
+}
+
+.heading {
+  font-size: 32px;
+  font-weight: 800;
+  color: white;
+  margin: 0;
+  line-height: 1.15;
+  letter-spacing: -0.5px;
+  text-align: center;
+}
+
+/* ─── Login box ───────────────────────────────────────────── */
+.loginBox {
   background: white;
   border-radius: 12px;
-  padding: 48px 40px;
+  padding: 32px 36px;
   width: 100%;
-  max-width: 420px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-}
-
-.header {
-  text-align: center;
-  margin-bottom: 32px;
+  max-width: 460px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  margin-top: 40px;
 }
 
 .title {
-  font-size: 28px;
+  font-size: 26px;
   font-weight: 700;
   color: #0f172a;
-  margin: 0 0 4px 0;
-}
-
-.subtitle {
-  font-size: 14px;
-  color: #64748b;
-  margin: 0;
+  margin: 0 0 24px 0;
+  text-align: center;
 }
 
 .form {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 18px;
 }
 
-.inputGroup {
+.field {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.inputGroup label {
+.label {
   font-size: 14px;
   font-weight: 500;
   color: #374151;
@@ -61,7 +98,7 @@
   border-radius: 8px;
   outline: none;
   transition: border-color 0.2s, box-shadow 0.2s;
-  background: #fff;
+  color: #111;
 }
 
 .input:focus {
@@ -74,7 +111,7 @@
 }
 
 .button {
-  margin-top: 8px;
+  margin-top: 6px;
   padding: 14px;
   font-size: 16px;
   font-weight: 600;
@@ -86,12 +123,12 @@
   transition: transform 0.2s, box-shadow 0.2s;
 }
 
-.button:hover:not(:disabled) {
+.button:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(8, 203, 0, 0.4);
+  box-shadow: 0 4px 14px rgba(8, 203, 0, 0.4);
 }
 
-.button:active:not(:disabled) {
+.button:active {
   transform: translateY(0);
 }
 
@@ -101,7 +138,7 @@
 }
 
 .footer {
-  margin-top: 24px;
+  margin-top: 16px;
   text-align: center;
 }
 
@@ -118,8 +155,10 @@
 .error {
   color: #ef4444;
   font-size: 14px;
-  padding: 10px 14px;
+  text-align: center;
+  margin: 0;
+  padding: 8px 12px;
   background: #fef2f2;
-  border: 1px solid #fecaca;
   border-radius: 6px;
+  border: 1px solid #fecaca;
 }

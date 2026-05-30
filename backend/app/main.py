@@ -9,6 +9,8 @@ from fastapi import Request
 from app.api.admin import auth, candidates, settings
 from app.api import interview, joining_details, offer
 from app.api.faq.route import router as faq_router
+from app.api.dev import router as dev_router
+from app.api.resume.route import router as resume_router
 from app.db.database import init_db
 
 app = FastAPI(
@@ -60,3 +62,7 @@ app.include_router(interview.router)
 app.include_router(joining_details.router)
 app.include_router(offer.router)
 app.include_router(faq_router)
+app.include_router(dev_router)
+
+# ── Resume routes ─────────────────────────────────────────────────────────────
+app.include_router(resume_router)

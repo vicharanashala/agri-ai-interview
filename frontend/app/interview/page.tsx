@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import styles from './page.module.css';
 import { syncPhaseToDb } from '@/lib/phaseSync';
+import { useAntiCheat, type ViolationType } from '@/hooks/useAntiCheat';
+import AntiCheatOverlay from '@/components/AntiCheatOverlay';
 
 interface Message {
   role: 'ai' | 'user';
@@ -50,9 +52,60 @@ export default function InterviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [showEndConfirmDialog, setShowEndConfirmDialog] = useState(false);
   const [isInterviewCompleted, setIsInterviewCompleted] = useState(false);
+  const [cheatWarning, setCheatWarning] = useState<{
+    visible: boolean
+    type: ViolationType | null
+    count: number
+  }>({ visible: false, type: null, count: 0 });
+  const [isClosing, setIsClosing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const isSubmittingRef = useRef(false);
+
+  // Anti-cheat: warning callback
+  const handleCheatViolation = useCallback((type: ViolationType, count: number) => {
+    setCheatWarning({ visible: true, type, count })
+  }, [])
+
+  // Anti-cheat: termination callback
+  const handleCheatTerminate = useCallback(async (type: ViolationType) => {
+    setCheatWarning(v => ({ ...v, visible: false }))
+    setIsClosing(true)
+    // Show closing screen for 2 seconds before ending
+    await new Promise(resolve => setTimeout(resolve, 2000))
+    if (interviewId) {
+      await fetch(`/api/interview/end/${interviewId}`, { method: 'POST' })
+    }
+    sessionStorage.setItem('interviewTerminatedCheat', 'true')
+    sessionStorage.setItem('interviewPhase', '3')
+    localStorage.setItem('interviewPhase', '3')
+    await syncPhaseToDb(3)
+    router.push('/summary?terminated=true')
+  }, [interviewId, router])
+
+  // Anti-cheat: log violation to backend (fire-and-forget)
+  const handleCheatLog = useCallback((type: ViolationType) => {
+    const candidateId = sessionStorage.getItem('candidateId') || ''
+    fetch('/api/anti-cheat/log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        candidateId,
+        interviewId: interviewId || null,
+        eventType: type,
+        severity: 'warning',
+        message: null,
+        metadata: null,
+      }),
+    }).catch(() => {})  // silently ignore errors — don't affect interview
+  }, [interviewId])
+
+  const { reset: resetAntiCheat } = useAntiCheat({
+    onViolation: handleCheatViolation,
+    onTerminate: handleCheatTerminate,
+    onLogEvent: handleCheatLog,
+    enabled: !showInstructions && !isComplete,
+  })
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -110,6 +163,7 @@ export default function InterviewPage() {
       return;
     }
 
+    resetAntiCheat();
     setIsStarting(true);
     setError(null);
     try {
@@ -118,7 +172,7 @@ export default function InterviewPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           candidate_data: {
-            name: 'Candidate',
+            name: sessionStorage.getItem('candidateFullName') || 'Candidate',
             position: 'Software Developer'
           }
         }),
@@ -644,6 +698,21 @@ export default function InterviewPage() {
               </button>
             </form>
           )}
+        </div>
+      )}
+      <AntiCheatOverlay
+        isVisible={cheatWarning.visible}
+        violationType={cheatWarning.type}
+        offenseCount={cheatWarning.count}
+        onDismiss={() => setCheatWarning(v => ({ ...v, visible: false }))}
+      />
+      {isClosing && (
+        <div className={styles.closingOverlay}>
+          <div className={styles.closingContent}>
+            <div className={styles.closingSpinner} />
+            <h2>Closing the interview...</h2>
+            <p>Please wait.</p>
+          </div>
         </div>
       )}
     </div>

@@ -166,9 +166,10 @@ export default function SummaryPage() {
     return (
       <main className={styles.container}>
         <div className={styles.content}>
-          <div className={styles.loading}>
-            <div className={styles.spinner}></div>
+          <div className={styles.loadingContainer}>
+            <div className={styles.spinner} />
             <p>Generating your interview summary...</p>
+            <span className={styles.loadingHint}>This may take a few moments</span>
           </div>
         </div>
       </main>

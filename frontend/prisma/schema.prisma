@@ -54,7 +54,7 @@ model Candidate {
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   // Personal Information
-  fullName          String
+  fullName          String?
   phone             String?
   
   // Location
@@ -78,6 +78,7 @@ model Candidate {
   // Relations for admin dashboard
   interviewSessions InterviewSession[]
   phaseHistory      PhaseHistory[]
+  resumes           Resume[]
   
   // Current pipeline phase (onboarding | interview | summary | offer | signing | joining)
   currentPhase      String   @default("onboarding")
@@ -159,4 +160,34 @@ model SystemGuidelines {
   key         String   @unique // e.g., 'question_guidelines', 'evaluation_system'
   content     String
   updatedAt   DateTime @updatedAt
+}
+
+model AntiCheatEvent {
+  id              String   @id @default(cuid())
+  candidateId     String
+  interviewId     String?
+  eventType       String   // 'tab_switch' | 'copy' | 'paste' | 'right_click' | 'window_blur' | 'fullscreen_exit'
+  severity        String   @default("warning") // 'warning' | 'critical'
+  message         String?
+  metadata        String?  // JSON string for extra context
+  createdAt       DateTime @default(now())
+
+  @@index([candidateId])
+  @@index([interviewId])
+  @@index([eventType])
+  @@index([createdAt])
+}
+
+model Resume {
+  id          String   @id @default(cuid())
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  fileName    String
+  fileType    String   // "pdf" | "docx"
+  rawText     String?  // extracted text content
+  parsedData  String?  // JSON string — structured parsed output (Phase 2)
+  status      String   @default("pending") // "pending" | "uploaded" | "parsed" | "failed"
+  createdAt   DateTime @default(now())
+
+  @@index([candidateId])
 }

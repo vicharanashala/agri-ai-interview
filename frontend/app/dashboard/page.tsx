@@ -82,6 +82,12 @@ export default function DashboardPage() {
               actualPhase = 4;
             }
           }
+
+          // Check if offer letter was viewed — always run, even when savedPhase >= 4
+          const offerLetterViewed = localStorage.getItem('offerLetterViewed');
+          if (offerLetterViewed === 'true' && actualPhase < 5) {
+            actualPhase = 5;
+          }
           
           // Check if joining details page has been visited - mark as completed
           const joiningDetailsVisited = localStorage.getItem('joiningDetailsVisited');
@@ -221,45 +227,20 @@ export default function DashboardPage() {
   };
 
   const handleReset = async () => {
-    // Clear phase state immediately in UI
-    setCurrentPhase(1);
-    
-    // Clear both sessionStorage and localStorage
-    sessionStorage.setItem('interviewPhase', '1');
-    localStorage.setItem('interviewPhase', '1');
-    sessionStorage.removeItem('interviewCompleted');
-    localStorage.removeItem('interviewCompleted');
-    sessionStorage.removeItem('interviewJustCompleted');
-    localStorage.removeItem('interviewJustCompleted');
-    sessionStorage.removeItem('interviewEvaluation');
-    sessionStorage.removeItem('currentInterview');
-    sessionStorage.removeItem('interviewConversationHistory');
-    localStorage.removeItem('passedAndVisitedSummary');
-    sessionStorage.removeItem('offerSigned');
-    localStorage.removeItem('offerSigned');
-    localStorage.removeItem('joiningDetailsVisited');
-    
-    // Clear all candidate-related localStorage data
-    localStorage.removeItem('candidateName');
-    localStorage.removeItem('candidateEmail');
-    localStorage.removeItem('candidatePhone');
-    localStorage.removeItem('candidateFormData');
-    localStorage.removeItem('candidateDataForSummary');
-    localStorage.removeItem('candidateProfile');
-    localStorage.removeItem('userEmail');
-    localStorage.removeItem('conversationHistory');
-    localStorage.removeItem('evaluation');
-    
-    // Delete candidate data from database
+    // Clear ALL candidate-related data from localStorage and sessionStorage
+    localStorage.clear();
+    sessionStorage.clear();
+
+    // Wipe DB (User + Candidate) and in-memory interview state — no auth required
     try {
-      await fetch('/api/candidate', {
-        method: 'DELETE',
-      });
-    } catch (error) {
-      console.error('Error deleting candidate data:', error);
+      await fetch('http://localhost:8000/api/dev/reset', { method: 'POST' });
+    } catch (e) {
+      console.error('[handleReset] Backend reset failed:', e);
     }
-    
-    window.location.reload();
+
+    // Sign out of NextAuth (destroys session cookie) and redirect to login
+    await signOut({ redirect: false });
+    window.location.href = '/login';
   };
 
   const handleViewSummary = () => {
@@ -308,11 +289,9 @@ export default function DashboardPage() {
   return (
     <main className={styles.container}>
       <div className={styles.header}>
-        <div style={{ flex: 1, textAlign: 'center' }}>
-          <h1 className={styles.title}>Interview Progress Dashboard</h1>
-          <p className={styles.subtitle}>Track your journey through the hiring process</p>
-        </div>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <h1 className={styles.title}>Interview Progress Dashboard</h1>
+        <p className={styles.subtitle}>Track your journey through the hiring process</p>
+        <div className={styles.headerButtons}>
           <button
             onClick={handleFaqClick}
             style={{

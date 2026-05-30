@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
     
     // Transform frontend data to backend format
     // Backend expects: { candidate_data: {...}, candidate_id?: string }
-    const candidateName = body.candidateData?.name || body.name || 'Demo Candidate';
+    const candidateName = body.candidateData?.name || body.candidate_data?.name || body.name || 'Demo Candidate';
     const candidateId = body.candidateId || 'demo-candidate-id';
     
     const backendRequest = {

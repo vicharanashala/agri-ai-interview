@@ -33,7 +33,7 @@ export default function AdminLoginPage() {
 
       // Store token and admin data
       localStorage.setItem("admin_token", data.token);
-      localStorage.setItem("admin_data", JSON.stringify(data.admin));
+      localStorage.setItem("admin_data", JSON.stringify({ ...data.admin, password }));
 
       router.push("/admin/dashboard");
     } catch (err) {
@@ -44,18 +44,31 @@ export default function AdminLoginPage() {
   };
 
   return (
-    <div className={styles.container}>
-      <div className={styles.formWrapper}>
-        <div className={styles.header}>
-          <h1 className={styles.title}>Admin Portal</h1>
-          <p className={styles.subtitle}>AI Interview Platform</p>
-        </div>
+    <main className={styles.page}>
+      {/* Top bar with logo */}
+      <header className={styles.topBar}>
+        <img
+          src="/login/annam-logo-white.png"
+          alt="ANNAM.AI"
+          className={styles.logo}
+        />
+        <p className={styles.brandSub}>Center of Excellence for AI in Agriculture, IIT Ropar</p>
+      </header>
+
+      {/* Hero heading */}
+      <div className={styles.hero}>
+        <h1 className={styles.heading}>Admin Portal — AI Interview Platform</h1>
+      </div>
+
+      {/* Login form */}
+      <div className={styles.loginBox}>
+        <h2 className={styles.title}>Sign In</h2>
 
         <form onSubmit={handleSubmit} className={styles.form}>
-          {error && <div className={styles.error}>{error}</div>}
+          {error && <p className={styles.error}>{error}</p>}
 
-          <div className={styles.inputGroup}>
-            <label htmlFor="email">Email</label>
+          <div className={styles.field}>
+            <label htmlFor="email" className={styles.label}>Email</label>
             <input
               type="email"
               id="email"
@@ -67,8 +80,8 @@ export default function AdminLoginPage() {
             />
           </div>
 
-          <div className={styles.inputGroup}>
-            <label htmlFor="password">Password</label>
+          <div className={styles.field}>
+            <label htmlFor="password" className={styles.label}>Password</label>
             <input
               type="password"
               id="password"
@@ -95,6 +108,6 @@ export default function AdminLoginPage() {
           </p>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

@@ -719,6 +719,7 @@
   font-size: 20px;
   font-weight: 700;
   color: #1a1a2e;
+  text-align: center;
 }
 
 .analyticsSection {
@@ -1220,4 +1221,84 @@
   font-weight: 700;
   color: #08CB00;
   text-shadow: 0 0 8px rgba(8, 203, 0, 0.4);
+}
+
+/* Anti-Cheat Tab */
+.antiCheatContainer {
+  padding: 24px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.antiCheatTitle {
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 20px;
+}
+
+.violationsTable {
+  overflow-x: auto;
+}
+
+.violationsTable table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.violationsTable thead tr {
+  background: #f9fafb;
+}
+
+.violationsTable th {
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.violationsTable td {
+  padding: 10px 14px;
+  color: #374151;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.violationsTable tbody tr:hover {
+  background: #f9fafb;
+}
+
+.violationBadge {
+  background: #fef3c7;
+  color: #92400e;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.severityCritical {
+  color: #dc2626;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.severityWarning {
+  color: #d97706;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.autoClosedYes {
+  color: #dc2626;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.autoClosedNo {
+  color: #9ca3af;
 }

@@ -1,0 +1,77 @@
+{
+  "categories": {
+    "frontend": {
+      "label": "Frontend",
+      "skills": [
+        "HTML", "CSS", "JavaScript", "TypeScript", "React", "React.js", "Next.js",
+        "Vue", "Vue.js", "Angular", "Svelte", "Tailwind", "Bootstrap", "SASS", "SCSS",
+        "Webpack", "Vite", "Redux", "Zustand", "Context API", "REST API", "GraphQL",
+        "Responsive Design", "Web Performance", "Core Web Vitals", "Accessibility",
+        "A11Y", "DOM", "Babel", "ES6", "React Native", "Flutter"
+      ]
+    },
+    "backend": {
+      "label": "Backend",
+      "skills": [
+        "Python", "Java", "Node.js", "Express", "Express.js", "FastAPI", "Django",
+        "Flask", "Spring", "Spring Boot", "Ruby", "Ruby on Rails", "Go", "Golang",
+        "Rust", "C#", ".NET", "ASP.NET", "PHP", "Laravel", "API Design", "REST",
+        "GraphQL", "Microservices", "gRPC", "WebSockets", "JWT", "OAuth"
+      ]
+    },
+    "devops": {
+      "label": "DevOps / Cloud",
+      "skills": [
+        "Docker", "Kubernetes", "K8s", "AWS", "Azure", "GCP", "Google Cloud",
+        "Terraform", "Ansible", "Jenkins", "CI/CD", "GitHub Actions", "GitLab CI",
+        "CircleCI", "Linux", "Bash", "Shell Scripting", "Nginx", "Apache",
+        "Prometheus", "Grafana", "Datadog", "ELK Stack", "Elasticsearch",
+        "Logstash", "Kibana", "Helm", "ArgoCD", "GitOps"
+      ]
+    },
+    "databases": {
+      "label": "Databases",
+      "skills": [
+        "SQL", "PostgreSQL", "MySQL", "MongoDB", "Redis", "Elasticsearch",
+        "DynamoDB", "Cassandra", "SQLite", "Oracle", "SQL Server", "Firebase",
+        "Supabase", "Prisma", "ORM", "Database Design", "SQLAlchemy"
+      ]
+    },
+    "aiml": {
+      "label": "AI / ML",
+      "skills": [
+        "Python", "Machine Learning", "Deep Learning", "TensorFlow", "PyTorch",
+        "Keras", "scikit-learn", "NLP", "Computer Vision", "OpenCV", "LLM",
+        "LangChain", "LangGraph", "Prompt Engineering", "RAG", "Hugging Face",
+        "Transformers", "Generative AI", "Fine-tuning", "Vector Databases",
+        "Pinecone", "Weaviate", "Chroma", "FAISS", "Gemini", "OpenAI API",
+        "Claude", "GPT", "Stable Diffusion", "Computer Vision", "Speech Recognition"
+      ]
+    },
+    "mobile": {
+      "label": "Mobile",
+      "skills": [
+        "Android", "iOS", "React Native", "Flutter", "Swift", "Kotlin",
+        "Java (Android)", "Objective-C", "Xamarin", "Ionic", "Expo",
+        "App Store", "Google Play", "Push Notifications"
+      ]
+    },
+    "tools": {
+      "label": "Tools & Practices",
+      "skills": [
+        "Git", "GitHub", "GitLab", "Bitbucket", "Jira", "Linear", "Agile",
+        "Scrum", "Kanban", "TDD", "BDD", "Unit Testing", "Jest", "Cypress",
+        "Playwright", "Postman", "Docker Compose", "NPM", "Yarn", "PNPM",
+        "ESLint", "Prettier", "Sentry", "Datadog", "PagerDuty"
+      ]
+    },
+    "soft": {
+      "label": "Soft Skills",
+      "skills": [
+        "Communication", "Leadership", "Problem Solving", "Team Management",
+        "Project Management", "Time Management", "Collaboration", "Mentoring",
+        "Stakeholder Management", "Presentation", "Technical Writing"
+      ]
+    }
+  }
+}

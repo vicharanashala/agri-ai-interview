@@ -257,12 +257,38 @@ export default function OnboardingPage() {
       }
 
       const candidate = await response.json();
-      
-      // Save candidate ID to sessionStorage (used by interview page)
+
+      // Upload resume to backend (server-side async: file on disk + raw text in DB)
+      if (resume?.data && candidate?.id) {
+        try {
+          // Convert base64 to a File object
+          const res = await fetch(resume.data);
+          const blob = await res.blob();
+          const fileName = resume.name || 'resume.pdf';
+          const fileType = fileName.endsWith('.docx')
+            ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            : 'application/pdf';
+          const file = new File([blob], fileName, { type: fileType });
+
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('candidateId', candidate.id);
+
+          await fetch('/api/resume', { method: 'POST', body: formData, credentials: 'include' });
+        } catch (uploadErr) {
+          console.error('Resume upload failed (non-blocking):', uploadErr);
+          // Non-fatal — continue even if resume upload fails
+        }
+      }
+
+      // Save candidate ID and fullName to sessionStorage (used by interview page)
       if (candidate?.id) {
         sessionStorage.setItem('candidateId', candidate.id);
       }
-      
+      if (formData.fullName) {
+        sessionStorage.setItem('candidateFullName', formData.fullName);
+      }
+
       // Save phase as completed to sessionStorage and redirect
       sessionStorage.setItem('interviewPhase', '2');
 

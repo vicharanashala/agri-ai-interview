@@ -25,6 +25,42 @@ interface Candidate {
   createdAt?: string;
 }
 
+interface ParsedResumeData {
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  skills: string[];
+  experience: { company: string; title: string; duration: string; highlights: string[] }[];
+  education: { institution: string; degree: string; year: string }[];
+  summary: string | null;
+  confidence_score: number;
+}
+
+interface SkillMatchData {
+  candidateId: string;
+  role: string;
+  roleLabel: string;
+  overallScore: number;
+  requiredMatch: number;
+  preferredMatch: number;
+  requiredMatched: string[];
+  requiredMissing: string[];
+  preferredMatched: string[];
+  preferredMissing: string[];
+  summary: string;
+}
+
+interface ResumeInfo {
+  id: string;
+  candidateId: string;
+  fileName: string;
+  fileType: string;
+  rawText: string | null;
+  parsedData: ParsedResumeData | null;
+  status: string;
+  createdAt: string;
+}
+
 interface PhaseStatus {
   phase: string;
   status: string;
@@ -58,7 +94,7 @@ interface Guidelines {
 }
 
 // Tabs
-type Tab = "live" | "candidates" | "analytics" | "settings";
+type Tab = "live" | "candidates" | "analytics" | "anti-cheat" | "settings";
 type SettingsTab = "guidelines" | "criteria";
 
 // Chart colors
@@ -97,6 +133,11 @@ export default function AdminDashboard() {
 
   // UI states
   const [selectedInterview, setSelectedInterview] = useState<string | null>(null);
+  const [resumeModal, setResumeModal] = useState<{ open: boolean; resume: ResumeInfo | null }>({ open: false, resume: null });
+  const [candidateResumes, setCandidateResumes] = useState<Record<string, ResumeInfo>>({}); // candidateId → latest resume
+  const [matchModal, setMatchModal] = useState<{ open: boolean; candidateId: string; candidateName: string; role: string }>({ open: false, candidateId: "", candidateName: "", role: "" });
+  const [matchData, setMatchData] = useState<SkillMatchData | null>(null);
+  const [matchLoading, setMatchLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [editingGuideline, setEditingGuideline] = useState<string | null>(null);
   const [guidelineContent, setGuidelineContent] = useState("");
@@ -111,6 +152,8 @@ export default function AdminDashboard() {
   });
   
   const [geoStats, setGeoStats] = useState<any>(null);
+  const [violations, setViolations] = useState<any[]>([]);
+  const [violationsLoading, setViolationsLoading] = useState(false);
   const [uniqueStates, setUniqueStates] = useState<string[]>([]);
   const [stateFunnel, setStateFunnel] = useState<{states: any[]; totalStates: number} | null>(null);
   const [stateFunnelFilter, setStateFunnelFilter] = useState<string>("");
@@ -140,6 +183,10 @@ export default function AdminDashboard() {
       const interval = setInterval(loadActiveInterviews, 5000);
       return () => clearInterval(interval);
     }
+    if (activeTab === "anti-cheat") {
+      const interval = setInterval(loadViolations, 5000);
+      return () => clearInterval(interval);
+    }
   }, [activeTab]);
 
   // Reload state funnel when filter changes
@@ -158,6 +205,7 @@ export default function AdminDashboard() {
         loadCriteria().catch(err => console.error("loadCriteria error:", err)),
         loadGeoStats().catch(err => console.error("loadGeoStats error:", err)),
         loadStateFunnel().catch(err => console.error("loadStateFunnel error:", err)),
+        loadViolations().catch(err => console.error("loadViolations error:", err)),
       ]);
     } finally {
       setLoading(false);
@@ -202,6 +250,185 @@ export default function AdminDashboard() {
       }
     } catch (err) {
       console.error("Failed to load candidates:", err);
+    }
+  };
+
+  // ── Resume helpers ──────────────────────────────────────────────────────────
+
+  const loadResumeForCandidate = async (candidateId: string) => {
+    try {
+      const res = await withAuth(`http://localhost:8000/api/admin/resumes?candidateId=${candidateId}`);
+      if (res.ok) {
+        const data: ResumeInfo[] = await res.json();
+        if (data.length > 0) {
+          setCandidateResumes(prev => ({ ...prev, [candidateId]: data[0] }));
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load resume for candidate:", err);
+    }
+  };
+
+  const loadResumesForAllCandidates = async (candidateList: Candidate[]) => {
+    // Load resumes for all candidates in parallel
+    await Promise.allSettled(candidateList.map(c => loadResumeForCandidate(c.id)));
+  };
+
+  const handleDownloadResume = (resume: ResumeInfo) => {
+    window.open(`/api/resume/${resume.id}`, "_blank");
+  };
+
+  const handlePreviewResume = (resume: ResumeInfo) => {
+    setResumeModal({ open: true, resume });
+  };
+
+  // ── Skills Match helpers ───────────────────────────────────────────────────
+
+  const ROLE_OPTIONS = [
+    { value: "frontend_engineer", label: "Frontend Engineer" },
+    { value: "backend_engineer", label: "Backend Engineer" },
+    { value: "fullstack_engineer", label: "Full Stack Engineer" },
+    { value: "devops_engineer", label: "DevOps Engineer" },
+    { value: "ai_ml_engineer", label: "AI/ML Engineer" },
+    { value: "mobile_engineer", label: "Mobile Engineer" },
+  ];
+
+  const fetchSkillMatch = async (candidateId: string, candidateName: string, role: string) => {
+    setMatchModal({ open: true, candidateId, candidateName, role });
+    setMatchData(null);
+    setMatchLoading(true);
+    try {
+      const res = await withAuth(`http://localhost:8000/api/admin/resume/match?candidateId=${candidateId}&role=${role}`);
+      if (res.ok) {
+        const data: SkillMatchData = await res.json();
+        setMatchData(data);
+      } else {
+        setMatchData(null);
+      }
+    } catch {
+      setMatchData(null);
+    } finally {
+      setMatchLoading(false);
+    }
+  };
+
+  // ── Parsed Resume View Component ──────────────────────────────────────────
+
+  function ParsedResumeView({ data }: { data: ParsedResumeData }) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "16px", maxHeight: "65vh", overflow: "auto" }}>
+        {/* Contact + Summary */}
+        <div style={{ background: "#f0f4ff", borderRadius: "6px", padding: "12px 16px" }}>
+          <div style={{ fontWeight: 600, fontSize: "15px", marginBottom: "4px" }}>
+            👤 {data.name || "Name not detected"}
+          </div>
+          <div style={{ fontSize: "13px", color: "#555" }}>
+            {data.email && `📧 ${data.email}`}
+            {data.phone && ` · 📞 ${data.phone}`}
+          </div>
+          {data.summary && (
+            <div style={{ marginTop: "8px", fontSize: "13px", color: "#333", fontStyle: "italic" }}>
+              "{data.summary}"
+            </div>
+          )}
+        </div>
+
+        {/* Skills */}
+        {data.skills.length > 0 && (
+          <div>
+            <div style={{ fontWeight: 600, fontSize: "13px", marginBottom: "6px", color: "#333" }}>
+              🛠 Skills ({data.skills.length})
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+              {data.skills.map((skill, i) => (
+                <span
+                  key={i}
+                  style={{
+                    background: "#dbeafe",
+                    color: "#1e40af",
+                    borderRadius: "4px",
+                    padding: "2px 8px",
+                    fontSize: "12px",
+                  }}
+                >
+                  {skill}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Experience */}
+        {data.experience.length > 0 && (
+          <div>
+            <div style={{ fontWeight: 600, fontSize: "13px", marginBottom: "6px", color: "#333" }}>
+              💼 Experience
+            </div>
+            {data.experience.map((exp, i) => (
+              <div
+                key={i}
+                style={{ background: "#f9f9f9", borderRadius: "6px", padding: "10px 14px", marginBottom: "8px" }}
+              >
+                <div style={{ fontWeight: 600, fontSize: "13px" }}>{exp.title}</div>
+                <div style={{ fontSize: "12px", color: "#666" }}>
+                  {exp.company}
+                  {exp.duration && ` · ${exp.duration}`}
+                </div>
+                {exp.highlights.length > 0 && (
+                  <ul style={{ margin: "6px 0 0 0", paddingLeft: "18px", fontSize: "12px", color: "#444" }}>
+                    {exp.highlights.map((h, j) => (
+                      <li key={j}>{h}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Education */}
+        {data.education.length > 0 && (
+          <div>
+            <div style={{ fontWeight: 600, fontSize: "13px", marginBottom: "6px", color: "#333" }}>
+              🎓 Education
+            </div>
+            {data.education.map((edu, i) => (
+              <div
+                key={i}
+                style={{ background: "#f9f9f9", borderRadius: "6px", padding: "8px 14px", marginBottom: "6px" }}
+              >
+                <div style={{ fontSize: "13px", fontWeight: 600 }}>{edu.degree}</div>
+                <div style={{ fontSize: "12px", color: "#666" }}>
+                  {edu.institution}
+                  {edu.year && ` · ${edu.year}`}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Load resumes when candidates tab is active
+  useEffect(() => {
+    if (activeTab === "candidates" && candidates.length > 0) {
+      loadResumesForAllCandidates(candidates);
+    }
+  }, [activeTab, candidates]);
+
+  const loadViolations = async () => {
+    setViolationsLoading(true);
+    try {
+      const res = await withAuth("http://localhost:8000/api/admin/anti-cheat/violations");
+      if (res.ok) {
+        const data = await res.json();
+        setViolations(data.violations || []);
+      }
+    } catch (err) {
+      console.error("Failed to load violations:", err);
+    } finally {
+      setViolationsLoading(false);
     }
   };
 
@@ -395,6 +622,12 @@ export default function AdminDashboard() {
           📊 Analytics
         </button>
         <button
+          className={`${styles.tab} ${activeTab === "anti-cheat" ? styles.activeTab : ""}`}
+          onClick={() => setActiveTab("anti-cheat")}
+        >
+          🛡️ Anti-Cheat
+        </button>
+        <button
           className={`${styles.tab} ${activeTab === "settings" ? styles.activeTab : ""}`}
           onClick={() => setActiveTab("settings")}
         >
@@ -472,17 +705,20 @@ export default function AdminDashboard() {
                   <thead>
                     <tr>
                       <th>Name</th>
+                      <th>Email</th>
                       <th>Phone</th>
                       <th>State</th>
                       <th>Current Phase</th>
                       <th>Phase Progress</th>
+                      <th>Resume</th>
                       <th>Created</th>
                     </tr>
                   </thead>
                   <tbody>
                     {candidates.map((candidate) => (
                       <tr key={candidate.id}>
-                        <td>{candidate.fullName}</td>
+                        <td>{candidate.fullName || "-"}</td>
+                        <td>{candidate.email || "-"}</td>
                         <td>{candidate.phone || "-"}</td>
                         <td>{candidate.state || "-"}</td>
                         <td>
@@ -504,6 +740,38 @@ export default function AdminDashboard() {
                             ))}
                           </div>
                         </td>
+                        <td>
+                          {candidateResumes[candidate.id] ? (
+                            <div style={{ display: "flex", gap: "4px" }}>
+                              <button
+                                onClick={() => handlePreviewResume(candidateResumes[candidate.id]!)}
+                                style={{ padding: "2px 8px", fontSize: "12px", cursor: "pointer" }}
+                                title="Preview resume"
+                              >
+                                👁 Preview
+                              </button>
+                              <button
+                                onClick={() => candidateResumes[candidate.id]?.parsedData
+                                  ? setMatchModal({ open: true, candidateId: candidate.id, candidateName: candidate.fullName || candidate.email || "", role: "frontend_engineer" })
+                                  : null
+                                }
+                                style={{ padding: "2px 8px", fontSize: "12px", cursor: candidateResumes[candidate.id]?.parsedData ? "pointer" : "not-allowed", opacity: candidateResumes[candidate.id]?.parsedData ? 1 : 0.4 }}
+                                title={candidateResumes[candidate.id]?.parsedData ? "Match skills to a role" : "Resume not yet parsed"}
+                              >
+                                🔗 Match
+                              </button>
+                              <button
+                                onClick={() => handleDownloadResume(candidateResumes[candidate.id]!)}
+                                style={{ padding: "2px 8px", fontSize: "12px", cursor: "pointer" }}
+                                title="Download resume"
+                              >
+                                ⬇ Download
+                              </button>
+                            </div>
+                          ) : (
+                            <span style={{ color: "#999", fontSize: "12px" }}>—</span>
+                          )}
+                        </td>
                         <td>{candidate.createdAt ? new Date(candidate.createdAt).toLocaleDateString() : "-"}</td>
                       </tr>
                     ))}
@@ -511,6 +779,216 @@ export default function AdminDashboard() {
                 </table>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── Resume Preview Modal ── */}
+        {resumeModal.open && resumeModal.resume && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.5)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 1000,
+            }}
+            onClick={() => setResumeModal({ open: false, resume: null })}
+          >
+            <div
+              style={{
+                background: "#fff",
+                borderRadius: "8px",
+                padding: "24px",
+                width: "700px",
+                maxWidth: "90vw",
+                maxHeight: "85vh",
+                overflow: "auto",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                <h2 style={{ margin: 0, fontSize: "16px" }}>
+                  📄 {resumeModal.resume.fileName}
+                </h2>
+                <button
+                  onClick={() => setResumeModal({ open: false, resume: null })}
+                  style={{ padding: "4px 10px", cursor: "pointer" }}
+                >
+                  ✕
+                </button>
+              </div>
+              {resumeModal.resume.parsedData ? (
+                <ParsedResumeView data={resumeModal.resume.parsedData!} />
+              ) : (
+                <div
+                  style={{
+                    background: "#f5f5f5",
+                    border: "1px solid #ddd",
+                    borderRadius: "4px",
+                    padding: "16px",
+                    fontSize: "13px",
+                    whiteSpace: "pre-wrap",
+                    fontFamily: "monospace",
+                    maxHeight: "60vh",
+                    overflow: "auto",
+                  }}
+                >
+                  {resumeModal.resume.rawText
+                    ? resumeModal.resume.rawText
+                    : "No text extracted (file may be image-based or empty)."}
+                </div>
+              )}
+              <div style={{ marginTop: "12px", display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+                <span style={{ fontSize: "12px", color: "#666", alignSelf: "center" }}>
+                  {resumeModal.resume.status === "parsed"
+                    ? `✅ Parsed (confidence: ${((resumeModal.resume.parsedData?.confidence_score ?? 0) * 100).toFixed(0)}%)`
+                    : resumeModal.resume.status === "parsing"
+                    ? "⏳ Parsing..."
+                    : resumeModal.resume.status === "uploaded"
+                    ? "📋 Uploaded — LLM parsing in progress"
+                    : resumeModal.resume.status
+                  }
+                </span>
+                <button
+                  onClick={() => handleDownloadResume(resumeModal.resume!)}
+                  style={{ padding: "6px 16px", cursor: "pointer" }}
+                >
+                  ⬇ Download Original
+                </button>
+                <button
+                  onClick={() => setResumeModal({ open: false, resume: null })}
+                  style={{ padding: "6px 16px", cursor: "pointer" }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Skills Match Modal ── */}
+        {matchModal.open && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.5)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 1100,
+            }}
+            onClick={() => { setMatchModal(m => ({ ...m, open: false })); setMatchData(null); }}
+          >
+            <div
+              style={{
+                background: "#fff",
+                borderRadius: "10px",
+                padding: "24px",
+                width: "680px",
+                maxWidth: "90vw",
+                maxHeight: "85vh",
+                overflow: "auto",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px" }}>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: "18px" }}>🔗 Skills Match</h2>
+                  <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#666" }}>{matchModal.candidateName}</p>
+                </div>
+                <button
+                  onClick={() => { setMatchModal(m => ({ ...m, open: false })); setMatchData(null); }}
+                  style={{ padding: "4px 10px", cursor: "pointer" }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Role selector */}
+              <div style={{ marginBottom: "16px" }}>
+                <label style={{ fontSize: "13px", fontWeight: 600, marginBottom: "4px", display: "block" }}>
+                  Target Role
+                </label>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <select
+                    value={matchModal.role}
+                    onChange={(e) => fetchSkillMatch(matchModal.candidateId, matchModal.candidateName, e.target.value)}
+                    style={{ flex: 1, padding: "6px 10px", fontSize: "13px", borderRadius: "6px", border: "1px solid #ccc" }}
+                  >
+                    {ROLE_OPTIONS.map(r => (
+                      <option key={r.value} value={r.value}>{r.label}</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() => fetchSkillMatch(matchModal.candidateId, matchModal.candidateName, matchModal.role)}
+                    style={{ padding: "6px 16px", cursor: "pointer", fontSize: "13px" }}
+                  >
+                    Check
+                  </button>
+                </div>
+              </div>
+
+              {matchLoading && <p style={{ textAlign: "center", color: "#666" }}>⏳ Analysing skills...</p>}
+
+              {matchData && (
+                <div>
+                  {/* Score badges */}
+                  <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
+                    {[
+                      { label: "Overall", value: matchData.overallScore, color: "#1e40af" },
+                      { label: "Required", value: matchData.requiredMatch, color: "#b45309" },
+                      { label: "Preferred", value: matchData.preferredMatch, color: "#065f46" },
+                    ].map(b => (
+                      <div key={b.label} style={{ flex: 1, background: "#f8fafc", borderRadius: "8px", padding: "10px", textAlign: "center", border: `2px solid ${b.color}` }}>
+                        <div style={{ fontSize: "11px", color: "#64748b", marginBottom: "2px" }}>{b.label}</div>
+                        <div style={{ fontSize: "22px", fontWeight: 700, color: b.color }}>
+                          {(b.value * 100).toFixed(0)}%
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <p style={{ fontSize: "13px", color: "#444", fontStyle: "italic", marginBottom: "16px" }}>
+                    "{matchData.summary}"
+                  </p>
+
+                  {/* Required skills */}
+                  <div style={{ marginBottom: "14px" }}>
+                    <div style={{ fontSize: "12px", fontWeight: 700, color: "#92400e", marginBottom: "6px" }}>
+                      ⚠️ Required Skills ({matchData.requiredMatched.length}/{matchData.requiredMatched.length + matchData.requiredMissing.length} matched)
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+                      {matchData.requiredMatched.map(s => (
+                        <span key={s} style={{ background: "#dcfce7", color: "#166534", borderRadius: "4px", padding: "2px 8px", fontSize: "12px" }}>{s}</span>
+                      ))}
+                      {matchData.requiredMissing.map(s => (
+                        <span key={s} style={{ background: "#fee2e2", color: "#991b1b", borderRadius: "4px", padding: "2px 8px", fontSize: "12px" }}>{s}</span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Preferred skills */}
+                  {matchData.preferredMatched.length > 0 || matchData.preferredMissing.length > 0 ? (
+                    <div>
+                      <div style={{ fontSize: "12px", fontWeight: 700, color: "#065f46", marginBottom: "6px" }}>
+                        👍 Preferred Skills ({matchData.preferredMatched.length}/{matchData.preferredMatched.length + matchData.preferredMissing.length} matched)
+                      </div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+                        {matchData.preferredMatched.map(s => (
+                          <span key={s} style={{ background: "#dcfce7", color: "#166534", borderRadius: "4px", padding: "2px 8px", fontSize: "12px" }}>{s}</span>
+                        ))}
+                        {matchData.preferredMissing.map(s => (
+                          <span key={s} style={{ background: "#fef9c3", color: "#854d0e", borderRadius: "4px", padding: "2px 8px", fontSize: "12px" }}>{s}</span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -902,6 +1380,57 @@ export default function AdminDashboard() {
                 )}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Anti-Cheat Tab */}
+        {activeTab === "anti-cheat" && (
+          <div className={styles.antiCheatContainer}>
+            <h2 className={styles.antiCheatTitle}>🛡️ Anti-Cheat Violations</h2>
+            {violationsLoading && violations.length === 0 ? (
+              <p>Loading...</p>
+            ) : violations.length === 0 ? (
+              <p className={styles.noDataMessage}>No violations recorded yet.</p>
+            ) : (
+              <div className={styles.violationsTable}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Candidate</th>
+                      <th>Email</th>
+                      <th>Violation</th>
+                      <th>Severity</th>
+                      <th>Auto-Closed</th>
+                      <th>Time</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {violations.map((v: any) => (
+                      <tr key={v.id}>
+                        <td>{v.candidateName}</td>
+                        <td>{v.email}</td>
+                        <td>
+                          <span className={styles.violationBadge}>
+                            {v.eventType.replace(/_/g, " ")}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={v.severity === "critical" ? styles.severityCritical : styles.severityWarning}>
+                            {v.severity}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={v.autoClosed ? styles.autoClosedYes : styles.autoClosedNo}>
+                            {v.autoClosed ? "🔴 Yes" : "—"}
+                          </span>
+                        </td>
+                        <td>{v.createdAt ? new Date(v.createdAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 

@@ -17,7 +17,7 @@ export default function LoginPage() {
 
   const handleGoogleSignIn = () => {
     setGoogleLoading(true);
-    signIn('google', { callbackUrl: '/onboarding' });
+    signIn('google', { callbackUrl: '/post-login' });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -27,7 +27,6 @@ export default function LoginPage() {
 
     try {
       if (mode === 'signup') {
-        // Registration flow
         if (!name || !email || !password) {
           setError('Please fill in all fields');
           setIsLoading(false);
@@ -52,7 +51,6 @@ export default function LoginPage() {
           return;
         }
 
-        // Auto sign-in after successful registration
         const result = await signIn('credentials', {
           email,
           password,
@@ -68,7 +66,6 @@ export default function LoginPage() {
 
         router.push('/onboarding');
       } else {
-        // Sign-in flow
         if (!email || !password) {
           setError('Please fill in all fields');
           setIsLoading(false);
@@ -87,7 +84,6 @@ export default function LoginPage() {
           return;
         }
 
-        // Check if user has already completed onboarding
         try {
           const profileResponse = await fetch('/api/candidate', {
             credentials: 'include',
@@ -113,15 +109,28 @@ export default function LoginPage() {
   };
 
   return (
-    <main className={styles.container}>
-      <header className={styles.header}>
-        <h1 className={styles.headerTitle}>Welcome to Annam.ai Agri AI Interview Platform</h1>
+    <main className={styles.page}>
+      {/* Top bar with small logo */}
+      <header className={styles.topBar}>
+        <img
+          src="/login/annam-logo-white.png"
+          alt="ANNAM.AI"
+          className={styles.logo}
+        />
+        <p className={styles.brandSub}>Center of Excellence for AI in Agriculture, IIT Ropar</p>
       </header>
+
+      {/* Hero heading */}
+      <div className={styles.hero}>
+        <h1 className={styles.heading}>
+          Welcome to Annam.ai AI-Powered Agri Interview Platform
+        </h1>
+      </div>
 
       {/* FAQ Hero Card */}
       <div className={styles.faqCard} onClick={() => router.push('/faq')}>
         <div className={styles.faqIcon}>
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10"/>
             <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
             <line x1="12" y1="17" x2="12.01" y2="17"/>
@@ -135,21 +144,21 @@ export default function LoginPage() {
           </p>
         </div>
         <div className={styles.faqArrow}>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <line x1="5" y1="12" x2="19" y2="12"/>
             <polyline points="12 5 19 12 12 19"/>
           </svg>
         </div>
       </div>
+
+      {/* Login form */}
       <div className={styles.loginBox}>
         <h2 className={styles.title}>{mode === 'signin' ? 'Sign In' : 'Create Account'}</h2>
 
         <form onSubmit={handleSubmit} className={styles.form} autoComplete="on">
           {mode === 'signup' && (
             <div className={styles.field}>
-              <label htmlFor="name" className={styles.label}>
-                Full Name
-              </label>
+              <label htmlFor="name" className={styles.label}>Full Name</label>
               <input
                 type="text"
                 id="name"
@@ -164,9 +173,7 @@ export default function LoginPage() {
           )}
 
           <div className={styles.field}>
-            <label htmlFor="email" className={styles.label}>
-              Email
-            </label>
+            <label htmlFor="email" className={styles.label}>Email</label>
             <input
               type="email"
               id="email"
@@ -180,9 +187,7 @@ export default function LoginPage() {
           </div>
 
           <div className={styles.field}>
-            <label htmlFor="password" className={styles.label}>
-              Password
-            </label>
+            <label htmlFor="password" className={styles.label}>Password</label>
             <input
               type="password"
               id="password"
@@ -199,20 +204,14 @@ export default function LoginPage() {
 
           <button type="submit" className={styles.button} disabled={isLoading}>
             {isLoading
-              ? mode === 'signin'
-                ? 'Signing in...'
-                : 'Creating account...'
-              : mode === 'signin'
-              ? 'Sign In'
-              : 'Create Account'}
+              ? mode === 'signin' ? 'Signing in...' : 'Creating account...'
+              : mode === 'signin' ? 'Sign In' : 'Create Account'}
           </button>
         </form>
 
         {mode === 'signin' && (
           <>
-            <div className={styles.divider}>
-              <span>or</span>
-            </div>
+            <div className={styles.divider}><span>or</span></div>
             <button
               type="button"
               onClick={handleGoogleSignIn}
@@ -223,7 +222,7 @@ export default function LoginPage() {
                 'Redirecting to Google...'
               ) : (
                 <>
-                  <svg width="18" height="18" viewBox="0 0 24 24" style={{ marginRight: 8, verticalAlign: 'middle' }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" style={{ marginRight: 8 }}>
                     <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
                     <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
                     <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
@@ -238,19 +237,9 @@ export default function LoginPage() {
 
         <p className={styles.footer}>
           {mode === 'signin' ? (
-            <>
-              Don't have an account?{' '}
-              <span className={styles.link} onClick={() => { setMode('signup'); setError(''); }}>
-                Sign up
-              </span>
-            </>
+            <>Don't have an account? <span className={styles.link} onClick={() => { setMode('signup'); setError(''); }}>Sign up</span></>
           ) : (
-            <>
-              Already have an account?{' '}
-              <span className={styles.link} onClick={() => { setMode('signin'); setError(''); }}>
-                Sign in
-              </span>
-            </>
+            <>Already have an account? <span className={styles.link} onClick={() => { setMode('signin'); setError(''); }}>Sign in</span></>
           )}
         </p>
       </div>

@@ -14,3 +14,5 @@ bcrypt>=4.0.0
 python-jose
 alembic
 httpx
+pdfplumber
+python-docx

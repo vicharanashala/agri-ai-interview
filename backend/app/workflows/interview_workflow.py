@@ -5,6 +5,13 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime
 
 from app.llm.service import llm_service
+from app.services.settings_service import get_question_guidelines, get_interview_system
+
+# Active interviews — cleared when interview ends
+_interviews: Dict[str, Any] = {}
+
+# Completed interviews — persists after end for evaluation retrieval
+_completed_interviews: Dict[str, Any] = {}
 
 
 class InterviewState:
@@ -94,57 +101,51 @@ class InterviewWorkflow:
         }
     
     async def _generate_next_question(self, state: InterviewState) -> str:
-        """Generate the next interview question using LLM."""
-        
-        # Build the prompt with candidate data and conversation history
+        """Generate the next interview question using LLM with DB-sourced guidelines."""
         candidate_data = state.candidate_data
-        
-        # Get question guidelines
+        conversation_history = [
+            {"role": m["role"], "content": m["content"]}
+            for m in state.messages
+            if m.get("role") and m.get("content")
+        ]
         guidelines = self._get_question_guidelines()
-        
-        # Build conversation history
-        conversation = state.get_conversation_context()
-        
-        prompt = f"""
-You are conducting an interview. Based on the candidate's response, generate the next relevant interview question.
+        system_prompt = get_interview_system()
 
-CANDIDATE INFORMATION:
-- Name: {candidate_data.get('name', 'Unknown')}
-- Position: {candidate_data.get('position', 'Not specified')}
-- Experience: {candidate_data.get('experience', 'Not specified')}
-- Skills: {candidate_data.get('skills', 'Not specified')}
-- Resume: {candidate_data.get('resume_text', 'No resume available')}
+        prompt = f"Candidate: {candidate_data.get('name', 'Unknown')}\n"
+        if candidate_data.get('farming_background'):
+            prompt += f"Background: {candidate_data['farming_background']}\n"
+        if candidate_data.get('experience_years'):
+            prompt += f"Experience: {candidate_data['experience_years']} years\n"
+        if candidate_data.get('crops_grown'):
+            prompt += f"Crops: {candidate_data['crops_grown']}\n"
+        if candidate_data.get('farming_type'):
+            prompt += f"Farming Type: {candidate_data['farming_type']}\n"
+        if candidate_data.get('land_size'):
+            prompt += f"Land Size: {candidate_data['land_size']}\n"
+        prompt += (
+            f"\nCONVERSATION: {state.get_conversation_context()}\n\n"
+            f"Based on the conversation, ask ONE short agriculture-related follow-up question (1-2 lines only). Return ONLY the question."
+        )
 
-CONVERSATION HISTORY:
-{conversation}
-
-{guidelines}
-
-Generate a single, focused interview question that:
-1. Builds on what the candidate just said
-2. Is relevant to their background and the position
-3. Helps assess their qualifications
-
-Return ONLY the question, nothing else.
-"""
-        
         try:
-            question = await llm_service.generate_text(prompt, max_tokens=300)
+            question = await llm_service.chat_completion(
+                messages=[{"role": "user", "content": prompt}],
+                system_prompt=system_prompt,
+                temperature=0.7,
+                max_tokens=200,
+            )
+            if question is None:
+                print("WARN: chat_completion returned None")
+                return "Can you tell me more about how you handle that situation on your farm?"
             return question.strip()
         except Exception as e:
-            print(f"Question generation error: {e}")
-            return "Can you tell me more about your experience with the key requirements of this role?"
+            import traceback
+            traceback.print_exc()
+            return "Can you tell me more about how you handle that situation on your farm?"
     
     def _get_question_guidelines(self) -> str:
-        """Get question generation guidelines."""
-        return """
-QUESTION GUIDELINES:
-- Questions should be relevant to the position and candidate's background
-- Vary question types: behavioral, technical, situational
-- Focus on understanding their experience, problem-solving, and communication skills
-- Don't ask yes/no questions; ask open-ended questions
-- One question at a time
-"""
+        """Get question generation guidelines from DB (or defaults)."""
+        return get_question_guidelines()
     
     def get_conversation_history(self, interview_id: str) -> Optional[List[Dict[str, Any]]]:
         """Get the full conversation history."""
@@ -154,8 +155,8 @@ QUESTION GUIDELINES:
         return state.messages
     
     def get_status(self, interview_id: str) -> Optional[Dict[str, Any]]:
-        """Get interview status."""
-        state = _interviews.get(interview_id)
+        """Get interview status from active or completed store."""
+        state = _interviews.get(interview_id) or _completed_interviews.get(interview_id)
         if not state:
             return None
         return {
@@ -164,12 +165,34 @@ QUESTION GUIDELINES:
         }
     
     def end_interview(self, interview_id: str) -> bool:
-        """End an interview session."""
+        """
+        End an interview session.
+        Moves the state to _completed_interviews before deletion so evaluation
+        can still retrieve the conversation history.
+        """
+        if interview_id in _interviews:
+            state = _interviews.pop(interview_id)
+            state.status = "completed"
+            # Preserve for evaluation — candidate_data and messages survive the end
+            _completed_interviews[interview_id] = state
+            return True
+        return False
+
+    def get_completed_interview(self, interview_id: str) -> Optional[Any]:
+        """Retrieve a completed interview's state for evaluation."""
+        return _completed_interviews.get(interview_id)
+
+    def get_conversation_history(self, interview_id: str) -> Optional[List[Dict[str, Any]]]:
+        """Get the full conversation history from either active or completed store."""
+        # Check active first
         state = _interviews.get(interview_id)
-        if not state:
-            return False
-        state.status = "ended"
-        return True
+        if state:
+            return state.messages
+        # Fall back to completed (post-end)
+        state = _completed_interviews.get(interview_id)
+        if state:
+            return state.messages
+        return None
 
 
 # Singleton instance

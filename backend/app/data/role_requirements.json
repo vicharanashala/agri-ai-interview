@@ -1,0 +1,34 @@
+{
+  "roles": {
+    "frontend_engineer": {
+      "label": "Frontend Engineer",
+      "required": ["HTML", "CSS", "JavaScript", "TypeScript", "React"],
+      "preferred": ["Next.js", "Tailwind", "GraphQL", "REST API", "Web Performance", "Responsive Design"]
+    },
+    "backend_engineer": {
+      "label": "Backend Engineer",
+      "required": ["Python", "REST", "SQL"],
+      "preferred": ["FastAPI", "Django", "PostgreSQL", "Redis", "Microservices", "Docker", "API Design"]
+    },
+    "fullstack_engineer": {
+      "label": "Full Stack Engineer",
+      "required": ["JavaScript", "React", "Python", "REST", "SQL"],
+      "preferred": ["Next.js", "TypeScript", "PostgreSQL", "Docker", "Git", "CI/CD"]
+    },
+    "devops_engineer": {
+      "label": "DevOps Engineer",
+      "required": ["Docker", "Linux", "CI/CD", "Git"],
+      "preferred": ["Kubernetes", "AWS", "Terraform", "GitHub Actions", "Prometheus", "Grafana", "Python", "Nginx"]
+    },
+    "ai_ml_engineer": {
+      "label": "AI/ML Engineer",
+      "required": ["Python", "Machine Learning", "Deep Learning"],
+      "preferred": ["PyTorch", "TensorFlow", "NLP", "LLM", "LangChain", "RAG", "Vector Databases", "Hugging Face", "Prometheus"]
+    },
+    "mobile_engineer": {
+      "label": "Mobile Engineer",
+      "required": ["React Native", "Android", "iOS"],
+      "preferred": ["Flutter", "Kotlin", "Swift", "Firebase", "REST API", "App Store"]
+    }
+  }
+}

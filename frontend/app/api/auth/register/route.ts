@@ -41,6 +41,16 @@ export async function POST(request: NextRequest) {
       },
     })
 
+    // Create a Candidate record immediately on signup so admin sees them
+    // with "onboarding" phase (fullName etc. will be filled during onboarding)
+    await prisma.candidate.create({
+      data: {
+        userId: user.id,
+        fullName: name,
+        currentPhase: 'onboarding',
+      },
+    })
+
     return NextResponse.json(
       {
         id: user.id,

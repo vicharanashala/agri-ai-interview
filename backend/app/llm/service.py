@@ -5,6 +5,7 @@ import os
 import httpx
 from typing import List, Dict, Any, Optional
 from app.core.config import settings
+from app.services.settings_service import get_evaluation_system
 
 
 class LLMService:
@@ -278,27 +279,19 @@ Questions MUST relate to agriculture, crops, soil, irrigation, or farming practi
     ) -> Dict[str, Any]:
         """
         Evaluate the interview and return scores and summary.
-        
-        Args:
-            candidate_data: Candidate's profile information
-            conversation_history: Full interview conversation
-        
-        Returns:
-            Dictionary with overall_score, metrics (motivation, agri_knowledge), 
-            and text summary of the interview
+        Uses the evaluation_system guideline from DB (or defaults).
         """
         conversation_text = self._build_conversation_summary(conversation_history)
         candidate_context = self._build_candidate_context(candidate_data)
-        
-        system_prompt = """You are an expert agricultural HR evaluator.
-Evaluate the candidate's interview performance based on their responses.
-Return a JSON object with:
-- overall_score: integer 0-100
-- metrics: object with "motivation" (0-10) and "agri_knowledge" (0-10)
-- summary: string (2-3 sentences summarizing the interview)
-
-Be fair and objective in your evaluation."""
-        
+        evaluation_system = get_evaluation_system()
+        system_prompt = (
+            "You are an expert agricultural HR evaluator.\n"
+            + evaluation_system
+            + "\nEvaluate the candidate's interview performance. Return a JSON object with:\n"
+            + "- overall_score: integer 0-100\n"
+            + "- metrics: object with \"motivation\" (0-10) and \"agri_knowledge\" (0-10)\n"
+            + "- summary: string (2-3 sentences)\n\nBe fair and objective."
+        )
         evaluation_prompt = f"""Evaluate this agricultural interview:
 
 Candidate Profile:
@@ -310,35 +303,31 @@ Interview Conversation:
 Return your evaluation as valid JSON only, no other text."""
 
         messages = [{"role": "user", "content": evaluation_prompt}]
-        
+
         try:
             response = await self.chat_completion(
                 messages=messages,
                 system_prompt=system_prompt,
-                temperature=0.3,  # Lower temp for consistent evaluation
+                temperature=0.3,
                 max_tokens=500
             )
-            
-            # Parse the JSON response
+
             import json
             import re
-            
-            # Try to extract JSON from the response
+
             json_match = re.search(r'\{[^{}]*\}', response, re.DOTALL)
             if json_match:
                 evaluation = json.loads(json_match.group())
             else:
-                # Fallback if JSON parsing fails
                 evaluation = {
                     "overall_score": 70,
                     "metrics": {"motivation": 7, "agri_knowledge": 7},
                     "summary": response[:200] if len(response) > 200 else response
                 }
-            
+
             return evaluation
-            
-        except Exception as e:
-            # Return default values on error
+
+        except Exception:
             return {
                 "overall_score": 0,
                 "metrics": {"motivation": 0, "agri_knowledge": 0},
@@ -370,25 +359,25 @@ Return your evaluation as valid JSON only, no other text."""
         if candidate_data.get("resume_text"):
             resume_text = f"\n\nResume Content:\n{candidate_data['resume_text']}"
         
-        system_prompt = """You are an expert agricultural HR evaluator.
-        
-Evaluate the candidate's interview performance comprehensively. You must return a valid JSON object with EXACTLY this structure:
-
-{
-    "overall_score": 0-100,
-    "metrics": {
-        "motivation": {"score": 0-10, "details": "explanation"},
-        "agri_knowledge": {"score": 0-10, "details": "explanation"},
-        "communication": {"score": 0-10, "details": "explanation"},
-        "problem_solving": {"score": 0-10, "details": "explanation"}
-    },
-    "summary": "2-3 paragraph comprehensive summary integrating resume, background, and interview performance",
-    "strengths": ["strength 1", "strength 2", "strength 3"],
-    "areas_for_improvement": ["area 1", "area 2", "area 3"],
-    "recommendation": "hire/consider/reject with brief explanation"
-}
-
-Be objective, fair, and base your evaluation on both the candidate's stated qualifications and their interview responses."""
+        system_prompt = (
+            "You are an expert agricultural HR evaluator.\n\n"
+            + get_evaluation_system()
+            + "\n\nEvaluate the candidate's interview performance comprehensively. "
+            + "You must return a valid JSON object with EXACTLY this structure:\n\n"
+            + "{\n"
+            + '"overall_score": 0-100,\n'
+            + '"metrics": {\n'
+            + '    "motivation": {"score": 0-10, "details": "explanation"},\n'
+            + '    "agri_knowledge": {"score": 0-10, "details": "explanation"},\n'
+            + '    "communication": {"score": 0-10, "details": "explanation"},\n'
+            + '    "problem_solving": {"score": 0-10, "details": "explanation"}\n'
+            + '},\n'
+            + '"summary": "2-3 paragraph comprehensive summary",\n'
+            + '"strengths": ["strength 1", "strength 2", "strength 3"],\n'
+            + '"areas_for_improvement": ["area 1", "area 2"],\n'
+            + '"recommendation": "hire/consider/reject with brief explanation"\n'
+            + "}\n\nBe objective, fair, and base your evaluation on both the candidate's stated qualifications and their interview responses."
+        )
 
         evaluation_prompt = f"""Evaluate this agricultural interview candidate comprehensively:
 

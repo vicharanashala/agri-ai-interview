@@ -53,6 +53,13 @@ class StatusResponse(BaseModel):
     conversation_length: int
 
 
+class StatusCheckResponse(BaseModel):
+    """Response for checking if any interview has been completed."""
+    has_completed_interview: bool
+    status: str
+    message: str
+
+
 @router.post("/start", response_model=StartInterviewResponse)
 async def start_interview(request: StartInterviewRequest):
     """
@@ -124,16 +131,42 @@ async def send_message(request: MessageRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/status/check", response_model=StatusCheckResponse)
+async def check_interview_status():
+    """
+    Check if any interview has been completed.
+    This endpoint checks the backend memory for any completed interview.
+    """
+    try:
+        from app.workflows.interview_workflow import _interviews
+
+        for interview_id, state in _interviews.items():
+            if state.status == "completed":
+                return StatusCheckResponse(
+                    has_completed_interview=True,
+                    status="completed",
+                    message="An interview has already been completed"
+                )
+    except ImportError:
+        pass
+
+    return StatusCheckResponse(
+        has_completed_interview=False,
+        status="not_started",
+        message="No completed interview found"
+    )
+
+
 @router.get("/status/{interview_id}", response_model=StatusResponse)
 async def get_status(interview_id: str):
     """
     Get the current status of an interview.
     """
     status = interview_graph_manager.get_status(interview_id)
-    
+
     if not status:
         raise HTTPException(status_code=404, detail="Interview not found")
-    
+
     return StatusResponse(
         interview_id=interview_id,
         status=status["status"],
@@ -147,10 +180,10 @@ async def get_history(interview_id: str):
     Get the full conversation history for an interview.
     """
     history = interview_graph_manager.get_conversation_history(interview_id)
-    
+
     if not history:
         raise HTTPException(status_code=404, detail="Interview not found")
-    
+
     return {"interview_id": interview_id, "history": history}
 
 
@@ -252,19 +285,16 @@ async def evaluate_interview(request: EvaluateRequest):
     Uses the LLM to analyze conversation history and generate detailed evaluation.
     """
     try:
-        # Get conversation history from workflow
+        # Get conversation history from workflow (checks both active and completed)
         messages = interview_workflow.get_conversation_history(request.interview_id)
         if not messages:
             raise HTTPException(status_code=404, detail="Interview not found or not completed")
         
-        # Get candidate data from stored state
-        status_data = interview_workflow.get_status(request.interview_id)
-        state = None
-        try:
-            from app.workflows.interview_workflow import _interviews
-            state = _interviews.get(request.interview_id)
-        except Exception:
-            pass
+        # Get candidate data from completed store (state moves there on end_interview)
+        state = interview_workflow.get_completed_interview(request.interview_id)
+        candidate_data = request.candidate_data or {}
+        if state and hasattr(state, 'candidate_data'):
+            candidate_data = state.candidate_data
         
         candidate_data = request.candidate_data or {}
         if state and hasattr(state, 'candidate_data'):
@@ -326,14 +356,7 @@ async def get_evaluation(interview_id: str):
         if not messages:
             raise HTTPException(status_code=404, detail="Interview not found")
 
-        status_data = interview_workflow.get_status(interview_id)
-        state = None
-        try:
-            from app.workflows.interview_workflow import _interviews
-            state = _interviews.get(interview_id)
-        except Exception:
-            pass
-
+        state = interview_workflow.get_completed_interview(interview_id)
         candidate_data = {}
         if state and hasattr(state, 'candidate_data'):
             candidate_data = state.candidate_data
@@ -377,39 +400,3 @@ async def get_evaluation(interview_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-class StatusCheckResponse(BaseModel):
-    """Response for checking interview status."""
-    has_completed_interview: bool
-    status: str
-    message: str
-
-
-@router.get("/status/check", response_model=StatusCheckResponse)
-async def check_interview_status():
-    """
-    Check if any interview has been completed.
-    This endpoint checks the backend memory for any completed interview.
-    """
-    try:
-        # Import the interviews dictionary from workflow
-        try:
-            from app.workflows.interview_workflow import _interviews
-            
-            # Check all interviews for completed status
-            for interview_id, state in _interviews.items():
-                if state.status == "completed":
-                    return StatusCheckResponse(
-                        has_completed_interview=True,
-                        status="completed",
-                        message="An interview has already been completed"
-                    )
-        except ImportError:
-            pass
-        
-        return StatusCheckResponse(
-            has_completed_interview=False,
-            status="not_started",
-            message="No completed interview found"
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))

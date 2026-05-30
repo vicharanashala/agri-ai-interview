@@ -59,6 +59,8 @@ export default function OfferPage() {
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       setPdfUrl(url);
+      // Mark that the offer letter has been viewed — unlocks "Submit Signed Offer" in dashboard
+      localStorage.setItem('offerLetterViewed', 'true');
     } catch (err) {
       setPdfError(err instanceof Error ? err.message : 'Failed to load offer letter');
     } finally {

@@ -89,6 +89,14 @@ export const authOptions: NextAuthOptions = {
             dbUser = await prisma.user.create({
               data: { email, name },
             })
+            // Create Candidate record immediately so admin sees them in onboarding phase
+            await prisma.candidate.create({
+              data: {
+                userId: dbUser.id,
+                fullName: name,
+                currentPhase: 'onboarding',
+              },
+            })
           }
           token.sub = dbUser.id
           token.email = email

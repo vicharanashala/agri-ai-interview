@@ -1,0 +1,346 @@
+.page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: linear-gradient(160deg, #0a2e0a 0%, #020617 60%, #0f172a 100%);
+  padding: 20px 20px 60px;
+  overflow-x: hidden;
+}
+
+/* ─── Top bar ─────────────────────────────────────────────── */
+.topBar {
+  position: fixed;
+  top: 28px;
+  left: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 10;
+}
+
+.logo {
+  height: 40px;
+  width: auto;
+  object-fit: contain;
+}
+
+.brandSub {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.5);
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* ─── Card shell ───────────────────────────────────────────── */
+.card {
+  background: white;
+  border-radius: 12px;
+  padding: 32px 36px;
+  width: 100%;
+  max-width: 520px;
+  margin-top: 80px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+}
+
+.cardTitle {
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 6px 0;
+  text-align: center;
+}
+
+.cardSub {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 0 0 28px 0;
+  text-align: center;
+  line-height: 1.5;
+}
+
+/* ─── State panels ─────────────────────────────────────────── */
+.stateBox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 16px;
+  padding: 8px 0;
+}
+
+.stateIcon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.stateHeading {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.stateText {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 0;
+  line-height: 1.6;
+  max-width: 360px;
+}
+
+/* QUEUED */
+.queuedIcon { background: rgba(59, 130, 246, 0.12); color: #2563eb; }
+.queuedHead { color: #1e40af; }
+
+/* QUEUE_FULL */
+.queueFullIcon { background: rgba(245, 158, 11, 0.12); color: #d97706; }
+.queueFullHead { color: #92400e; }
+
+/* COOLDOWN */
+.cooldownIcon { background: rgba(239, 68, 68, 0.1); color: #dc2626; }
+.cooldownHead { color: #991b1b; }
+
+/* READY */
+.readyIcon { background: rgba(8, 203, 0, 0.12); color: #059669; }
+.readyHead { color: #065f46; }
+
+/* PAUSED */
+.pausedIcon { background: rgba(139, 92, 246, 0.12); color: #7c3aed; }
+.pausedHead { color: #4c1d95; }
+
+/* INTERVIEWING */
+.interviewingIcon { background: rgba(8, 203, 0, 0.12); color: #059669; }
+.interviewingHead { color: #065f46; }
+
+/* CANCELLED / SKIPPED */
+.cancelledIcon { background: rgba(239, 68, 68, 0.1); color: #dc2626; }
+.cancelledHead { color: #991b1b; }
+
+/* NOT_FOUND */
+.notFoundIcon { background: rgba(107, 114, 128, 0.1); color: #4b5563; }
+.notFoundHead { color: #374151; }
+
+/* ─── Info rows (position, countdown, etc.) ────────────────── */
+.infoRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 12px 16px;
+  width: 100%;
+  text-align: left;
+}
+
+.infoLabel {
+  font-size: 13px;
+  font-weight: 500;
+  color: #6b7280;
+  flex-shrink: 0;
+}
+
+.infoValue {
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+  margin-left: auto;
+}
+
+/* ─── Buttons ──────────────────────────────────────────────── */
+.button {
+  padding: 13px 28px;
+  font-size: 15px;
+  font-weight: 600;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  min-width: 180px;
+}
+
+.button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.primaryBtn {
+  background: linear-gradient(135deg, #08CB00 0%, #059669 100%);
+  box-shadow: 0 4px 14px rgba(8, 203, 0, 0.3);
+}
+
+.primaryBtn:hover:not(:disabled) {
+  box-shadow: 0 6px 20px rgba(8, 203, 0, 0.4);
+}
+
+.dangerBtn {
+  background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.3);
+}
+
+.dangerBtn:hover:not(:disabled) {
+  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
+}
+
+.outlineBtn {
+  background: transparent;
+  border: 1.5px solid #d1d5db;
+  color: #374151;
+  box-shadow: none;
+}
+
+.outlineBtn:hover:not(:disabled) {
+  border-color: #9ca3af;
+  background: #f9fafb;
+}
+
+/* ─── Wait time badge ──────────────────────────────────────── */
+.waitBadge {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 99px;
+  margin-left: 8px;
+}
+
+.badgeApprox {
+  background: #fef9c3;
+  color: #854d0e;
+  border: 1px solid #fde68a;
+}
+
+.badgeExact {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+/* ─── Back link ────────────────────────────────────────────── */
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 20px;
+  font-size: 14px;
+  color: #6b7280;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.backLink:hover {
+  color: #374151;
+}
+
+/* ─── Loading / error states ──────────────────────────────── */
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 40px 0;
+}
+
+.spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid #e5e7eb;
+  border-top-color: #08CB00;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loadingText {
+  font-size: 14px;
+  color: #9ca3af;
+  margin: 0;
+}
+
+.errorText {
+  font-size: 14px;
+  color: #dc2626;
+  margin: 0;
+  padding: 10px 16px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  width: 100%;
+  text-align: center;
+}
+
+/* ─── Divider ──────────────────────────────────────────────── */
+.divider {
+  width: 100%;
+  height: 1px;
+  background: #e5e7eb;
+  margin: 4px 0;
+}
+
+/* ─── Footer actions ───────────────────────────────────────── */
+.footerActions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: 4px;
+}
+
+/* ─── Progress bar for cooldown ───────────────────────────── */
+.progressTrack {
+  width: 100%;
+  height: 6px;
+  background: #e5e7eb;
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  background: linear-gradient(90deg, #ef4444, #f97316);
+  border-radius: 99px;
+  transition: width 1s linear;
+}
+/* ─── Almost-there pulse for position 1 waiting on promotion ── */
+.almostThereMsg {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  padding: 10px 16px;
+  font-size: 14px;
+  color: #1d4ed8;
+  font-weight: 500;
+  text-align: center;
+  max-width: 320px;
+}
+
+.pulseDot {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #2563eb;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}

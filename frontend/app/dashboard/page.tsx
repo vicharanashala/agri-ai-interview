@@ -164,7 +164,7 @@ export default function DashboardPage() {
     },
   ];
 
-  const handlePhaseClick = (phase: PhaseInfo) => {
+  const handlePhaseClick = async (phase: PhaseInfo) => {
     // Allow clicking on current or completed phases
     if (phase.status === 'current' || phase.status === 'completed') {
       // If Phase 2 (Start Interview) is completed, show popup
@@ -179,7 +179,14 @@ export default function DashboardPage() {
           router.push('/onboarding');
           break;
         case 2:
-          router.push('/interview');
+          if (phase.status === 'current') {
+            // Go directly to the interview instructions page.
+            // handleBeginInterview handles queue join + confirm silently
+            // before starting the interview.
+            router.push('/interview');
+          } else {
+            router.push('/interview/queue');
+          }
           break;
         case 3:
           router.push('/summary');

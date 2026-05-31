@@ -47,10 +47,14 @@ export default function InterviewPage() {
   const [currentEvaluation, setCurrentEvaluation] = useState<CumulativeEvaluation | null>(null);
   const [showEvaluation, setShowEvaluation] = useState(false);
   const [showInstructions, setShowInstructions] = useState(true);
+  const [showResumePrompt, setShowResumePrompt] = useState(false);
+  const [showStarting, setShowStarting] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
+  const [isResuming, setIsResuming] = useState(false);
   const [isEnding, setIsEnding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showEndConfirmDialog, setShowEndConfirmDialog] = useState(false);
+  const [showBackConfirmDialog, setShowBackConfirmDialog] = useState(false);
   const [isInterviewCompleted, setIsInterviewCompleted] = useState(false);
   const [cheatWarning, setCheatWarning] = useState<{
     visible: boolean
@@ -148,64 +152,181 @@ export default function InterviewPage() {
       } catch (error) {
         console.error('Failed to check interview status:', error);
       }
+
+      // Check if there's an existing active session (resume path)
+      try {
+        const candidateId = sessionStorage.getItem('candidateId') || '';
+        const queueRes = await fetch(`/api/interview/queue/status/${candidateId}`);
+        if (queueRes.ok) {
+          const qData = await queueRes.json();
+          // 6.4 — Show resume prompt if paused
+          if (qData.result === 'paused') {
+            setShowResumePrompt(true);
+            return;
+          }
+        }
+      } catch {
+        // Non-fatal — proceed to interview page
+      }
     };
 
     checkInterviewStatus();
-  }, []);
+  }, [router]);
+
+  // Block back button during active interview — show confirmation
+  useEffect(() => {
+    // Only activate when interview has started and is not complete
+    if (!interviewId || isComplete) return;
+
+    const handleBackButton = (e: PopStateEvent) => {
+      e.preventDefault();
+      setShowBackConfirmDialog(true);
+      // Push state back so we're still on the page
+      window.history.pushState(null, '', window.location.href);
+    };
+
+    window.history.pushState(null, '', window.location.href);
+    window.addEventListener('popstate', handleBackButton);
+    return () => window.removeEventListener('popstate', handleBackButton);
+  }, [interviewId, isComplete]);
+
+  // 6.4 — Handle resume from a paused interview state
+  const handleResumeInterview = async () => {
+    setIsResuming(true);
+    try {
+      const candidateId = sessionStorage.getItem('candidateId') || '';
+      const res = await fetch('/api/interview/resume', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ candidate_id: candidateId }),
+      });
+      const data = await res.json();
+      if (!res.ok || (data.result !== 'resumed' && data.result !== 'session_not_paused')) {
+        setError(data.reason || 'Could not resume. Please try again.');
+        setShowResumePrompt(false);
+        return;
+      }
+      // Redirect to interview page — backend restores the snapshot
+      router.push('/interview');
+    } catch {
+      setError('Network error. Please check your connection.');
+      setShowResumePrompt(false);
+    } finally {
+      setIsResuming(false);
+    }
+  };
 
   const handleBeginInterview = async () => {
-    // Check if interview was already completed
-    const wasCompleted = localStorage.getItem('interviewCompleted') === 'true' || 
-                         sessionStorage.getItem('interviewCompleted') === 'true';
-    
-    if (wasCompleted) {
-      setError('Interview is already completed. Go to Interview Summary.');
-      return;
-    }
-
+    // Always reset completed state — the candidate is starting a new attempt
+    setIsInterviewCompleted(false);
+    setError(null);
     resetAntiCheat();
     setIsStarting(true);
-    setError(null);
+    // Start the starting screen immediately — never show instructions underneath
+    setShowStarting(true);
+    setShowInstructions(false);
+
     try {
+      const candidateId = sessionStorage.getItem('candidateId') || '';
+
+      // ── Step 1: Request an interview slot ─────────────────────────────────
+      const queueRes = await fetch('/api/interview/queue/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ candidate_id: candidateId }),
+      });
+      const queueData = await queueRes.json();
+
+      // No slot available — show the message and let them retry
+      if (queueData.result === 'no_slot') {
+        setShowStarting(false);
+        setShowInstructions(true);
+        setError('All slots are full, please try after sometime.');
+        return;
+      }
+
+      // Already has an active interview — resume it
+      if (queueData.result === 'already_active') {
+        setInterviewId(queueData.interview_id);
+        setShowStarting(false);
+        setShowInstructions(false);
+        // Restore history for resumed session
+        try {
+          const histRes = await fetch(`/api/interview/history/${queueData.interview_id}`);
+          if (histRes.ok) {
+            const histData = await histRes.json();
+            if (histData.history && histData.history.length > 0) {
+              const restored: Message[] = histData.history.map((m: { role: string; content: string }) => ({
+                role: m.role as 'ai' | 'user',
+                content: m.content,
+              }));
+              setMessages(restored);
+            } else {
+              setMessages([{ role: 'ai', content: 'Welcome back! Please continue from where you left off.' }]);
+            }
+          }
+        } catch {
+          setMessages([{ role: 'ai', content: 'Welcome back! Please continue from where you left off.' }]);
+        }
+        return;
+      }
+
+      // ── Step 2: Start the interview (slot was granted) ────────────────────
+      setShowStarting(true);
+      setShowInstructions(false);
+
       const response = await fetch('/api/interview/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          candidateId: candidateId,
           candidate_data: {
             name: sessionStorage.getItem('candidateFullName') || 'Candidate',
-            position: 'Software Developer'
-          }
+            position: 'Software Developer',
+          },
         }),
       });
-      
+
       const data = await response.json();
-      
-      // Check for errors - specifically handle completed interview case
+
       if (!response.ok || data.error || !data.interviewId) {
-        // Check if this is an "already completed" error from backend
         if (response.status === 400 && data.detail?.message?.includes('already completed')) {
+          setShowStarting(false);
+          setShowInstructions(true);
           setError('Interview is already completed. Go to Interview Summary.');
           return;
         }
         const errorMsg = data.error || 'Failed to start interview. Please ensure the backend server is running.';
         console.error('Start interview error:', errorMsg, data);
+        setShowStarting(false);
+        setShowInstructions(true);
         setError(errorMsg);
         return;
       }
-      
+
       setInterviewId(data.interviewId);
       // Persist to localStorage so summary page can retrieve it
       localStorage.setItem('currentInterview', JSON.stringify({
         interviewId: data.interviewId,
         startedAt: new Date().toISOString(),
       }));
+      setShowStarting(false);
+
+      // If resumed (existing session), fetch conversation history so we can
+      // restore the chat UI instead of showing an empty first question.
+      setInterviewId(data.interviewId);
       setMessages([{ role: 'ai', content: data.question || data.greeting }]);
+      setShowStarting(false);
+
       setShowInstructions(false);
     } catch (error) {
       console.error('Failed to start interview:', error);
+      setShowStarting(false);
+      setShowInstructions(true);
       setError('Network error. Please ensure the backend server is running on port 8000.');
     } finally {
       setIsStarting(false);
+      setShowStarting(false); // guarantee cleanup — don't let candidate get stuck
     }
   };
 
@@ -418,9 +539,46 @@ export default function InterviewPage() {
     }
   };
 
+  const handleConfirmBack = async () => {
+    setShowBackConfirmDialog(false);
+    setIsEnding(true);
+
+    try {
+      if (interviewId) {
+        await fetch(`/api/interview/end/${interviewId}`, { method: 'POST' });
+      }
+
+      const candidateId = sessionStorage.getItem('candidateId') || '';
+      fetch('/api/interview/queue/cancel', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ candidate_id: candidateId }),
+      }).catch(() => {});
+
+      sessionStorage.setItem('interviewPhase', '3');
+      localStorage.setItem('interviewPhase', '3');
+      sessionStorage.setItem('phase2_completed', 'true');
+      localStorage.setItem('phase2_completed', 'true');
+      await syncPhaseToDb(3);
+
+      router.push('/summary?terminated=true');
+    } catch (error) {
+      console.error('Failed to end interview on back:', error);
+      setIsEnding(false);
+    }
+  };
+
   const handleConfirmEnd = async () => {
     // Close dialog immediately so user sees it go away
     setShowEndConfirmDialog(false);
+
+    // 6.6 — Notify backend of voluntary cancel before ending
+    const candidateId = sessionStorage.getItem('candidateId') || '';
+    fetch('/api/interview/queue/cancel', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ candidate_id: candidateId }),
+    }).catch(() => {}); // non-fatal — don't block the end flow
 
     // Set Interview Summary (Phase 3) as current phase
     sessionStorage.setItem('interviewPhase', '3');
@@ -468,58 +626,100 @@ export default function InterviewPage() {
     );
   }
 
+  // 6.4 — Show resume prompt if interview was paused (interruption path)
+  // 6.5 — Show "Starting your interview soon" screen
+  if (showStarting) {
+    return (
+      <div className={styles.container}>
+        <div className={styles.completedScreen}>
+          <div className={styles.completedCard}>
+            <div className={styles.startingIcon}>🚀</div>
+            <h1 className={styles.completedTitle}>Starting your interview soon</h1>
+            <p className={styles.completedSubtitle}>
+              A slot is available. Setting everything up for you — this will only take a moment.
+            </p>
+            <div className={styles.startingDots}>
+              <span></span><span></span><span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (showResumePrompt) {
+    return (
+      <div className={styles.container}>
+        <div className={styles.completedScreen}>
+          <div className={styles.completedCard}>
+            <div className={styles.completedIcon}>⏸</div>
+            <h1 className={styles.completedTitle}>Interview Paused</h1>
+            <p className={styles.completedSubtitle}>
+              Your interview was interrupted but your progress has been saved.
+            </p>
+            <p className={styles.completedDescription}>
+              Your interview will resume from where you left off — no need to start over.
+            </p>
+            {error && <p className={styles.errorText}>{error}</p>}
+            <button
+              className={styles.completedButton}
+              onClick={handleResumeInterview}
+              disabled={isResuming}
+            >
+              {isResuming ? 'Resuming…' : 'Resume Interview'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className={styles.container}>
+    <>
       {showInstructions ? (
         <div className={styles.instructionScreen}>
           <div className={styles.instructionCard}>
-            <h1 className={styles.instructionTitle}>AI Interview</h1>
-            <p className={styles.instructionSubtitle}>Welcome to your AI-powered interview session</p>
-            
+            <h1 className={styles.instructionTitle}>Interview Guidelines</h1>
+            <p className={styles.instructionSubtitle}>Please read the following guidelines carefully before starting your interview</p>
+
             <div className={styles.guidelines}>
-              <h2>Guidelines</h2>
               <ul>
-                <li>Answer each question to the best of your ability</li>
-                <li>The interview will adapt based on your responses</li>
-                <li>You will receive feedback after each answer</li>
-                <li>The interview typically consists of 10 questions</li>
-                <li>Be honest and thorough in your responses</li>
+                <li>This is an AI powered chat interview.</li>
+                <li>The interview will adapt based on your responses and evaluate accordingly.</li>
+                <li>Try to answer the questions in depth to get better results.</li>
               </ul>
+
+              <h3 className={styles.antiCheatTitle}>⚠️ Anti-Cheating Rules</h3>
+              <p className={styles.antiCheatSubtitle}>The following actions are monitored and will result in interview termination after 2 violations:</p>
+              <ul className={styles.antiCheatList}>
+                <li>🚫 <strong>Tab Switching</strong> — Do not switch to other browser tabs or windows</li>
+                <li>🚫 <strong>Leaving the Window</strong> — Do not click outside or Alt+Tab away from this window</li>
+                <li>🚫 <strong>Exiting Fullscreen</strong> — The interview runs in fullscreen mode; do not exit it</li>
+                <li>🚫 <strong>Copy / Paste</strong> — Copy and paste are disabled during the interview</li>
+                <li>🚫 <strong>Right-Click</strong> — Right-click context menu is disabled</li>
+                <li>🚫 <strong>Text Selection</strong> — Selecting text on the page is not allowed</li>
+                <li>🚫 <strong>Multi-Monitor</strong> — Moving the browser to another display is not allowed</li>
+                <li>⏳ <strong>Idle Timeout</strong> — If no activity is detected for 10 seconds, a warning will be triggered</li>
+              </ul>
+              <p className={styles.antiCheatNote}>
+                🔒 All violations are logged and reported to the review team. Please stay focused throughout the interview.
+              </p>
             </div>
 
-            <div className={styles.evaluationInfo}>
-              <h2>How You'll Be Evaluated</h2>
-              <div className={styles.criteria}>
-                <div className={styles.criteriaItem}>
-                  <span className={styles.criteriaLabel}>Technical Accuracy</span>
-                  <span className={styles.criteriaPercent}>40%</span>
-                </div>
-                <div className={styles.criteriaItem}>
-                  <span className={styles.criteriaLabel}>Communication</span>
-                  <span className={styles.criteriaPercent}>25%</span>
-                </div>
-                <div className={styles.criteriaItem}>
-                  <span className={styles.criteriaLabel}>Problem Solving</span>
-                  <span className={styles.criteriaPercent}>20%</span>
-                </div>
-                <div className={styles.criteriaItem}>
-                  <span className={styles.criteriaLabel}>Relevance</span>
-                  <span className={styles.criteriaPercent}>15%</span>
-                </div>
-              </div>
-            </div>
-
-            <button 
+            <button
               className={styles.beginButton}
               onClick={handleBeginInterview}
               disabled={isStarting}
             >
               {isStarting ? 'Starting...' : 'Begin Interview'}
             </button>
+
+            {error && <p className={styles.errorMessage}>{error}</p>}
           </div>
         </div>
       ) : (
-        <div className={styles.chatContainer}>
+        <div className={styles.container}>
+          <div className={styles.chatContainer}>
           <div className={styles.header}>
             <div className={styles.headerLeft}>
               <h1 className={styles.title}>AI Interview Assistant</h1>
@@ -586,6 +786,29 @@ export default function InterviewPage() {
                     onClick={handleCancelEnd}
                   >
                     No
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showBackConfirmDialog && (
+            <div className={styles.confirmOverlay}>
+              <div className={styles.confirmDialog}>
+                <h2>Leave Interview?</h2>
+                <p>Going back will close your interview. Your progress will be lost and you won't be able to resume.</p>
+                <div className={styles.confirmButtons}>
+                  <button
+                    className={styles.confirmYesButton}
+                    onClick={handleConfirmBack}
+                  >
+                    Leave
+                  </button>
+                  <button
+                    className={styles.confirmNoButton}
+                    onClick={() => setShowBackConfirmDialog(false)}
+                  >
+                    Stay
                   </button>
                 </div>
               </div>
@@ -699,6 +922,7 @@ export default function InterviewPage() {
             </form>
           )}
         </div>
+        </div>
       )}
       <AntiCheatOverlay
         isVisible={cheatWarning.visible}
@@ -715,6 +939,6 @@ export default function InterviewPage() {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

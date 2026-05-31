@@ -104,20 +104,56 @@ model Admin {
   updatedAt     DateTime  @updatedAt
 }
 
+// Singleton table — persists active_interview_count across server restarts.
+// Single row with id='singleton'.
+model ActiveInterviewCount {
+  id        String   @id @default("singleton")
+  count     Int      @default(0)
+  updatedAt DateTime @updatedAt
+}
+
+model InterviewQueueEntry {
+  id              String    @id @default(cuid())
+  candidateId     String    @unique
+  status          String    @default("queued") // queued | ready | interviewing | paused | cancelled | skipped | completed
+  position        Int?
+  scheduledAt     DateTime?
+  joinedAt        DateTime?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  cancelledAt     DateTime?
+  skippedAt       DateTime?
+  cooldownUntil   DateTime?
+  skipCount       Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model InterviewStateSnapshot {
+  id                  String   @id @default(cuid())
+  candidateId         String
+  queueEntryId        String
+  questionCount       Int
+  conversationHistory String   // JSON string
+  createdAt           DateTime @default(now())
+}
+
 model InterviewSession {
-  id              String   @id @default(cuid())
+  id              String    @id @default(cuid())
   candidateId     String
   candidate       Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
-  status          String   @default("active") // active, completed, cancelled
-  currentPhase    String   @default("interview")
-  interviewData   String?  // JSON string for interview state
-  startedAt       DateTime @default(now())
+  queueEntryId    String?
+  startedViaQueue Boolean   @default(false)
+  status          String    @default("active") // active, completed, cancelled
+  currentPhase    String    @default("interview")
+  interviewData   String?   // JSON string for interview state
+  startedAt       DateTime  @default(now())
   completedAt     DateTime?
   
   messages        InterviewMessage[]
   
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 }
 
 model InterviewMessage {

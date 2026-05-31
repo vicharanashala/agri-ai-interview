@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect } from 'react';
+import { Suspense, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
-export default function PostLoginPage() {
+function PostLoginContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -57,5 +57,24 @@ export default function PostLoginPage() {
     }}>
       Redirecting...
     </div>
+  );
+}
+
+export default function PostLoginPage() {
+  return (
+    <Suspense fallback={
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        fontFamily: 'system-ui, sans-serif',
+        color: '#666',
+      }}>
+        Loading...
+      </div>
+    }>
+      <PostLoginContent />
+    </Suspense>
   );
 }

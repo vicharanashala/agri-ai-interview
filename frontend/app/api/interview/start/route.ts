@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
     // Transform frontend data to backend format
     // Backend expects: { candidate_data: {...}, candidate_id?: string }
     const candidateName = body.candidateData?.name || body.candidate_data?.name || body.name || 'Demo Candidate';
-    const candidateId = body.candidateId || 'demo-candidate-id';
+    const candidateId = body.candidate_id || body.candidateId || 'demo-candidate-id';
     
     const backendRequest = {
       candidate_data: body.candidateData || {
@@ -21,6 +21,7 @@ export async function POST(request: NextRequest) {
         farming_type: body.farmingType || '',
         land_size: body.landSize || '',
       },
+      // Backend Pydantic model uses snake_case: candidate_id, not candidateId
       candidate_id: candidateId,
     };
 

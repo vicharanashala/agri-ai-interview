@@ -9,7 +9,7 @@ import uuid
 from app.workflows.interview_graph import interview_graph_manager
 from app.llm import llm_service
 from app.workflows.interview_workflow import interview_workflow
-
+from app.services.queue_manager import slot_manager
 
 router = APIRouter(prefix="/api/interview", tags=["interview"])
 
@@ -64,39 +64,41 @@ class StatusCheckResponse(BaseModel):
 async def start_interview(request: StartInterviewRequest):
     """
     Start a new interview session.
-    
-    Creates a new interview with the provided candidate data
-    and returns the first question.
+
+    Directly starts the interview if a slot is available, or returns
+    "no_slot" if all slots are in use.
     """
     try:
-        # Check if there's an existing completed interview for this candidate
-        # Using candidate_id if provided, otherwise we can check all active interviews
-        if request.candidate_id:
-            status = interview_graph_manager.get_status(request.candidate_id)
-            if status and status.get("status") == "completed":
-                raise HTTPException(
-                    status_code=400,
-                    detail={
-                        "message": "Interview is already completed. Go to Interview Summary.",
-                        "status": "completed",
-                        "interview_id": request.candidate_id
-                    }
-                )
-        
-        # Generate unique interview ID
-        interview_id = str(uuid.uuid4())
-        
-        # Initialize interview and get first question using langgraph
-        first_question = await interview_graph_manager.initialize_interview(
-            interview_id=interview_id,
-            candidate_data=request.candidate_data
-        )
-        
+        candidate_id = request.candidate_id
+
+        if not candidate_id:
+            raise HTTPException(status_code=400, detail="candidate_id is required")
+
+        result = await slot_manager.start_interview(candidate_id, request.candidate_data)
+
+        if result["result"] == "no_slot":
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "message": result["message"],
+                    "active_interview_count": result["active_interview_count"],
+                    "max_concurrent": result["max_concurrent"],
+                }
+            )
+
+        if result["result"] == "already_active":
+            return StartInterviewResponse(
+                interview_id=result["interview_id"],
+                first_question="",
+                status="resumed"
+            )
+
         return StartInterviewResponse(
-            interview_id=interview_id,
-            first_question=first_question,
+            interview_id=result["interview_id"],
+            first_question=result["first_question"],
             status="active"
         )
+
     except HTTPException:
         raise
     except Exception as e:
@@ -193,18 +195,51 @@ async def end_interview(interview_id: str):
     Manually end an interview session and get evaluation.
     """
     success = interview_graph_manager.end_interview(interview_id)
-    
+
     if not success:
         raise HTTPException(status_code=404, detail="Interview not found")
-    
+
     # Get the evaluation from langgraph
     evaluation = interview_graph_manager.get_evaluation(interview_id)
-    
+
+    # Free the slot
+    state = interview_workflow.get_completed_interview(interview_id)
+    candidate_id = state.candidate_id if state and hasattr(state, 'candidate_id') else ""
+    if candidate_id:
+        slot_manager.complete_interview(candidate_id, interview_id)
+
     return {
         "message": "Interview ended successfully",
         "interview_id": interview_id,
         "evaluation": evaluation
     }
+
+
+class PauseRequest(BaseModel):
+    candidate_id: str
+    interview_id: str
+
+
+class ResumeRequest(BaseModel):
+    candidate_id: str
+
+
+@router.post("/pause")
+async def pause_interview(request: PauseRequest):
+    """
+    Save a state snapshot when a candidate's connection is interrupted.
+    """
+    result = await slot_manager.pause_interview(request.candidate_id, request.interview_id)
+    return result
+
+
+@router.post("/resume")
+async def resume_interview(request: ResumeRequest):
+    """
+    Resume a paused interview from the saved state snapshot.
+    """
+    result = await slot_manager.resume_interview(request.candidate_id)
+    return result
 
 
 @router.delete("/reset")

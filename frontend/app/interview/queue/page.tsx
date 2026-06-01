@@ -76,12 +76,12 @@ export default function QueuePage() {
 
   // Candidate ID key: bump this whenever candidateId changes to force-reload
   const [candidateKey, setCandidateKey] = useState(0);
-  // Read live from sessionStorage — avoids stale-ref issues
-  const candidateId = useMemo(
-    () => sessionStorage.getItem('candidateId') || '',
-    [candidateKey],
-  );
-  // Detect when onboarding sets candidateId in the same tab
+  // Initialize as empty string (safe for SSR), read from sessionStorage only after mount
+  const [candidateId, setCandidateId] = useState('');
+  useEffect(() => {
+    setCandidateId(sessionStorage.getItem('candidateId') || '');
+  }, [candidateKey]);
+  // Detect when onboarding sets candidateId in a different tab
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
       if (e.key === 'candidateId') setCandidateKey(k => k + 1);

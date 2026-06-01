@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import styles from "./dashboard.module.css";
 import { useRouter } from "next/navigation";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import IndiaMap from "../../../components/IndiaMap";
 import LiveTab from "../../../components/admin/LiveTab";
 
 // Types
@@ -1261,34 +1260,6 @@ export default function AdminDashboard() {
             ============================================ */}
 
             {/* Phase 3 Header */}
-            <div className={styles.phase3Header}>
-              <h3>🗺️ Geographic Visualizations</h3>
-              <span className={styles.phase3Badge}>Phase 3</span>
-            </div>
-
-            {/* India State Heat Map (3.2, 3.3) */}
-            <div className={styles.mapWrapper}>
-              <h3 style={{ margin: "0 0 12px", fontSize: "14px", fontWeight: 600, color: "#374151" }}>
-                India — Candidate Density by State
-              </h3>
-              {geoStats?.states?.length ? (
-                <IndiaMap states={geoStats.states} />
-              ) : (
-                <p className={styles.mapNoData}>No geographic data available. Add candidates with location data to see the heat map.</p>
-              )}
-              {geoStats?.states?.length ? (
-                <div className={styles.mapLegend}>
-                  <span>Low</span>
-                  <div style={{ display: "flex", gap: 3 }}>
-                    {["#dcfce7", "#86efac", "#22c55e", "#16a34a", "#15803d"].map((c) => (
-                      <div key={c} className={styles.mapLegendDot} style={{ background: c }} />
-                    ))}
-                  </div>
-                  <span>High</span>
-                  <span style={{ marginLeft: 12 }}>Darker green = more candidates</span>
-                </div>
-              ) : null}
-            </div>
 
             {/* Top 10 States + Top 10 Districts (3.6, 3.7) */}
             <div className={styles.top10Grid}>

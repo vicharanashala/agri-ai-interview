@@ -9,6 +9,10 @@ RUN npm ci
 # Generate Prisma client
 FROM base AS prisma
 WORKDIR /app
+# Install libssl1.1 for Prisma query engine (Alpine 3.17+ dropped it)
+RUN apk add --no-cache \
+    libssl1.1 \
+    || apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/v3.16/main libssl1.1
 COPY --from=deps /app/node_modules ./node_modules
 COPY prisma/schema.prisma ./prisma/
 RUN npx prisma generate

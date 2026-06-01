@@ -4,11 +4,12 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { candidateId: string } }
+  { params }: { params: Promise<{ candidateId: string }> }
 ) {
   try {
+    const { candidateId } = await params;
     const response = await fetch(
-      `${API_BASE_URL}/api/interview/queue/wait-time/${params.candidateId}`,
+      `${API_BASE_URL}/api/interview/queue/wait-time/${candidateId}`,
       { method: 'GET' }
     );
 

@@ -37,82 +37,65 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
-    // Check both sessionStorage and localStorage for phase state
-    // Use the higher phase value from either storage
-    const savedPhaseSession = sessionStorage.getItem('interviewPhase');
-    const savedPhaseLocal = localStorage.getItem('interviewPhase');
-    const sessionPhase = savedPhaseSession ? parseInt(savedPhaseSession) : 0;
-    const localPhase = savedPhaseLocal ? parseInt(savedPhaseLocal) : 0;
-    const savedPhase = Math.max(sessionPhase, localPhase).toString();
+    // Map DB phase label → number (source of truth for pipeline progress)
+    const DB_PHASE_NUM: Record<string, number> = {
+      'onboarding': 1,
+      'interview':  2,
+      'summary':    3,
+      'offer':      4,
+      'signing':    5,
+      'joining':    6,
+    };
 
-    // Fetch candidate profile from database
     const checkProfile = async () => {
       try {
         const response = await fetch('/api/candidate');
-        if (response.ok) {
-          const candidate = await response.json();
-          
-          // Determine the actual phase based on profile existence and saved phase
-          let actualPhase: Phase = 1;
-          
-          if (candidate) {
-            // Onboarding is complete, next step is interview
-            actualPhase = 2;
-            
-            // Check if interview is completed (check both storage types)
-            const interviewCompletedSession = sessionStorage.getItem('interviewCompleted');
-            const interviewCompletedLocal = localStorage.getItem('interviewCompleted');
-            const interviewCompleted = interviewCompletedSession || interviewCompletedLocal;
-            
-            if (interviewCompleted === 'true' || savedPhase === '3') {
-              actualPhase = 3;
-            }
-          } else if (savedPhase) {
-            // Fallback to saved phase
-            actualPhase = parseInt(savedPhase) as Phase;
-          }
-          
-          // If saved phase is already 4 or higher, use it directly
-          if (savedPhase && parseInt(savedPhase) >= 4) {
-            actualPhase = parseInt(savedPhase) as Phase;
-          } else {
-            // Check if student passed and visited summary - unlock offer letter phase (4)
-            const passedAndVisitedSummary = localStorage.getItem('passedAndVisitedSummary');
-            if (passedAndVisitedSummary === 'true' && actualPhase < 4) {
-              actualPhase = 4;
-            }
-          }
+        if (!response.ok) throw new Error('Failed to fetch candidate');
+        const candidate = await response.json();
 
-          // Check if offer letter was viewed — always run, even when savedPhase >= 4
-          const offerLetterViewed = localStorage.getItem('offerLetterViewed');
-          if (offerLetterViewed === 'true' && actualPhase < 5) {
-            actualPhase = 5;
-          }
-          
-          // Check if joining details page has been visited - mark as completed
-          const joiningDetailsVisited = localStorage.getItem('joiningDetailsVisited');
-          if (joiningDetailsVisited === 'true') {
-            setJoiningCompleted(true);
-          }
-          
-          setCurrentPhase(actualPhase);
-          setHasCompletedInterview(actualPhase >= 3);
-          
-          // If interview was just completed, automatically navigate to summary
-          // Check both storage types for the justCompleted flag
-          const justCompletedSession = sessionStorage.getItem('interviewJustCompleted');
-          const justCompletedLocal = localStorage.getItem('interviewJustCompleted');
-          const justCompleted = justCompletedSession || justCompletedLocal;
-          
-          if (actualPhase >= 3 && justCompleted === 'true') {
-            // Clear the flag from both storage types
-            sessionStorage.removeItem('interviewJustCompleted');
-            localStorage.removeItem('interviewJustCompleted');
-            // Small delay to allow dashboard to render first
-            setTimeout(() => {
-              router.push('/summary');
-            }, 500);
-          }
+        if (!candidate) {
+          setIsLoading(false);
+          return;
+        }
+
+        // 1. DB phase as starting point (source of truth — survives logout/login)
+        const dbPhaseNum = (DB_PHASE_NUM[candidate.currentPhase] ?? 1) as Phase;
+
+        // 2. Pull latest flag values from DB (authoritative) and localStorage (for in-flight updates)
+        const dbOfferViewed     = !!candidate.offerLetterViewed;
+        const dbSummaryVisited  = !!candidate.passedAndVisitedSummary;
+        const dbJoiningVisited  = !!candidate.joiningDetailsVisited;
+        const lsOfferViewed     = localStorage.getItem('offerLetterViewed') === 'true';
+        const lsSummaryVisited  = localStorage.getItem('passedAndVisitedSummary') === 'true';
+        const lsJoiningVisited  = localStorage.getItem('joiningDetailsVisited') === 'true';
+
+        const offerViewed    = dbOfferViewed    || lsOfferViewed;
+        const summaryVisited = dbSummaryVisited || lsSummaryVisited;
+        const joiningVisited = dbJoiningVisited || lsJoiningVisited;
+
+        // 3. Reconstruct actual phase from DB phase + flags
+        // Flags can push the phase forward beyond what DB's currentPhase alone says
+        let actualPhase: Phase = dbPhaseNum;
+
+        if (summaryVisited && actualPhase < 4) actualPhase = 4;
+        if (offerViewed    && actualPhase < 5) actualPhase = 5;
+        if (joiningVisited) setJoiningCompleted(true);
+
+        setCurrentPhase(actualPhase);
+        setHasCompletedInterview(actualPhase >= 3);
+
+        // Sync storage flags from DB (keeps localStorage in sync for downstream pages)
+        if (dbOfferViewed)    localStorage.setItem('offerLetterViewed',      'true');
+        if (dbSummaryVisited) localStorage.setItem('passedAndVisitedSummary', 'true');
+        if (dbJoiningVisited) localStorage.setItem('joiningDetailsVisited',   'true');
+
+        // If interview was just completed (redirect flag set by interview page), go to summary
+        const justCompleted = sessionStorage.getItem('interviewJustCompleted') === 'true'
+          || localStorage.getItem('interviewJustCompleted') === 'true';
+        if (actualPhase >= 3 && justCompleted) {
+          sessionStorage.removeItem('interviewJustCompleted');
+          localStorage.removeItem('interviewJustCompleted');
+          setTimeout(() => router.push('/summary'), 500);
         }
       } catch (error) {
         console.error('Error fetching candidate profile:', error);
@@ -120,7 +103,7 @@ export default function DashboardPage() {
         setIsLoading(false);
       }
     };
-    
+
     checkProfile();
   }, [router]);
 

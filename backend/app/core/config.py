@@ -6,7 +6,9 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     model_config = ConfigDict(
         extra='ignore',  # Allow extra environment variables
-        env_file=".env"
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=True,
     )
     
     APP_NAME: str = "AI Interview Platform"

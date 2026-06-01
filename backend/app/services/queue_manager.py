@@ -93,6 +93,78 @@ class SlotManager:
 
     def _sync_active_count(self, db: Session) -> None:
         self._active_count = _compute_active_count(db)
+
+    def _resume_workflow_from_session(
+        self, session: "InterviewSession", candidate_data: dict
+    ) -> None:
+        """
+        Reconstruct in-memory workflow state from a DB InterviewSession record
+        and load it into _interviews so the /message endpoint can route to it.
+
+        Called when a candidate tries to start but already has an active session
+        in the DB (e.g. after a backend container restart).
+        """
+        from app.workflows.interview_workflow import (
+            interview_workflow,
+            _interviews,
+            InterviewState,
+        )
+        import json
+
+        interview_id = session.id
+
+        # Skip if already loaded in memory
+        if interview_id in _interviews:
+            return
+
+        # Parse stored messages from interviewData or InterviewStateSnapshot
+        messages = []
+        interview_data_raw = session.interviewData
+        if interview_data_raw:
+            try:
+                data = json.loads(interview_data_raw)
+                messages = data.get("messages", [])
+            except Exception:
+                pass
+
+        # Also try InterviewStateSnapshot if available
+        if not messages:
+            try:
+                db = _get_db()
+                try:
+                    from app.db.models.interview_session import InterviewStateSnapshot
+                    snap = (
+                        db.query(InterviewStateSnapshot)
+                        .filter(InterviewStateSnapshot.interviewId == interview_id)
+                        .first()
+                    )
+                    if snap:
+                        try:
+                            snap_data = json.loads(snap.stateJson)
+                            messages = snap_data.get("messages", [])
+                        except Exception:
+                            pass
+                finally:
+                    db.close()
+            except Exception:
+                pass
+
+        # Build the InterviewState and add to _interviews
+        state = InterviewState(interview_id, candidate_data)
+        for msg in messages:
+            role = msg.get("role")
+            content = msg.get("content")
+            if role and content:
+                state.messages.append({"role": role, "content": content, "timestamp": msg.get("timestamp", "")})
+        state.status = session.status or "active"
+        _interviews[interview_id] = state
+
+        # Also push through interview_graph_manager for consistency
+        from app.workflows.interview_graph import interview_graph_manager
+        try:
+            interview_graph_manager.workflow._interviews[interview_id] = state
+        except Exception:
+            pass
         stats = db.query(ActiveInterviewCount).filter_by(id="singleton").first()
         if stats:
             stats.count = self._active_count
@@ -124,6 +196,18 @@ class SlotManager:
                 .first()
             )
             if existing_session:
+                # Rehydrate the in-memory workflow state from the DB session
+                # so subsequent /message calls can find the interview in _interviews
+                interview_data = {}
+                if existing_session.interviewData:
+                    try:
+                        interview_data = json.loads(existing_session.interviewData)
+                    except Exception:
+                        pass
+
+                candidate_data = interview_data.get("candidate_data", {})
+                self._resume_workflow_from_session(existing_session, candidate_data)
+
                 return {
                     "result": "already_active",
                     "interview_id": existing_session.id,

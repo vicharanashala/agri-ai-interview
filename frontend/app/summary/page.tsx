@@ -44,6 +44,7 @@ export default function SummaryPage() {
           setEvaluation(evaluationData);
           // Mark that user has visited summary page (for both pass and fail)
           localStorage.setItem('passedAndVisitedSummary', 'true');
+          await syncPhaseToDb(3, { passedAndVisitedSummary: true });
           setLoading(false);
           return;
         }
@@ -88,7 +89,8 @@ export default function SummaryPage() {
         
         // Mark that user has visited summary page (for both pass and fail)
         localStorage.setItem('passedAndVisitedSummary', 'true');
-        
+        await syncPhaseToDb(3, { passedAndVisitedSummary: true });
+
         setEvaluation(data);
       } catch (err) {
         console.error('Error fetching evaluation:', err);
@@ -124,9 +126,10 @@ export default function SummaryPage() {
     // If student passed, mark as passed and visited summary to unlock offer letter phase
     if (evaluation && evaluation.overall_score > 1) {
       localStorage.setItem('passedAndVisitedSummary', 'true');
+      await syncPhaseToDb(4, { passedAndVisitedSummary: true });
+    } else {
+      await syncPhaseToDb(4);
     }
-
-    await syncPhaseToDb(4);
     router.push('/dashboard');
   };
 

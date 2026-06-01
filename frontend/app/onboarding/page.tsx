@@ -58,15 +58,24 @@ export default function OnboardingPage() {
 
   // Check if onboarding is already completed on mount
   useEffect(() => {
-    const savedPhase = sessionStorage.getItem('interviewPhase');
-    
-    // Check if profile exists in database via API
+    // Always check the DB for existing profile — sessionStorage is cleared on logout,
+    // so we can't rely on it here. The DB is the source of truth.
     const checkProfile = async () => {
       try {
         const response = await fetch('/api/candidate');
         if (response.ok) {
           const candidate = await response.json();
-          if (candidate) {
+          // Only freeze the form if the candidate has at least one meaningful field filled in.
+          // An empty candidate record (created at signup) means onboarding is not complete yet.
+          const hasProfileData = candidate && (
+            candidate.fullName ||
+            candidate.phone ||
+            candidate.state ||
+            candidate.district ||
+            candidate.pincode ||
+            candidate.currentRole
+          );
+          if (hasProfileData) {
             setIsFrozen(true);
             setFormData({
               fullName: candidate.fullName || '',
@@ -90,11 +99,8 @@ export default function OnboardingPage() {
         console.error('Error fetching candidate profile:', error);
       }
     };
-    
-    // If phase is > 1, check database for existing profile
-    if (savedPhase && parseInt(savedPhase) > 1) {
-      checkProfile();
-    }
+
+    checkProfile();
   }, []);
 
   const validatePhone = (value: string): boolean => {

@@ -108,16 +108,20 @@ const PHASE_LABELS: Record<string, string> = {
   joining: "Joining",
 };
 
+// Points to the Next.js rewrite proxy so the browser talks to a single origin.
+// In Docker, this resolves to the Next.js server; locally it falls back to the
+// direct backend URL for development outside Docker.
+const ADMIN_API_BASE =
+  process.env.NEXT_PUBLIC_ADMIN_API_URL ||
+  (typeof window !== "undefined" ? window.location.origin : "");
+
 export default function AdminDashboard() {
   const router = useRouter();
-  // Authenticated fetch helper — attaches admin token to all API calls
+  // Authenticated fetch helper — browser automatically sends the admin_session
+  // cookie (httpOnly, path=/api/admin) with every proxied /api/admin/* request.
+  // No localStorage or X-Admin-Token header needed.
   const withAuth = (url: string, opts: RequestInit = {}) => {
-    const token = localStorage.getItem("admin_token");
-    const headers: Record<string, string> = {
-      ...(token ? { "X-Admin-Token": token } : {}),
-      ...(opts.headers as Record<string, string> || {}),
-    };
-    return fetch(url, { ...opts, headers });
+    return fetch(`${ADMIN_API_BASE}${url}`, { ...opts, credentials: "include" });
   };
 
   const [activeTab, setActiveTab] = useState<Tab>("live");
@@ -164,16 +168,25 @@ export default function AdminDashboard() {
   const [districtFilter, setDistrictFilter] = useState<string>("");
   const [districts, setDistricts] = useState<string[]>([]);
 
-  // Check auth on mount
+  // Check auth on mount — verify the admin_session cookie with the backend
   useEffect(() => {
-    const token = localStorage.getItem("admin_token");
-    const admin = localStorage.getItem("admin_data");
-    if (!token || !admin) {
-      router.push("/admin/login");
-      return;
-    }
-    setAdminData(JSON.parse(admin));
-    loadData();
+    const verifyAndLoad = async () => {
+      try {
+        const res = await withAuth("/api/admin/auth/session");
+        if (!res.ok) {
+          router.push("/admin/login");
+          return;
+        }
+        const session = await res.json();
+        setAdminData({ name: "Admin User", email: session.email });
+        loadData();
+        // Wipe stale live-interview cache so the UI never shows outdated sessions
+        setActiveInterviews([]);
+      } catch {
+        router.push("/admin/login");
+      }
+    };
+    verifyAndLoad();
   }, [router]);
 
   // Poll for live updates
@@ -213,7 +226,7 @@ export default function AdminDashboard() {
 
   const loadStats = async () => {
     try {
-      const res = await withAuth("http://localhost:8000/api/admin/stats");
+      const res = await withAuth("/api/admin/stats");
       if (res.ok) {
         const data = await res.json();
         setStats(data);
@@ -225,7 +238,7 @@ export default function AdminDashboard() {
 
   const loadActiveInterviews = async () => {
     try {
-      const res = await withAuth("http://localhost:8000/api/admin/interviews/active");
+      const res = await withAuth("/api/admin/interviews/active");
       if (res.ok) {
         const data = await res.json();
         setActiveInterviews(data.interviews || []);
@@ -242,7 +255,7 @@ export default function AdminDashboard() {
       if (phaseFilter) params.append("phase", phaseFilter);
       if (stateFilter) params.append("state", stateFilter);
       if (districtFilter) params.append("district", districtFilter);
-      const res = await withAuth(`http://localhost:8000/api/admin/candidates?${params}`);
+      const res = await withAuth(`/api/admin/candidates?${params}`);
       if (res.ok) {
         const data = await res.json();
         setCandidates(data.candidates || []);
@@ -256,7 +269,7 @@ export default function AdminDashboard() {
 
   const loadResumeForCandidate = async (candidateId: string) => {
     try {
-      const res = await withAuth(`http://localhost:8000/api/admin/resumes?candidateId=${candidateId}`);
+      const res = await withAuth(`/api/admin/resumes?candidateId=${candidateId}`);
       if (res.ok) {
         const data: ResumeInfo[] = await res.json();
         if (data.length > 0) {
@@ -297,7 +310,7 @@ export default function AdminDashboard() {
     setMatchData(null);
     setMatchLoading(true);
     try {
-      const res = await withAuth(`http://localhost:8000/api/admin/resume/match?candidateId=${candidateId}&role=${role}`);
+      const res = await withAuth(`/api/admin/resume/match?candidateId=${candidateId}&role=${role}`);
       if (res.ok) {
         const data: SkillMatchData = await res.json();
         setMatchData(data);
@@ -419,7 +432,7 @@ export default function AdminDashboard() {
   const loadViolations = async () => {
     setViolationsLoading(true);
     try {
-      const res = await withAuth("http://localhost:8000/api/admin/anti-cheat/violations");
+      const res = await withAuth("/api/admin/anti-cheat/violations");
       if (res.ok) {
         const data = await res.json();
         setViolations(data.violations || []);
@@ -433,10 +446,10 @@ export default function AdminDashboard() {
 
   const loadStateFunnel = async () => {
     try {
-      const url = stateFunnelFilter
-        ? `http://localhost:8000/api/admin/stats/by-state?state=${encodeURIComponent(stateFunnelFilter)}`
-        : "http://localhost:8000/api/admin/stats/by-state";
-      const res = await withAuth(url);
+      const path = stateFunnelFilter
+        ? `/api/admin/stats/by-state?state=${encodeURIComponent(stateFunnelFilter)}`
+        : "/api/admin/stats/by-state";
+      const res = await withAuth(path);
       if (res.ok) {
         const data = await res.json();
         setStateFunnel(stateFunnelFilter ? { states: [data], totalStates: 1 } : data);
@@ -448,7 +461,7 @@ export default function AdminDashboard() {
 
   const loadGeoStats = async () => {
     try {
-      const res = await withAuth("http://localhost:8000/api/admin/stats/geographic");
+      const res = await withAuth("/api/admin/geo/stats");
       if (res.ok) {
         const data = await res.json();
         setGeoStats(data);
@@ -465,7 +478,7 @@ export default function AdminDashboard() {
       return;
     }
     try {
-      const res = await withAuth(`http://localhost:8000/api/admin/stats/locations?state=${encodeURIComponent(state)}`);
+      const res = await withAuth(`/api/admin/stats/locations?state=${encodeURIComponent(state)}`);
       if (res.ok) {
         const data = await res.json();
         setDistricts(data.districts || []);
@@ -487,7 +500,7 @@ export default function AdminDashboard() {
 
   const loadGuidelines = async () => {
     try {
-      const res = await withAuth("http://localhost:8000/api/admin/settings/guidelines");
+      const res = await withAuth("/api/admin/settings/guidelines");
       if (res.ok) {
         const data = await res.json();
         setGuidelines(data.guidelines || []);
@@ -499,7 +512,7 @@ export default function AdminDashboard() {
 
   const loadCriteria = async () => {
     try {
-      const res = await withAuth("http://localhost:8000/api/admin/settings/evaluation-criteria");
+      const res = await withAuth("/api/admin/settings/evaluation-criteria");
       if (res.ok) {
         const data = await res.json();
         setCriteria(data.criteria || []);
@@ -509,15 +522,18 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("admin_token");
-    localStorage.removeItem("admin_data");
+  const handleLogout = async () => {
+    try {
+      await withAuth("/api/admin/auth/logout", { method: "POST" });
+    } catch {
+      // Best-effort: still redirect even if the call fails
+    }
     router.push("/admin/login");
   };
 
   const handleSaveGuideline = async (key: string) => {
     try {
-      const res = await withAuth(`http://localhost:8000/api/admin/settings/guidelines/${key}`, {
+      const res = await withAuth(`/api/admin/settings/guidelines/${key}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: guidelineContent }),
@@ -533,7 +549,7 @@ export default function AdminDashboard() {
 
   const handleSaveCriteria = async (id: string) => {
     try {
-      const res = await withAuth(`http://localhost:8000/api/admin/settings/evaluation-criteria/${id}`, {
+      const res = await withAuth(`/api/admin/settings/evaluation-criteria/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(criteriaForm),
@@ -550,7 +566,7 @@ export default function AdminDashboard() {
   const handleDeleteCriteria = async (id: string) => {
     if (!confirm("Are you sure you want to delete this criteria?")) return;
     try {
-      const res = await withAuth(`http://localhost:8000/api/admin/settings/evaluation-criteria/${id}`, {
+      const res = await withAuth(`/api/admin/settings/evaluation-criteria/${id}`, {
         method: "DELETE",
       });
       if (res.ok) {

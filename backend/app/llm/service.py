@@ -58,7 +58,18 @@ class LLMService:
             )
             response.raise_for_status()
             data = response.json()
-            return data["choices"][0]["message"]["content"]
+            message = data["choices"][0]["message"]
+            content = message.get("content") or ""
+
+            # MiniMax-M2.7 is a reasoning model — when content is null the answer
+            # is embedded in the reasoning field after the thinking tags.
+            if not content and message.get("reasoning"):
+                reasoning = message["reasoning"]
+                # Strip theCoT deliberation tags if present
+                reasoning = reasoning.replace("<|TheCoT|>", "").replace("</|TheCoT|>", "").strip()
+                content = reasoning
+
+            return content or "(No response)"
 
     async def generate_interview_question(
         self,

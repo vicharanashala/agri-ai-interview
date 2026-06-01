@@ -136,12 +136,74 @@ class InterviewWorkflow:
             )
             if question is None:
                 print("WARN: chat_completion returned None")
-                return "Can you tell me more about how you handle that situation on your farm?"
+                return self._fallback_question(state)
             return question.strip()
         except Exception as e:
             import traceback
             traceback.print_exc()
-            return "Can you tell me more about how you handle that situation on your farm?"
+            return self._fallback_question(state)
+
+    FALLBACK_QUESTIONS = [
+        "What challenges have you faced with pest management in your crops?",
+        "How do you decide which crops to grow each season?",
+        "What irrigation methods do you use and why?",
+        "How do you manage soil health throughout the year?",
+        "What role does weather play in your farming decisions?",
+        "How do you handle market fluctuations for your produce?",
+        "What sustainable practices do you follow on your farm?",
+        "How has your farming approach evolved over the years?",
+        "What are the biggest costs in your farming operation?",
+        "How do you store and preserve your harvest?",
+        "What pests or diseases have been most problematic for you?",
+        "How do you select seeds and planting material?",
+        "What role does government support play in your farming?",
+        "How do you manage labour on your farm?",
+        "What new techniques or technologies are you using?",
+    ]
+
+    # Crop-specific fallback question sets — cycling prevents same question repeat
+    CROP_FALLBACKS = {
+        "tomato": [
+            "How do you manage tomato blight and fruit rot in your fields?",
+            "What quality standards do buyers expect for tomatoes at the market?",
+            "How do you handle the seasonal glut when tomato prices crash?",
+        ],
+        "wheat": [
+            "What challenges do you face during wheat harvest?",
+            "How do you manage wheat rust and other common diseases?",
+        ],
+        "rice": [
+            "How do you manage water for your paddy fields?",
+            "What challenges do you face with rice straw management after harvest?",
+        ],
+    }
+
+    def _fallback_question(self, state: "InterviewState") -> str:
+        """
+        Return a contextually-chosen fallback question when the LLM is unavailable.
+        Cycles through questions so the same one is not repeated across fallback calls.
+        """
+        idx = len(state.messages) % len(self.FALLBACK_QUESTIONS)
+        base = self.FALLBACK_QUESTIONS[idx]
+
+        # Personalise with candidate data — also cycle through crop-specific questions
+        crops = state.candidate_data.get("crops_grown", "") or ""
+        farming_bg = str(state.candidate_data.get("farming_background", "")).lower()
+        region = state.candidate_data.get("state", "") or ""
+
+        # Try crop-specific cycle first
+        for crop_key, questions in self.CROP_FALLBACKS.items():
+            if crop_key in crops.lower():
+                crop_idx = len(state.messages) % len(questions)
+                return questions[crop_idx]
+
+        if "vegetable" in farming_bg:
+            veg_idx = len(state.messages) % len(self.FALLBACK_QUESTIONS)
+            return self.FALLBACK_QUESTIONS[veg_idx]
+        if region:
+            return f"What farming challenges are most pressing in {region} right now?"
+
+        return base
     
     def _get_question_guidelines(self) -> str:
         """Get question generation guidelines from DB (or defaults)."""

@@ -37,12 +37,18 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
+# Install libssl1.1 for Prisma query engine (Alpine 3.17+ dropped it)
+RUN apk add --no-cache \
+    libssl1.1 \
+    || apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/v3.16/main libssl1.1
+
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 
 USER nextjs
 

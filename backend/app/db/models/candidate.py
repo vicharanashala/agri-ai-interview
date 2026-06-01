@@ -1,5 +1,5 @@
 """
-Candidate database model — mirrors the Prisma schema (same SQLite file).
+Candidate database model — mirrors the Prisma schema (same PostgreSQL database).
 """
 from sqlalchemy import Column, String, Integer, DateTime, JSON, Boolean, Text
 from datetime import datetime, timezone
@@ -15,6 +15,21 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+class User(Base):
+    """User model — mirrors frontend/prisma/schema.prisma User table."""
+
+    __tablename__ = "User"
+
+    id = Column(String, primary_key=True)
+    name = Column(String, nullable=True)
+    email = Column(String, unique=True, nullable=True)
+    emailVerified = Column(DateTime, nullable=True)
+    image = Column(String, nullable=True)
+    password = Column(String, nullable=True)
+    createdAt = Column(DateTime, default=_utcnow)
+    updatedAt = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+
 class Candidate(Base):
     """Candidate model — mirrors frontend/prisma/schema.prisma Candidate table."""
 
@@ -22,7 +37,7 @@ class Candidate(Base):
 
     id = Column(String, primary_key=True)          # cuid() string
     userId = Column(String, unique=True, nullable=False)  # FK to User
-    fullName = Column(String, nullable=False)      # was "name" in old model
+    fullName = Column(String, nullable=True)
     phone = Column(String, nullable=True)
     state = Column(String, nullable=True)
     district = Column(String, nullable=True)
@@ -36,9 +51,13 @@ class Candidate(Base):
     cropsGrown = Column(String, nullable=True)
     farmSize = Column(String, nullable=True)
     primaryExpertise = Column(String, nullable=True)
-    # Phase tracking — stored in notes JSON on Prisma side
-    # Status reflects overall candidate status
-    # Maps to Prisma fields; interviewSessions/phaseHistory are relations we skip here
+    # Phase tracking
+    currentPhase = Column(String, default="onboarding")  # onboarding | interview | summary | offer | signing | joining
+    # Flags that unlock pipeline phases — persisted so they survive logout/login
+    offerLetterViewed = Column(Boolean, default=False)
+    passedAndVisitedSummary = Column(Boolean, default=False)
+    joiningDetailsVisited = Column(Boolean, default=False)
+
     createdAt = Column(DateTime, default=_utcnow)
     updatedAt = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
@@ -97,7 +116,7 @@ class InterviewSession(Base):
     __tablename__ = "InterviewSession"
 
     id = Column(String, primary_key=True)
-    candidateId = Column(String, nullable=False)
+    candidateId = Column(String, nullable=True)
     queueEntryId = Column(String, nullable=True)
     startedViaQueue = Column(Boolean, default=False)
     status = Column(String, default="active")
@@ -105,5 +124,36 @@ class InterviewSession(Base):
     interviewData = Column(String, nullable=True)  # JSON string
     startedAt = Column(DateTime, default=_utcnow)
     completedAt = Column(DateTime, nullable=True)
+    createdAt = Column(DateTime, default=_utcnow)
+    updatedAt = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+
+class AntiCheatEvent(Base):
+    """Anti-cheat event — mirrors frontend/prisma/schema.prisma AntiCheatEvent table."""
+
+    __tablename__ = "AntiCheatEvent"
+
+    id = Column(String, primary_key=True)
+    candidateId = Column(String, nullable=False)
+    interviewId = Column(String, nullable=True)
+    eventType = Column(String, nullable=False)
+    severity = Column(String, default="warning")
+    message = Column(String, nullable=True)
+    event_metadata = Column(String, nullable=True)  # JSON string
+    createdAt = Column(DateTime, default=_utcnow)
+
+
+class Resume(Base):
+    """Resume model — mirrors frontend/prisma/schema.prisma Resume table."""
+
+    __tablename__ = "Resume"
+
+    id = Column(String, primary_key=True)
+    candidateId = Column(String, nullable=False)
+    fileName = Column(String, nullable=False)
+    fileType = Column(String, nullable=False)
+    rawText = Column(Text, nullable=True)
+    parsedData = Column(Text, nullable=True)  # JSON string — structured parsed output
+    status = Column(String, default="pending")  # pending | uploaded | parsed | failed
     createdAt = Column(DateTime, default=_utcnow)
     updatedAt = Column(DateTime, default=_utcnow, onupdate=_utcnow)

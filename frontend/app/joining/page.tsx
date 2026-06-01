@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import styles from './page.module.css';
+import { syncPhaseToDb } from '@/lib/phaseSync';
 
 interface JoiningDetails {
   user: {
@@ -31,10 +32,16 @@ export default function JoiningPage() {
     const currentPhase = localStorage.getItem('interviewPhase');
     if (!currentPhase || parseInt(currentPhase) < 6) {
       router.push('/dashboard');
-    } else {
+      return;
+    }
+
+    // Wrap async DB sync in an IIFE
+    ;(async () => {
       // Mark joining details as visited/completed
       localStorage.setItem('joiningDetailsVisited', 'true');
-      
+      // Also persist to DB so this survives logout/login
+      await syncPhaseToDb(6, { joiningDetailsVisited: true });
+
       // Set mock data for joining details
       setJoiningDetails({
         user: {
@@ -76,7 +83,7 @@ export default function JoiningPage() {
         ],
       });
       setIsLoading(false);
-    }
+    })();
   }, [router]);
 
   const handleDownload = async () => {

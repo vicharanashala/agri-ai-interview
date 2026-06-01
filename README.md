@@ -64,7 +64,7 @@ Requires: **Python 3.11+** and **Node 20+**
 │   ├── components/           # React components + IndiaMap
 │   ├── hooks/                # Custom React hooks
 │   ├── lib/                  # Prisma client, auth config
-│   ├── prisma/               # Prisma schema + SQLite dev DB
+│   ├── prisma/               # Prisma schema + PostgreSQL (via Docker volume)
 │   ├── Dockerfile
 │   └── package.json
 │
@@ -115,7 +115,7 @@ gcloud secrets create OPENAI_API_KEY --data-file=- <<< "sk-..."
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `OPENAI_API_KEY` | OpenAI API key | `sk-...` |
-| `DATABASE_URL` | SQLite path or PostgreSQL | `sqlite:///./annam_interviews.db` |
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql://user:password@postgres:5432/ai_interview` |
 | `SECRET_KEY` | FastAPI auth signing key | 64-char random string |
 | `ADMIN_EMAIL` | Admin login email | `admin@annam.com` |
 | `ADMIN_PASSWORD` | Admin login password | `change-this` |
@@ -138,13 +138,13 @@ gcloud secrets create OPENAI_API_KEY --data-file=- <<< "sk-..."
               ┌───────────┴───────────┐
               ▼                       ▼
         ┌──────────┐           ┌──────────┐
-        │ SQLite / │           │  Redis   │
-        │ Postgres │           │ (Cache)  │
+        │ PostgreSQL │           │  Redis   │
+        │   (SQLAlchemy)       │ (Cache)  │
         └──────────┘           └──────────┘
 ```
 
 **Interview Flow:**
-1. Candidate completes onboarding → stored in Prisma (SQLite dev / PostgreSQL prod)
+1. Candidate completes onboarding → stored in Prisma (PostgreSQL)
 2. `POST /api/interview/start` → initializes LangGraph workflow
 3. Each answer → `POST /api/interview/message` → `process_answer()` → phase transition
 4. End of interview → evaluation scored via LLM
@@ -152,7 +152,7 @@ gcloud secrets create OPENAI_API_KEY --data-file=- <<< "sk-..."
 
 **Named Volumes (Docker):**
 - `backend_uploads` — uploaded resumes and files
-- `frontend_prisma` — Prisma SQLite database
+- (removed — Prisma now uses the shared PostgreSQL instance)
 - `redis_data` — Redis cache
 
 ---

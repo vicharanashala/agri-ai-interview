@@ -89,14 +89,17 @@ export const authOptions: NextAuthOptions = {
             dbUser = await prisma.user.create({
               data: { email, name },
             })
-            // Create Candidate record immediately so admin sees them in onboarding phase
-            await prisma.candidate.create({
-              data: {
-                userId: dbUser.id,
-                fullName: name,
-                currentPhase: 'onboarding',
-              },
+          }
+          // Immediately create Candidate record so user appears in admin dashboard
+          try {
+            await prisma.candidate.upsert({
+              where: { userId: dbUser.id },
+              update: {},
+              create: { userId: dbUser.id, currentPhase: 'onboarding' },
             })
+          } catch (err) {
+            // Non-fatal: auth succeeds even if candidate record creation fails
+            console.error('[next-auth] Failed to create candidate record:', err)
           }
           token.sub = dbUser.id
           token.email = email

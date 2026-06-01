@@ -6,7 +6,6 @@ Called asynchronously after a resume is uploaded.
 import json
 import os
 import re
-import sqlite3
 from typing import Dict, Any, Optional
 
 # Load skills taxonomy for normalization
@@ -193,30 +192,25 @@ def _error_result(reason: str) -> Dict[str, Any]:
 
 # ── DB helpers ────────────────────────────────────────────────────────────────
 
-def _get_prisma_db_path() -> str:
-    return os.path.join(
-        os.path.dirname(__file__), "..", "..", "..", "..",
-        "frontend", "prisma", "dev.db"
-    )
-
-
 def save_parsed_data(resume_id: str, parsed_data: Dict[str, Any]) -> bool:
-    """Write parsed JSON to the Resume record in Prisma SQLite."""
-    db_path = _get_prisma_db_path()
-    conn = sqlite3.connect(db_path)
+    """Write parsed JSON to the Resume record in PostgreSQL."""
+    from app.db.database import SessionLocal
+    from app.db.models.candidate import Resume
+
+    db = SessionLocal()
     try:
-        conn.execute(
-            """
-            UPDATE Resume
-            SET parsedData = ?, status = 'parsed'
-            WHERE id = ?
-            """,
-            (json.dumps(parsed_data), resume_id),
-        )
-        conn.commit()
-        return True
+        resume = db.query(Resume).filter(Resume.id == resume_id).first()
+        if resume:
+            resume.parsedData = json.dumps(parsed_data)
+            resume.status = "parsed"
+            db.commit()
+            return True
+        else:
+            print(f"[resume_parser] Resume {resume_id} not found")
+            return False
     except Exception as e:
         print(f"[resume_parser] Failed to save parsed data: {e}")
+        db.rollback()
         return False
     finally:
-        conn.close()
+        db.close()

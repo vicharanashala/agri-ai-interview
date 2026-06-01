@@ -20,4 +20,4 @@ RUN touch .env
 EXPOSE 8000
 
 # Run migrations + start server
-CMD ["sh", "-c", "python -m app.db.init_db && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"]
+CMD ["sh", "-c", "python -m app.db && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"]

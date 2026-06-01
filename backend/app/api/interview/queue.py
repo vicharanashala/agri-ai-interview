@@ -5,11 +5,40 @@ No queue, no positions, no wait times.
 Candidates either get a slot immediately or are told to try later.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from typing import Optional
 
+from sqlalchemy.orm import Session
+from app.db.database import get_db
+from app.db.models.candidate import Candidate
 from app.services.queue_manager import slot_manager, MAX_CONCURRENT_INTERVIEWS
+
+
+def _fetch_candidate_data(candidate_id: str, db: Session) -> dict:
+    """
+    Fetch candidate profile data from PostgreSQL to pass to the interview.
+    This ensures the LLM has candidate context (name, farming background, etc.).
+    """
+    cand = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not cand:
+        return {}
+
+    return {
+        "name": cand.fullName or "Candidate",
+        "phone": cand.phone,
+        "state": cand.state,
+        "district": cand.district,
+        "current_role": cand.currentRole,
+        "experience_years": cand.yearsOfExperience,
+        "education": cand.highestEducation,
+        "institution": cand.institution,
+        "farming_background": cand.farmingBackground,
+        "crops_grown": cand.cropsGrown,
+        "farm_size": cand.farmSize,
+        "primary_expertise": cand.primaryExpertise,
+        "candidate_id": candidate_id,
+    }
 
 router = APIRouter(prefix="/api/interview/queue", tags=["interview-queue"])
 
@@ -42,16 +71,17 @@ class StatsResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 @router.post("/request", response_model=StartResponse)
-async def queue_request(request: SlotRequest):
+async def queue_request(request: SlotRequest, db: Session = Depends(get_db)):
     """
     Candidate requests an interview slot.
 
     If a slot is available (active < MAX_CONCURRENT), the interview starts
     immediately. Otherwise returns "All slots are full, please try after sometime".
     """
+    candidate_data = _fetch_candidate_data(request.candidate_id, db)
     result = await slot_manager.start_interview(
         candidate_id=request.candidate_id,
-        candidate_data={},
+        candidate_data=candidate_data,
     )
     return StartResponse(**result)
 

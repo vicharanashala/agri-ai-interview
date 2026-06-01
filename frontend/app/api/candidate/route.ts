@@ -122,6 +122,15 @@ const PHASE_MAP: Record<number, string> = {
   6: "joining",
 };
 
+const REVERSE_PHASE_MAP: Record<string, number> = {
+  "onboarding": 1,
+  "interview": 2,
+  "summary": 3,
+  "offer": 4,
+  "signing": 5,
+  "joining": 6,
+};
+
 export async function PATCH(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -129,20 +138,39 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { phase } = await request.json();
-    const phaseLabel = PHASE_MAP[phase];
+    const body = await request.json();
+    const { phase, offerLetterViewed, passedAndVisitedSummary, joiningDetailsVisited } = body;
 
     const user = await prisma.user.findUnique({ where: { email: session.user.email } });
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
+    const updateData: Record<string, unknown> = {};
+    if (phase !== undefined) {
+      updateData.currentPhase = PHASE_MAP[phase];
+    }
+    if (offerLetterViewed !== undefined) {
+      updateData.offerLetterViewed = offerLetterViewed;
+    }
+    if (passedAndVisitedSummary !== undefined) {
+      updateData.passedAndVisitedSummary = passedAndVisitedSummary;
+    }
+    if (joiningDetailsVisited !== undefined) {
+      updateData.joiningDetailsVisited = joiningDetailsVisited;
+    }
+
     const candidate = await prisma.candidate.update({
       where: { userId: user.id },
-      data: { currentPhase: phaseLabel },
+      data: updateData,
     });
 
-    return NextResponse.json({ currentPhase: candidate.currentPhase }, { status: 200 });
+    return NextResponse.json({
+      currentPhase: candidate.currentPhase,
+      offerLetterViewed: candidate.offerLetterViewed,
+      passedAndVisitedSummary: candidate.passedAndVisitedSummary,
+      joiningDetailsVisited: candidate.joiningDetailsVisited,
+    }, { status: 200 });
   } catch (error) {
     console.error("Error updating candidate phase:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

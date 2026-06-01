@@ -18,7 +18,7 @@ Admin can preview + download any candidate's uploaded resume from the candidates
 ### Backend
 - [x] PDF text extraction (`pdfplumber`)
 - [x] DOCX text extraction (`python-docx`)
-- [x] `POST /api/resume/upload` — saves file to `backend/uploads/resumes/`, extracts raw text, stores in Prisma SQLite
+- [x] `POST /api/resume/upload` — saves file to `backend/uploads/resumes/`, extracts raw text, stores in PostgreSQL
 - [x] `GET /api/resume/{id}` — serves original file for download
 - [x] `GET /api/admin/resumes?candidateId=` — lists resumes per candidate (for admin table)
 
@@ -60,7 +60,7 @@ Admin can preview + download any candidate's uploaded resume from the candidates
 ### LLM Parsing
 - [x] `parse_resume_with_llm()` — structured Gemini prompt → JSON with name, email, phone, skills, experience[], education[], summary, confidence_score
 - [x] JSON extraction: direct parse + regex fallback from LLM response text
-- [x] `save_parsed_data()` — writes to Resume.parsedData in SQLite
+- [x] `save_parsed_data()` — writes to Resume.parsedData in PostgreSQL
 
 ### Auto-Parse Flow
 - [x] Upload returns immediately (`status: uploaded`)
@@ -131,7 +131,7 @@ Admin can preview + download any candidate's uploaded resume from the candidates
 ## Acceptance Criteria (Phase 1 — DONE)
 
 - [x] Resume files saved to backend storage (`backend/uploads/resumes/`)
-- [x] Raw text extracted and stored in SQLite for admin preview
+- [x] Raw text extracted and stored in PostgreSQL for admin preview
 - [x] Admin can preview + download resume from candidates table
 - [x] 5MB file size limit enforced
 

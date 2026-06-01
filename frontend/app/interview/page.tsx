@@ -115,13 +115,19 @@ export default function InterviewPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Auto-focus input whenever a new AI question arrives
+  // Intercept fetch to log all interview API calls (debug)
   useEffect(() => {
-    const lastMessage = messages[messages.length - 1];
-    if (lastMessage?.role === 'ai' && !isLoading && inputRef.current) {
-      inputRef.current.focus();
-    }
-  }, [messages, isLoading]);
+    const origFetch = window.fetch.bind(window);
+    window.fetch = async (...args) => {
+      const [url, options] = args;
+      const urlStr = typeof url === 'string' ? url : (url as Request).url;
+      if (urlStr.includes('/api/interview')) {
+        console.log('[FetchIntercept]', options?.method || 'GET', urlStr);
+      }
+      return origFetch(...args);
+    };
+    return () => { window.fetch = origFetch; };
+  }, []);
 
   // Check if interview is already completed on page load
   useEffect(() => {
@@ -271,53 +277,18 @@ export default function InterviewPage() {
         return;
       }
 
-      // ── Step 2: Start the interview (slot was granted) ────────────────────
-      setShowStarting(true);
-      setShowInstructions(false);
-
-      const response = await fetch('/api/interview/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          candidateId: candidateId,
-          candidate_data: {
-            name: sessionStorage.getItem('candidateFullName') || 'Candidate',
-            position: 'Software Developer',
-          },
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok || data.error || !data.interviewId) {
-        if (response.status === 400 && data.detail?.message?.includes('already completed')) {
-          setShowStarting(false);
-          setShowInstructions(true);
-          setError('Interview is already completed. Go to Interview Summary.');
-          return;
-        }
-        const errorMsg = data.error || 'Failed to start interview. Please ensure the backend server is running.';
-        console.error('Start interview error:', errorMsg, data);
-        setShowStarting(false);
-        setShowInstructions(true);
-        setError(errorMsg);
-        return;
-      }
-
-      setInterviewId(data.interviewId);
+      // ── Step 2: Use the interview_id + first_question from queue/request ───
+      // queue/request already creates and starts the interview session.
+      // We only call /api/interview/start for the 'already_active' path
+      // (history restore), which is handled above. Here we handle 'started'.
+      setShowStarting(false);
+      setInterviewId(queueData.interview_id);
       // Persist to localStorage so summary page can retrieve it
       localStorage.setItem('currentInterview', JSON.stringify({
-        interviewId: data.interviewId,
+        interviewId: queueData.interview_id,
         startedAt: new Date().toISOString(),
       }));
-      setShowStarting(false);
-
-      // If resumed (existing session), fetch conversation history so we can
-      // restore the chat UI instead of showing an empty first question.
-      setInterviewId(data.interviewId);
-      setMessages([{ role: 'ai', content: data.question || data.greeting }]);
-      setShowStarting(false);
-
+      setMessages([{ role: 'ai', content: queueData.first_question }]);
       setShowInstructions(false);
     } catch (error) {
       console.error('Failed to start interview:', error);
@@ -485,8 +456,10 @@ export default function InterviewPage() {
   };
 
   const handleEndInterview = async () => {
+    console.log('[EndInterview] handleEndInterview called, interviewId=', interviewId);
     if (!interviewId) {
-      console.error('Interview not started');
+      console.error('[EndInterview] Interview not started — interviewId is null');
+      setError('Interview not started. Please refresh the page.');
       return;
     }
 
@@ -591,6 +564,7 @@ export default function InterviewPage() {
     // Sync to DB so admin dashboard sees the correct phase
     await syncPhaseToDb(3);
 
+    console.log('[EndInterview] handleConfirmEnd: calling handleEndInterview, interviewId=', interviewId);
     // Call the end interview API
     await handleEndInterview();
   };

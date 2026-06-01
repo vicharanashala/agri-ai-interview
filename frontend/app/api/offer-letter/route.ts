@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
     const phone = searchParams.get('phone') || '+91 9876543210';
     const action = searchParams.get('action') || 'view';
 
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    const backendUrl = 'http://backend:8000';
     const backendEndpoint = `${backendUrl}/api/offer-letter?name=${encodeURIComponent(name)}&email=${encodeURIComponent(email)}&phone=${encodeURIComponent(phone)}&action=${action}`;
 
     const response = await fetch(backendEndpoint, {

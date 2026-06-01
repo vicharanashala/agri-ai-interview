@@ -4,6 +4,13 @@ import { useState } from "react";
 import styles from "./login.module.css";
 import { useRouter } from "next/navigation";
 
+// Points to the Next.js rewrite proxy so the browser talks to a single origin.
+// In Docker, this resolves to the Next.js server; locally it falls back to the
+// direct backend URL for development outside Docker.
+const ADMIN_API_BASE =
+  process.env.NEXT_PUBLIC_ADMIN_API_URL ||
+  (typeof window !== "undefined" ? window.location.origin : "");
+
 export default function AdminLoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -17,13 +24,20 @@ export default function AdminLoginPage() {
     setLoading(true);
 
     try {
-      const response = await fetch("http://localhost:8000/api/admin/auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, password }),
-      });
+      // Credentials are sent to backend; on success the backend sets the
+      // httpOnly admin_session cookie (scoped to /admin).  Nothing is stored
+      // in localStorage — the cookie handles everything.
+      const response = await fetch(
+        `${ADMIN_API_BASE}/api/admin/auth/login`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: "include",
+          body: JSON.stringify({ email, password }),
+        }
+      );
 
       const data = await response.json();
 
@@ -31,10 +45,8 @@ export default function AdminLoginPage() {
         throw new Error(data.detail || "Login failed");
       }
 
-      // Store token and admin data
-      localStorage.setItem("admin_token", data.token);
-      localStorage.setItem("admin_data", JSON.stringify({ ...data.admin, password }));
-
+      // The admin_session cookie is already set by the backend (path=/admin).
+      // We navigate to dashboard; the dashboard will verify the cookie on mount.
       router.push("/admin/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");

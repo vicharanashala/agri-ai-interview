@@ -3,8 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model Account {
@@ -82,6 +82,13 @@ model Candidate {
   
   // Current pipeline phase (onboarding | interview | summary | offer | signing | joining)
   currentPhase      String   @default("onboarding")
+  
+  // Flag: candidate viewed offer letter (unlocks signing phase)
+  offerLetterViewed    Boolean  @default(false)
+  // Flag: candidate visited summary page (unlocks offer phase)
+  passedAndVisitedSummary Boolean @default(false)
+  // Flag: candidate visited joining details
+  joiningDetailsVisited Boolean  @default(false)
   
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt

@@ -1,10 +1,13 @@
 fastapi
+python-multipart
 uvicorn[standard]
 sqlalchemy
 asyncpg
 psycopg2-binary
 redis
 pydantic
+pydantic-settings
+reportlab
 python-dotenv
 langgraph
 langchain

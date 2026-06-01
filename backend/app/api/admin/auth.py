@@ -1,7 +1,11 @@
 """
 Admin Authentication API Endpoints.
+
+Completely separate from the NextAuth candidate session.
+Uses an httpOnly cookie scoped to /admin so signing out from
+either flow does not affect the other.
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response, Cookie
 from pydantic import BaseModel
 from typing import Optional
 import bcrypt
@@ -20,6 +24,14 @@ _ADMINS = {
 
 # Active session tokens: token → {admin_id, email}
 _active_tokens: dict[str, dict] = {}
+
+# Cookie-based session constants
+# path=/api/admin matches the FastAPI origin (localhost:8000/api/admin/*)
+# so the browser sends the cookie with every admin API call.
+# The cookie is NOT sent to other origins or paths, keeping it isolated.
+_ADMIN_COOKIE_NAME = "admin_session"
+_ADMIN_COOKIE_PATH = "/api/admin"
+_ADMIN_COOKIE_MAX_AGE = 60 * 60 * 24 * 7  # 7 days
 
 router = APIRouter(prefix="/api/admin/auth", tags=["admin-auth"])
 
@@ -52,9 +64,11 @@ class AdminLoginResponse(BaseModel):
 
 
 @router.post("/login", response_model=AdminLoginResponse)
-async def admin_login(request: AdminLoginRequest):
+async def admin_login(request: AdminLoginRequest, response: Response):
     """
     Authenticate an admin user and issue a session token.
+    Stores the token in an httpOnly cookie scoped to /admin so it is
+    completely independent of the NextAuth session used by the candidate flow.
     """
     admin = _ADMINS.get(request.email)
 
@@ -70,6 +84,17 @@ async def admin_login(request: AdminLoginRequest):
         "email": admin["email"],
     }
 
+    # Set httpOnly cookie scoped to /admin — no JS access, not sent to other paths
+    response.set_cookie(
+        key=_ADMIN_COOKIE_NAME,
+        value=token,
+        path=_ADMIN_COOKIE_PATH,
+        max_age=_ADMIN_COOKIE_MAX_AGE,
+        httponly=True,
+        secure=False,  # True in production (HTTPS)
+        samesite="none",
+    )
+
     return AdminLoginResponse(
         success=True,
         token=token,
@@ -83,21 +108,51 @@ async def admin_login(request: AdminLoginRequest):
 
 
 @router.post("/logout")
-async def admin_logout(token: str):
-    """Revoke an admin session token."""
-    if token in _active_tokens:
-        del _active_tokens[token]
+async def admin_logout(response: Response, admin_session: Optional[str] = Cookie(None)):
+    """
+    Revoke the admin session identified by the admin_session cookie and
+    clear the cookie.  Only the admin_session cookie is touched — the
+    candidate NextAuth session is not affected.
+    """
+    if admin_session and admin_session in _active_tokens:
+        del _active_tokens[admin_session]
+
+    response.set_cookie(
+        key=_ADMIN_COOKIE_NAME,
+        value="",
+        path=_ADMIN_COOKIE_PATH,
+        max_age=0,
+        httponly=True,
+        secure=False,
+        samesite="none",
+    )
     return {"success": True, "message": "Logged out successfully"}
 
 
-@router.get("/verify")
-async def verify_token(token: str):
-    """Check whether an admin token is valid and return session info."""
-    session = _active_tokens.get(token)
+@router.get("/session")
+async def get_admin_session(admin_session: Optional[str] = Cookie(None)):
+    """
+    Check whether the request has a valid admin_session cookie and return
+    session info.  Used by the frontend admin dashboard to verify auth on mount.
+    """
+    if not admin_session or admin_session not in _active_tokens:
+        raise HTTPException(status_code=401, detail="Not authenticated")
 
-    if not session:
+    session = _active_tokens[admin_session]
+    return {
+        "valid": True,
+        "admin_id": session["admin_id"],
+        "email": session["email"],
+    }
+
+
+@router.get("/verify")
+async def verify_token(admin_session: Optional[str] = Cookie(None)):
+    """Check whether an admin session cookie is valid and return session info."""
+    if not admin_session or admin_session not in _active_tokens:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
+    session = _active_tokens[admin_session]
     return {
         "valid": True,
         "admin_id": session["admin_id"],

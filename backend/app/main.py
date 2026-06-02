@@ -6,7 +6,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Request
 
-from app.api.admin import auth, candidates, settings
+from app.core.config import settings as app_settings
+from app.api.admin import auth, candidates, settings as admin_settings
 from app.api import interview, joining_details, offer
 from app.api.interview.queue import router as interview_queue_router
 from app.api.faq.route import router as faq_router
@@ -23,13 +24,11 @@ app = FastAPI(
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
 # Allow frontend (Next.js) to communicate with backend
+# CORS_ORIGINS is a comma-separated string of allowed origins
+cors_origins = [origin.strip() for origin in app_settings.CORS_ORIGINS.split(",")]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        # Add production origins here
-    ],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -55,7 +54,7 @@ async def debug_headers(request: Request):
 # ── Admin routes ──────────────────────────────────────────────────────────────
 app.include_router(auth.router)
 app.include_router(candidates.router)
-app.include_router(settings.router)
+app.include_router(admin_settings.router)
 
 
 # ── Interview routes ──────────────────────────────────────────────────────────

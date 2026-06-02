@@ -142,9 +142,9 @@ export default function InterviewPage() {
         return;
       }
 
-      // Then check backend
+      // Then check backend — pass candidateId so we check THIS candidate's session, not all sessions
       try {
-        const response = await fetch('/api/interview/status/check');
+        const response = await fetch(`/api/interview/status/check?candidate_id=${candidateId}`);
         if (response.ok) {
           const data = await response.json();
           if (data.has_completed_interview) {
@@ -383,6 +383,11 @@ export default function InterviewPage() {
         sessionStorage.setItem('interviewPhase', '3');
         localStorage.setItem('interviewPhase', '3');
         await syncPhaseToDb(3);
+
+        // Call backend to end interview — this updates InterviewSession.status to 'completed' in DB
+        if (interviewId) {
+          await fetch(`/api/interview/end/${interviewId}`, { method: 'POST' });
+        }
 
         // Save conversation history for summary page
         const evaluationData = {

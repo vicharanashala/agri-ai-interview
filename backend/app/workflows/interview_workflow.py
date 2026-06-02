@@ -5,10 +5,7 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime
 
 from app.llm.service import llm_service
-from app.services.settings_service import get_question_guidelines, get_interview_system
-
-# Active interviews — cleared when interview ends
-_interviews: Dict[str, Any] = {}
+from app.services.settings_service import get_question_guidelines, get_interview_system, get_interview_settings
 
 # Completed interviews — persists after end for evaluation retrieval
 _completed_interviews: Dict[str, Any] = {}
@@ -22,7 +19,7 @@ class InterviewState:
         self.candidate_data = candidate_data
         self.messages: List[Dict[str, Any]] = []  # conversation history
         self.question_count = 0
-        self.max_questions = 10
+        self.max_questions = get_interview_settings()["max_questions"]
         self.status = "active"
         self.created_at = datetime.now()
     

@@ -11,6 +11,12 @@ from app.db.models.settings import Settings
 
 
 # -------------------------------------------------------------------
+# Interview configuration defaults
+# -------------------------------------------------------------------
+DEFAULT_MAX_QUESTIONS = 10
+
+
+# -------------------------------------------------------------------
 # Default guideline content (must match backend/app/api/admin/settings.py)
 # -------------------------------------------------------------------
 DEFAULT_GUIDELINES = {
@@ -147,3 +153,27 @@ def get_interview_system() -> str:
 
 def get_faq_system() -> str:
     return get_guideline("faq_system")
+
+
+# -------------------------------------------------------------------
+# Interview configuration
+# -------------------------------------------------------------------
+def get_interview_settings() -> dict:
+    """
+    Load interview configuration from the DB, falling back to defaults.
+    Returns {"max_questions": int}.
+    """
+    try:
+        db = _get_db()
+        try:
+            setting: Optional[Settings] = db.query(Settings).filter(
+                Settings.key == "interview_max_questions"
+            ).first()
+            if setting and setting.value:
+                return {"max_questions": int(setting.value)}
+        finally:
+            db.close()
+    except Exception:
+        pass
+
+    return {"max_questions": DEFAULT_MAX_QUESTIONS}

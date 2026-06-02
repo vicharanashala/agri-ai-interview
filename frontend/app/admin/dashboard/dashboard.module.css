@@ -621,6 +621,53 @@
   background: white;
 }
 
+/* Interview Config Section */
+.interviewConfigSection {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.interviewConfigCard {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 20px;
+  background: #f9fafb;
+}
+
+.interviewConfigLabel {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1a1a2e;
+  margin-bottom: 12px;
+}
+
+.interviewConfigRow {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.interviewConfigInput {
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 14px;
+  width: 100px;
+}
+
+.interviewConfigInput:focus {
+  outline: none;
+  border-color: #08CB00;
+}
+
+.interviewConfigHint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #6b7280;
+}
+
 /* Buttons */
 .editBtn {
   background: #dcfce7;

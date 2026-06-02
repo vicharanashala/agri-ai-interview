@@ -10,6 +10,7 @@ from app.workflows.interview_graph import interview_graph_manager
 from app.llm import llm_service
 from app.workflows.interview_workflow import interview_workflow
 from app.services.queue_manager import slot_manager
+from app.db.database import get_db
 
 router = APIRouter(prefix="/api/interview", tags=["interview"])
 
@@ -134,23 +135,32 @@ async def send_message(request: MessageRequest):
 
 
 @router.get("/status/check", response_model=StatusCheckResponse)
-async def check_interview_status():
+async def check_interview_status(candidate_id: Optional[str] = None):
     """
-    Check if any interview has been completed.
-    This endpoint checks the backend memory for any completed interview.
+    Check if a specific candidate's interview has been completed.
+    Uses the PostgreSQL InterviewSession table for persistent, per-candidate state
+    instead of the global in-memory _interviews dict.
     """
-    try:
-        from app.workflows.interview_workflow import _interviews
-
-        for interview_id, state in _interviews.items():
-            if state.status == "completed":
+    if candidate_id:
+        db = next(get_db())
+        try:
+            from app.db.models.candidate import InterviewSession
+            session = (
+                db.query(InterviewSession)
+                .filter(
+                    InterviewSession.candidateId == candidate_id,
+                    InterviewSession.status == "completed",
+                )
+                .first()
+            )
+            if session:
                 return StatusCheckResponse(
                     has_completed_interview=True,
                     status="completed",
                     message="An interview has already been completed"
                 )
-    except ImportError:
-        pass
+        finally:
+            db.close()
 
     return StatusCheckResponse(
         has_completed_interview=False,

@@ -94,7 +94,7 @@ interface Guidelines {
 
 // Tabs
 type Tab = "live" | "candidates" | "analytics" | "anti-cheat" | "settings";
-type SettingsTab = "guidelines" | "criteria";
+type SettingsTab = "guidelines" | "criteria" | "interview-config";
 
 // Chart colors
 const CHART_COLORS = ["#08CB00", "#10b981", "#f59e0b", "#ef4444", "#059669", "#22c55e"];
@@ -146,6 +146,9 @@ export default function AdminDashboard() {
   const [guidelineContent, setGuidelineContent] = useState("");
   const [editingCriteria, setEditingCriteria] = useState<string | null>(null);
   const [criteriaForm, setCriteriaForm] = useState<Partial<EvaluationCriteria>>({});
+  const [interviewConfig, setInterviewConfig] = useState<{ max_questions: number }>({ max_questions: 10 });
+  const [maxQuestionsInput, setMaxQuestionsInput] = useState<number>(10);
+  const [savingConfig, setSavingConfig] = useState(false);
   const [stats, setStats] = useState({ 
     totalCandidates: 0, 
     activeInterviews: 0, 
@@ -215,6 +218,7 @@ export default function AdminDashboard() {
         loadCandidates().catch(err => console.error("loadCandidates error:", err)),
         loadGuidelines().catch(err => console.error("loadGuidelines error:", err)),
         loadCriteria().catch(err => console.error("loadCriteria error:", err)),
+        loadInterviewConfig().catch(err => console.error("loadInterviewConfig error:", err)),
         loadGeoStats().catch(err => console.error("loadGeoStats error:", err)),
         loadStateFunnel().catch(err => console.error("loadStateFunnel error:", err)),
         loadViolations().catch(err => console.error("loadViolations error:", err)),
@@ -519,6 +523,39 @@ export default function AdminDashboard() {
       }
     } catch (err) {
       console.error("Failed to load criteria:", err);
+    }
+  };
+
+  const loadInterviewConfig = async () => {
+    try {
+      const res = await withAuth("/api/admin/settings/interview-config");
+      if (res.ok) {
+        const data = await res.json();
+        setInterviewConfig({ max_questions: data.max_questions });
+        setMaxQuestionsInput(data.max_questions);
+      }
+    } catch (err) {
+      console.error("Failed to load interview config:", err);
+    }
+  };
+
+  const handleSaveInterviewConfig = async () => {
+    setSavingConfig(true);
+    try {
+      const res = await withAuth("/api/admin/settings/interview-config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ max_questions: maxQuestionsInput }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setInterviewConfig({ max_questions: data.max_questions });
+        setMaxQuestionsInput(data.max_questions);
+      }
+    } catch (err) {
+      console.error("Failed to save interview config:", err);
+    } finally {
+      setSavingConfig(false);
     }
   };
 
@@ -1437,6 +1474,12 @@ export default function AdminDashboard() {
               >
                 Evaluation Criteria
               </button>
+              <button
+                className={`${styles.settingsTab} ${settingsTab === "interview-config" ? styles.activeSettingsTab : ""}`}
+                onClick={() => setSettingsTab("interview-config")}
+              >
+                Interview Config
+              </button>
             </div>
 
             {/* Guidelines Section */}
@@ -1561,6 +1604,40 @@ export default function AdminDashboard() {
                     )}
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* Interview Config Section */}
+            {settingsTab === "interview-config" && (
+              <div className={styles.interviewConfigSection}>
+                <p className={styles.settingsDescription}>
+                  Configure how many questions each candidate will answer per interview session.
+                </p>
+                <div className={styles.interviewConfigCard}>
+                  <label className={styles.interviewConfigLabel}>
+                    Maximum Questions Per Interview
+                  </label>
+                  <div className={styles.interviewConfigRow}>
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={maxQuestionsInput}
+                      onChange={(e) => setMaxQuestionsInput(Number(e.target.value))}
+                      className={styles.interviewConfigInput}
+                    />
+                    <button
+                      onClick={handleSaveInterviewConfig}
+                      disabled={savingConfig || maxQuestionsInput === interviewConfig.max_questions}
+                      className={styles.saveBtn}
+                    >
+                      {savingConfig ? "Saving…" : "Save"}
+                    </button>
+                  </div>
+                  <p className={styles.interviewConfigHint}>
+                    Current value: <strong>{interviewConfig.max_questions}</strong>. New interviews will use this value.
+                  </p>
+                </div>
               </div>
             )}
           </div>

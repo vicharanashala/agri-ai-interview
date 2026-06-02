@@ -1,20 +1,20 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  output: "standalone",
   async rewrites() {
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
     return [
       {
         source: '/api/admin/:path*',
-        destination: `${process.env.BACKEND_URL}/api/admin/:path*`,
+        destination: `${backendUrl}/api/admin/:path*`,
       },
       {
         source: '/api/interview/:path*',
-        destination: `${process.env.BACKEND_URL}/api/interview/:path*`,
+        destination: `${backendUrl}/api/interview/:path*`,
       },
       {
         source: '/api/faq/:path*',
-        destination: `${process.env.BACKEND_URL}/api/faq/:path*`,
+        destination: `${backendUrl}/api/faq/:path*`,
       },
     ];
   },

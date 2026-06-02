@@ -11,6 +11,7 @@ import uuid
 from app.db.database import get_db
 from app.db.models.settings import Settings
 from app.api.admin.middleware import require_admin_auth
+from app.services.settings_service import get_interview_settings
 
 router = APIRouter(prefix="/api/admin/settings", tags=["admin-settings"])
 
@@ -405,4 +406,52 @@ async def delete_criteria(criteria_id: str, db: Session = Depends(get_db), _admi
     return {
         "success": True,
         "message": "Criteria deleted"
+    }
+
+
+# ============ Interview Configuration Endpoints ============
+
+class InterviewConfigResponse(BaseModel):
+    max_questions: int
+
+
+class UpdateInterviewConfigRequest(BaseModel):
+    max_questions: int
+
+
+@router.get("/interview-config", response_model=InterviewConfigResponse)
+async def get_interview_config(_admin=Depends(require_admin_auth)):
+    """
+    Get current interview configuration (max questions per interview).
+    """
+    config = get_interview_settings()
+    return InterviewConfigResponse(max_questions=config["max_questions"])
+
+
+@router.put("/interview-config")
+async def update_interview_config(request: UpdateInterviewConfigRequest, db: Session = Depends(get_db), _admin=Depends(require_admin_auth)):
+    """
+    Update interview configuration — specifically the max questions per interview.
+    """
+    if request.max_questions < 1:
+        raise HTTPException(status_code=400, detail="max_questions must be at least 1")
+
+    setting = db.query(Settings).filter(Settings.key == "interview_max_questions").first()
+    if setting:
+        setting.value = str(request.max_questions)
+        setting.updated_at = datetime.now().isoformat()
+    else:
+        setting = Settings(
+            key="interview_max_questions",
+            value=str(request.max_questions),
+            category="interview",
+            description="Maximum number of questions per interview session"
+        )
+        db.add(setting)
+
+    db.commit()
+
+    return {
+        "success": True,
+        "max_questions": request.max_questions
     }

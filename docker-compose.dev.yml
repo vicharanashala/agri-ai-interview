@@ -1,5 +1,6 @@
 services:
-  backend:
+  agri-interview-backend:
+    container_name: agri-interview-backend
     build:
       context: ./backend
       dockerfile: Dockerfile.dev
@@ -7,11 +8,12 @@ services:
       - "${BACKEND_PORT:-8001}:8000"
     volumes:
       - ./backend:/app
-    env_file:
-      - .env.docker
     environment:
-      - DATABASE_URL=postgresql://user:password@postgres:5432/ai_interview
+      - DATABASE_URL=postgresql://user:password@host.docker.internal:5432/ai_interview
       - REDIS_URL=redis://redis:6379
+      - BACKEND_URL=http://agri-interview-backend:8000
+      - CORS_ORIGINS=http://localhost:3001
+      - CORS_ALLOW_CREDENTIALS=false
     depends_on:
       redis:
         condition: service_healthy
@@ -19,32 +21,52 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  frontend:
+  agri-interview-frontend:
+    container_name: agri-interview-frontend
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev
     ports:
       - "${FRONTEND_PORT:-3001}:3000"
     volumes:
-      - ./frontend:/app
+      - ./frontend/app:/app/app
+      - ./frontend/components:/app/components
+      - ./frontend/lib:/app/lib
+      - ./frontend/hooks:/app/hooks
+      - ./frontend/services:/app/services
+      - ./frontend/types:/app/types
+      - ./frontend/public:/app/public
+      - ./frontend/prisma:/app/prisma
+      - ./frontend/next.config.js:/app/next.config.js
+      - ./frontend/middleware.ts:/app/middleware.ts
+      - ./frontend/package.json:/app/package.json
       - frontend_node_modules:/app/node_modules
     env_file:
       - .env.docker
     environment:
-      - DATABASE_URL=postgresql://user:password@postgres:5432/ai_interview
+      - DATABASE_URL=postgresql://user:password@host.docker.internal:5432/ai_interview?schema=public
+      - BACKEND_URL=http://agri-interview-backend:8000
     depends_on:
-      backend:
+      agri-interview-backend:
         condition: service_started
       postgres:
         condition: service_healthy
     restart: unless-stopped
+    command: >
+      sh -c "npx prisma generate &&
+             cp -r ./prisma/node_modules/.prisma ./node_modules/ &&
+             cp -r ./prisma/node_modules/@prisma ./node_modules/ &&
+             npx next dev -p 3000"
 
   redis:
     image: redis:7-alpine
+    container_name: redis
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    networks:
+      - ai-interview-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -53,6 +75,9 @@ services:
 
   postgres:
     image: postgres:16-alpine
+    container_name: postgres
+    networks:
+      - ai-interview-network
     environment:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
@@ -66,6 +91,10 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+networks:
+  ai-interview-network:
+    driver: bridge
 
 volumes:
   frontend_node_modules:

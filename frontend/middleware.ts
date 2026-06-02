@@ -18,7 +18,6 @@ const authRoutes = ['/login'];
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Get the session token (JWT)
   const token = await getToken({
     req: request,
     secret: process.env.NEXTAUTH_SECRET,

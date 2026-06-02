@@ -132,6 +132,8 @@ export default function InterviewPage() {
   // Check if interview is already completed on page load
   useEffect(() => {
     const checkInterviewStatus = async () => {
+      const candidateId = sessionStorage.getItem('candidateId') || '';
+
       // First check localStorage
       const wasCompleted = localStorage.getItem('interviewCompleted') === 'true' || 
                            sessionStorage.getItem('interviewCompleted') === 'true';

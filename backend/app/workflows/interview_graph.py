@@ -32,8 +32,35 @@ class InterviewGraphManager:
         return self.workflow.end_interview(interview_id)
     
     def get_evaluation(self, interview_id: str) -> Optional[Dict[str, Any]]:
-        """Get evaluation (not implemented yet)."""
-        return None
+        """Get evaluation for a completed interview by generating it from conversation history."""
+        from app.llm import llm_service
+
+        messages = self.workflow.get_conversation_history(interview_id)
+        if not messages:
+            return None
+
+        state = self.workflow.get_completed_interview(interview_id)
+        candidate_data = {}
+        if state and hasattr(state, 'candidate_data'):
+            candidate_data = state.candidate_data
+
+        import asyncio
+        conversation_history = [
+            {"role": m.get("role"), "content": m.get("content")}
+            for m in messages
+            if m.get("role") and m.get("content")
+        ]
+
+        try:
+            evaluation = asyncio.get_event_loop().run_until_complete(
+                llm_service.generate_interview_evaluation(
+                    candidate_data=candidate_data,
+                    conversation_history=conversation_history
+                )
+            )
+            return evaluation
+        except Exception:
+            return None
     
     def clear_interview(self, interview_id: str) -> bool:
         """Clear a specific interview."""

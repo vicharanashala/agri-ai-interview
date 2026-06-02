@@ -464,7 +464,22 @@ export default function InterviewPage() {
 
   const handleEndInterview = async () => {
     console.log('[EndInterview] handleEndInterview called, interviewId=', interviewId);
-    if (!interviewId) {
+
+    // Fix #1: Fall back to localStorage if interviewId state is null
+    let effectiveInterviewId = interviewId;
+    if (!effectiveInterviewId) {
+      try {
+        const stored = localStorage.getItem('currentInterview');
+        if (stored) {
+          effectiveInterviewId = JSON.parse(stored).interviewId;
+          console.log('[EndInterview] Recovered interviewId from localStorage:', effectiveInterviewId);
+        }
+      } catch (e) {
+        console.error('[EndInterview] Failed to parse stored interviewId:', e);
+      }
+    }
+
+    if (!effectiveInterviewId) {
       console.error('[EndInterview] Interview not started — interviewId is null');
       setError('Interview not started. Please refresh the page.');
       return;
@@ -475,16 +490,18 @@ export default function InterviewPage() {
 
     try {
       // End the interview session
-      const endRes = await fetch(`/api/interview/end/${interviewId}`, {
+      const endRes = await fetch(`/api/interview/end/${effectiveInterviewId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
       const endData = await endRes.json();
 
-      if (!endRes.ok || endData.error) {
-        const errorMessage = endData.error || 'Failed to end interview. Please try again.';
+      // Fix #2: Check HTTP status directly — FastAPI returns "detail" not "error"
+      if (!endRes.ok) {
+        const errorMessage = endData.detail || 'Failed to end interview. Please try again.';
         console.error('End interview error:', errorMessage);
         setError(errorMessage);
+        setIsEnding(false);
         return;
       }
 
@@ -498,7 +515,7 @@ export default function InterviewPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          interview_id: interviewId,
+          interview_id: effectiveInterviewId,
           conversation_history: history,
           candidate_data: {},
         }),
@@ -524,8 +541,19 @@ export default function InterviewPage() {
     setIsEnding(true);
 
     try {
-      if (interviewId) {
-        await fetch(`/api/interview/end/${interviewId}`, { method: 'POST' });
+      // Use localStorage fallback for interviewId (same as handleEndInterview)
+      let effectiveInterviewId = interviewId;
+      if (!effectiveInterviewId) {
+        try {
+          const stored = localStorage.getItem('currentInterview');
+          if (stored) {
+            effectiveInterviewId = JSON.parse(stored).interviewId;
+          }
+        } catch (e) {}
+      }
+
+      if (effectiveInterviewId) {
+        await fetch(`/api/interview/end/${effectiveInterviewId}`, { method: 'POST' });
       }
 
       const candidateId = sessionStorage.getItem('candidateId') || '';

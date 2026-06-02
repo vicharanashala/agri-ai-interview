@@ -214,7 +214,10 @@ async def end_interview(interview_id: str):
 
     # Free the slot
     state = interview_workflow.get_completed_interview(interview_id)
-    candidate_id = state.candidate_id if state and hasattr(state, 'candidate_id') else ""
+    # Fix #3: candidate_id is stored INSIDE candidate_data dict, not as a direct attribute
+    candidate_id = ""
+    if state and hasattr(state, 'candidate_data'):
+        candidate_id = state.candidate_data.get("candidate_id", "")
     if candidate_id:
         slot_manager.complete_interview(candidate_id, interview_id)
 

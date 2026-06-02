@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 export async function GET() {
   try {
-    const backendUrl = 'http://backend:8000';
+    const backendUrl = process.env.BACKEND_URL ?? 'http://backend:8000';
     const response = await fetch(`${backendUrl}/api/interview/status/check`, {
       method: 'GET',
       headers: {

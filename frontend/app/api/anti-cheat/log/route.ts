@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 
-const API_BASE_URL = 'http://backend:8000';
+const API_BASE_URL = process.env.BACKEND_URL ?? 'http://backend:8000';
 
 // Pre-computed bcrypt hash of the admin password — same as backend auth.py
 // This avoids storing the raw password in env or client-visible code

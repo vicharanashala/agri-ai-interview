@@ -18,6 +18,7 @@ out/
 .env.*.local
 .env.prod
 .env.prod.example
+stack.env
 
 # Logs
 *.log

@@ -50,11 +50,18 @@ export async function POST(request: NextRequest) {
     }
 
     // Normal evaluation flow for non-admin users
+    const authHeader = request.headers.get('Authorization');
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (authHeader) {
+      headers['Authorization'] = authHeader;
+      console.log('[Evaluate Route] Authorization header present, first 8 chars:', authHeader.substring(0, 8));
+    } else {
+      console.log('[Evaluate Route] No Authorization header in request to evaluate route');
+    }
+
     const response = await fetch(`${API_BASE_URL}/api/interview/evaluate`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({
         interview_id,
         candidate_data: candidate_data || {},

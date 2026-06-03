@@ -45,6 +45,9 @@ export async function authFetch(
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`
+    console.log(`[authFetch] URL=${url} | token(first 8)=${token.substring(0, 8)}... | header set`);
+  } else {
+    console.warn(`[authFetch] URL=${url} | NO TOKEN in sessionStorage — no Authorization header`);
   }
 
   return fetch(url, {
@@ -73,12 +76,16 @@ export function interceptAuthFetch(): () => void {
 
   window.fetch = async (url: string | Request, init?: RequestInit) => {
     const token = getAuthToken()
+    const urlStr = typeof url === 'string' ? url : (url as Request).url
     if (token) {
       const headers: Record<string, string> = {
         ...(init?.headers as Record<string, string> || {}),
         Authorization: `Bearer ${token}`,
       }
       init = { ...init, headers }
+      console.log(`[interceptFetch] URL=${urlStr} | token(first 8)=${token.substring(0, 8)}... | header attached`);
+    } else {
+      console.warn(`[interceptFetch] URL=${urlStr} | NO TOKEN in sessionStorage — request will go without auth`);
     }
     return orig(url, init)
   }

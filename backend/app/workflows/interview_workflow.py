@@ -14,9 +14,10 @@ _completed_interviews: Dict[str, Any] = {}
 class InterviewState:
     """Manages the state of an ongoing interview session."""
     
-    def __init__(self, interview_id: str, candidate_data: Dict[str, Any]):
+    def __init__(self, interview_id: str, candidate_data: Dict[str, Any], resume_parsed: Optional[Dict[str, Any]] = None):
         self.interview_id = interview_id
         self.candidate_data = candidate_data
+        self.resume_parsed = resume_parsed
         self.messages: List[Dict[str, Any]] = []  # conversation history
         self.question_count = 0
         self.max_questions = get_interview_settings()["max_questions"]

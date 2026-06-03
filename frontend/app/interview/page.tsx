@@ -2,9 +2,11 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import styles from './page.module.css';
 import { syncPhaseToDb } from '@/lib/phaseSync';
 import { useAntiCheat, type ViolationType } from '@/hooks/useAntiCheat';
+import { interceptAuthFetch, authFetch } from '@/lib/auth-fetch';
 import AntiCheatOverlay from '@/components/AntiCheatOverlay';
 
 interface Message {
@@ -38,6 +40,7 @@ interface CumulativeEvaluation {
 
 export default function InterviewPage() {
   const router = useRouter();
+  const { data: session } = useSession();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -62,6 +65,7 @@ export default function InterviewPage() {
     count: number
   }>({ visible: false, type: null, count: 0 });
   const [isClosing, setIsClosing] = useState(false);
+  const [candidateId, setCandidateId] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const isSubmittingRef = useRef(false);
@@ -78,7 +82,7 @@ export default function InterviewPage() {
     // Show closing screen for 2 seconds before ending
     await new Promise(resolve => setTimeout(resolve, 2000))
     if (interviewId) {
-      await fetch(`/api/interview/end/${interviewId}`, { method: 'POST' })
+      await authFetch(`/api/interview/end/${interviewId}`, { method: 'POST' })
     }
     sessionStorage.setItem('interviewTerminatedCheat', 'true')
     sessionStorage.setItem('interviewPhase', '3')
@@ -89,7 +93,6 @@ export default function InterviewPage() {
 
   // Anti-cheat: log violation to backend (fire-and-forget)
   const handleCheatLog = useCallback((type: ViolationType) => {
-    const candidateId = sessionStorage.getItem('candidateId') || ''
     fetch('/api/anti-cheat/log', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -111,6 +114,36 @@ export default function InterviewPage() {
     enabled: !showInstructions && !isComplete,
   })
 
+  // Auto-attach Authorization: Bearer token to ALL fetch calls on this page
+  useEffect(() => {
+    const restore = interceptAuthFetch()
+    return restore
+  }, [])
+
+  // Resolve candidateId once when session is available — uses JWT token or /api/candidate fallback
+  useEffect(() => {
+    if (!session?.user) return;
+
+    // candidateId is embedded in the JWT token by auth-options — available immediately
+    const fromToken = (session.user as { candidateId?: string }).candidateId;
+    if (fromToken) {
+      setCandidateId(fromToken);
+      sessionStorage.setItem('candidateId', fromToken);
+      return;
+    }
+
+    // Fallback: fetch from /api/candidate (covers cases where token was issued before we added candidateId)
+    fetch('/api/candidate', { credentials: 'include' })
+      .then((r) => r.ok ? r.json() : null)
+      .then((cand) => {
+        if (cand?.id) {
+          setCandidateId(cand.id);
+          sessionStorage.setItem('candidateId', cand.id);
+        }
+      })
+      .catch(() => {});
+  }, [session]);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -131,9 +164,9 @@ export default function InterviewPage() {
 
   // Check if interview is already completed on page load
   useEffect(() => {
-    const checkInterviewStatus = async () => {
-      const candidateId = sessionStorage.getItem('candidateId') || '';
+    if (!candidateId) return;
 
+    const checkInterviewStatus = async () => {
       // First check localStorage
       const wasCompleted = localStorage.getItem('interviewCompleted') === 'true' || 
                            sessionStorage.getItem('interviewCompleted') === 'true';
@@ -146,7 +179,7 @@ export default function InterviewPage() {
 
       // Then check backend — pass candidateId so we check THIS candidate's session, not all sessions
       try {
-        const response = await fetch(`/api/interview/status/check?candidate_id=${candidateId}`);
+        const response = await authFetch(`/api/interview/status/check?candidate_id=${candidateId}`);
         if (response.ok) {
           const data = await response.json();
           if (data.has_completed_interview) {
@@ -163,8 +196,7 @@ export default function InterviewPage() {
 
       // Check if there's an existing active session (resume path)
       try {
-        const candidateId = sessionStorage.getItem('candidateId') || '';
-        const queueRes = await fetch(`/api/interview/queue/status/${candidateId}`);
+        const queueRes = await authFetch(`/api/interview/queue/status/${candidateId}`);
         if (queueRes.ok) {
           const qData = await queueRes.json();
           // 6.4 — Show resume prompt if paused
@@ -179,7 +211,7 @@ export default function InterviewPage() {
     };
 
     checkInterviewStatus();
-  }, [router]);
+  }, [router, candidateId]);
 
   // Block back button during active interview — show confirmation
   useEffect(() => {
@@ -202,8 +234,7 @@ export default function InterviewPage() {
   const handleResumeInterview = async () => {
     setIsResuming(true);
     try {
-      const candidateId = sessionStorage.getItem('candidateId') || '';
-      const res = await fetch('/api/interview/resume', {
+      const res = await authFetch('/api/interview/resume', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ candidate_id: candidateId }),
@@ -225,27 +256,46 @@ export default function InterviewPage() {
   };
 
   const handleBeginInterview = async () => {
-    // Always reset completed state — the candidate is starting a new attempt
     setIsInterviewCompleted(false);
     setError(null);
     resetAntiCheat();
     setIsStarting(true);
-    // Start the starting screen immediately — never show instructions underneath
     setShowStarting(true);
     setShowInstructions(false);
 
-    try {
-      const candidateId = sessionStorage.getItem('candidateId') || '';
+    // Resolve candidateId — try sessionStorage first (set by post-login),
+    // then React state (from useEffect), then fall back to API call.
+    let resolvedId =
+      (typeof window !== 'undefined' ? sessionStorage.getItem('candidate_id') : null) ||
+      candidateId ||
+      '';
+    if (!resolvedId) {
+      try {
+        const r = await fetch('/api/candidate', { credentials: 'include' });
+        if (r.ok) {
+          const cand = await r.json();
+          resolvedId = cand?.id || '';
+        }
+      } catch { /* non-fatal */ }
+    }
 
+    if (!resolvedId) {
+      setError('Candidate profile not found. Please complete onboarding first.');
+      setShowStarting(false);
+      setShowInstructions(true);
+      setIsStarting(false);
+      return;
+    }
+
+    try {
       // ── Step 1: Request an interview slot ─────────────────────────────────
-      const queueRes = await fetch('/api/interview/queue/request', {
+      const queueRes = await authFetch('/api/interview/queue/request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ candidate_id: candidateId }),
+        body: JSON.stringify({ candidate_id: resolvedId }),
       });
       const queueData = await queueRes.json();
 
-      // No slot available — show the message and let them retry
       if (queueData.result === 'no_slot') {
         setShowStarting(false);
         setShowInstructions(true);
@@ -253,21 +303,21 @@ export default function InterviewPage() {
         return;
       }
 
-      // Already has an active interview — resume it
       if (queueData.result === 'already_active') {
         setInterviewId(queueData.interview_id);
         setShowStarting(false);
         setShowInstructions(false);
-        // Restore history for resumed session
         try {
-          const histRes = await fetch(`/api/interview/history/${queueData.interview_id}`);
+          const histRes = await authFetch(`/api/interview/history/${queueData.interview_id}`);
           if (histRes.ok) {
             const histData = await histRes.json();
-            if (histData.history && histData.history.length > 0) {
-              const restored: Message[] = histData.history.map((m: { role: string; content: string }) => ({
-                role: m.role as 'ai' | 'user',
-                content: m.content,
-              }));
+            if (histData.history?.length > 0) {
+              const restored: Message[] = histData.history.map(
+                (m: { role: string; content: string }) => ({
+                  role: m.role as 'ai' | 'user',
+                  content: m.content,
+                })
+              );
               setMessages(restored);
             } else {
               setMessages([{ role: 'ai', content: 'Welcome back! Please continue from where you left off.' }]);
@@ -279,13 +329,8 @@ export default function InterviewPage() {
         return;
       }
 
-      // ── Step 2: Use the interview_id + first_question from queue/request ───
-      // queue/request already creates and starts the interview session.
-      // We only call /api/interview/start for the 'already_active' path
-      // (history restore), which is handled above. Here we handle 'started'.
-      setShowStarting(false);
+      // ── Step 2: Slot acquired — start the interview ────────────────────────
       setInterviewId(queueData.interview_id);
-      // Persist to localStorage so summary page can retrieve it
       localStorage.setItem('currentInterview', JSON.stringify({
         interviewId: queueData.interview_id,
         startedAt: new Date().toISOString(),
@@ -299,7 +344,6 @@ export default function InterviewPage() {
       setError('Network error. Please ensure the backend server is running on port 8000.');
     } finally {
       setIsStarting(false);
-      setShowStarting(false); // guarantee cleanup — don't let candidate get stuck
     }
   };
 
@@ -337,7 +381,7 @@ export default function InterviewPage() {
     setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
 
     try {
-      const response = await fetch('/api/interview/message', {
+      const response = await authFetch('/api/interview/message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -388,7 +432,7 @@ export default function InterviewPage() {
 
         // Call backend to end interview — this updates InterviewSession.status to 'completed' in DB
         if (interviewId) {
-          await fetch(`/api/interview/end/${interviewId}`, { method: 'POST' });
+          await authFetch(`/api/interview/end/${interviewId}`, { method: 'POST' });
         }
 
         // Save conversation history for summary page
@@ -421,7 +465,7 @@ export default function InterviewPage() {
         const history = messages
           .filter((m: any) => m.role === 'user' || m.role === 'ai')
           .map((m: any) => ({ role: m.role, content: m.content }));
-        const evalRes = await fetch('/api/interview/evaluate', {
+        const evalRes = await authFetch('/api/interview/evaluate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ interview_id: interviewId, conversation_history: history, candidate_data: {} }),
@@ -490,7 +534,7 @@ export default function InterviewPage() {
 
     try {
       // End the interview session
-      const endRes = await fetch(`/api/interview/end/${effectiveInterviewId}`, {
+      const endRes = await authFetch(`/api/interview/end/${effectiveInterviewId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
@@ -511,7 +555,7 @@ export default function InterviewPage() {
         .map((m: any) => ({ role: m.role, content: m.content }));
 
       // Immediately fetch evaluation and cache it
-      const evalRes = await fetch('/api/interview/evaluate', {
+      const evalRes = await authFetch('/api/interview/evaluate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -553,11 +597,10 @@ export default function InterviewPage() {
       }
 
       if (effectiveInterviewId) {
-        await fetch(`/api/interview/end/${effectiveInterviewId}`, { method: 'POST' });
+        await authFetch(`/api/interview/end/${effectiveInterviewId}`, { method: 'POST' });
       }
 
-      const candidateId = sessionStorage.getItem('candidateId') || '';
-      fetch('/api/interview/queue/cancel', {
+      authFetch('/api/interview/queue/cancel', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ candidate_id: candidateId }),
@@ -581,8 +624,7 @@ export default function InterviewPage() {
     setShowEndConfirmDialog(false);
 
     // 6.6 — Notify backend of voluntary cancel before ending
-    const candidateId = sessionStorage.getItem('candidateId') || '';
-    fetch('/api/interview/queue/cancel', {
+    authFetch('/api/interview/queue/cancel', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ candidate_id: candidateId }),

@@ -101,12 +101,9 @@ export default function OnboardingPage() {
   }, []);
 
   const validatePhone = (value: string): boolean => {
-    // Remove any non-digit characters
-    const digitsOnly = value.replace(/\D/g, '');
-    
-    // Check if it's exactly 10 digits
-    if (digitsOnly.length !== 10) {
-      setPhoneError('Phone number must be exactly 10 digits');
+    // Only integers allowed, exactly 10 digits
+    if (value.length !== 10 || /\D/.test(value)) {
+      setPhoneError('Phone number must be exactly 10 digits (numbers only)');
       return false;
     }
     
@@ -128,13 +125,15 @@ export default function OnboardingPage() {
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    // Only allow digits and + sign
-    const filtered = value.replace(/[^\d+]/g, '');
-    setFormData((prev) => ({ ...prev, phone: filtered }));
+    // Only allow digits (no + sign for Indian numbers)
+    const filtered = value.replace(/\D/g, '');
+    // Max 10 digits
+    const truncated = filtered.slice(0, 10);
+    setFormData((prev) => ({ ...prev, phone: truncated }));
     
     // Validate on full entry
-    if (filtered.length >= 10) {
-      validatePhone(filtered);
+    if (truncated.length >= 10) {
+      validatePhone(truncated);
     } else {
       setPhoneError('');
     }
@@ -234,6 +233,46 @@ export default function OnboardingPage() {
 
     // Validate pincode
     if (!validatePincode(formData.pincode)) {
+      return;
+    }
+
+    if (!formData.address.trim()) {
+      setError('Please enter your address');
+      return;
+    }
+
+    if (!formData.currentRole.trim()) {
+      setError('Please enter your current role');
+      return;
+    }
+
+    if (!formData.yearsOfExperience.trim()) {
+      setError('Please enter your years of experience');
+      return;
+    }
+
+    if (!formData.highestEducation.trim()) {
+      setError('Please select your highest education');
+      return;
+    }
+
+    if (!formData.institution.trim()) {
+      setError('Please enter your institution/university');
+      return;
+    }
+
+    if (!formData.farmingBackground.trim()) {
+      setError('Please describe your farming experience');
+      return;
+    }
+
+    if (!formData.cropsGrown.trim()) {
+      setError('Please enter the crops you have grown/handled');
+      return;
+    }
+
+    if (!formData.primaryExpertise.trim()) {
+      setError('Please select your primary area of expertise');
       return;
     }
 
@@ -461,8 +500,10 @@ export default function OnboardingPage() {
                 onChange={handleChange}
                 className={styles.input}
                 placeholder="Enter your full name"
+                maxLength={30}
                 required
               />
+              <span className={styles.charCount}>{formData.fullName.length}/30</span>
             </div>
 
             <div className={styles.field}>
@@ -476,11 +517,12 @@ export default function OnboardingPage() {
                 value={formData.phone}
                 onChange={handlePhoneChange}
                 className={styles.input}
-                placeholder="+91 9876543210"
-                maxLength={13}
+                placeholder="Enter 10-digit phone number"
+                maxLength={10}
                 required
               />
               {phoneError && <span className={styles.fieldError}>{phoneError}</span>}
+              <span className={styles.charCount}>{formData.phone.length}/10 digits</span>
             </div>
           </section>
 
@@ -538,7 +580,7 @@ export default function OnboardingPage() {
 
             <div className={styles.field}>
               <label htmlFor="address" className={styles.label}>
-                Address
+                Address <span className={styles.required}>*</span>
               </label>
               <textarea
                 id="address"
@@ -548,7 +590,10 @@ export default function OnboardingPage() {
                 className={styles.textarea}
                 placeholder="Enter your full address"
                 rows={3}
+                maxLength={150}
+                required
               />
+              <span className={styles.charCount}>{formData.address.length}/150</span>
             </div>
           </section>
 
@@ -556,7 +601,9 @@ export default function OnboardingPage() {
             <h2 className={styles.sectionTitle}>Professional Background</h2>
             
             <div className={styles.field}>
-              <label htmlFor="currentRole" className={styles.label}>Current Role</label>
+              <label htmlFor="currentRole" className={styles.label}>
+                Current Role <span className={styles.required}>*</span>
+              </label>
               <input
                 type="text"
                 id="currentRole"
@@ -565,11 +612,16 @@ export default function OnboardingPage() {
                 onChange={handleChange}
                 className={styles.input}
                 placeholder="e.g., Farmer, Agronomist"
+                maxLength={30}
+                required
               />
+              <span className={styles.charCount}>{formData.currentRole.length}/30</span>
             </div>
 
             <div className={styles.field}>
-              <label htmlFor="yearsOfExperience" className={styles.label}>Years of Experience</label>
+              <label htmlFor="yearsOfExperience" className={styles.label}>
+                Years of Experience <span className={styles.required}>*</span>
+              </label>
               <input
                 type="number"
                 id="yearsOfExperience"
@@ -577,19 +629,24 @@ export default function OnboardingPage() {
                 value={formData.yearsOfExperience}
                 onChange={handleChange}
                 className={styles.input}
-                placeholder="0"
+                placeholder="e.g., 2.5"
                 min="0"
+                step="0.1"
+                required
               />
             </div>
 
             <div className={styles.field}>
-              <label htmlFor="highestEducation" className={styles.label}>Highest Education</label>
+              <label htmlFor="highestEducation" className={styles.label}>
+                Highest Education <span className={styles.required}>*</span>
+              </label>
               <select
                 id="highestEducation"
                 name="highestEducation"
                 value={formData.highestEducation}
                 onChange={handleChange}
                 className={styles.input}
+                required
               >
                 <option value="">Select...</option>
                 <option value="High School">High School</option>
@@ -601,7 +658,9 @@ export default function OnboardingPage() {
             </div>
 
             <div className={styles.field}>
-              <label htmlFor="institution" className={styles.label}>Institution/University</label>
+              <label htmlFor="institution" className={styles.label}>
+                Institution/University <span className={styles.required}>*</span>
+              </label>
               <input
                 type="text"
                 id="institution"
@@ -610,7 +669,10 @@ export default function OnboardingPage() {
                 onChange={handleChange}
                 className={styles.input}
                 placeholder="Name of your institution"
+                maxLength={30}
+                required
               />
+              <span className={styles.charCount}>{formData.institution.length}/30</span>
             </div>
           </section>
 
@@ -618,7 +680,9 @@ export default function OnboardingPage() {
             <h2 className={styles.sectionTitle}>Agricultural Field Experience</h2>
             
             <div className={styles.field}>
-              <label htmlFor="farmingBackground" className={styles.label}>Rural Agricultural Work Experience (RAWE)</label>
+              <label htmlFor="farmingBackground" className={styles.label}>
+                Rural Agricultural Work Experience (RAWE) <span className={styles.required}>*</span>
+              </label>
               <textarea
                 id="farmingBackground"
                 name="farmingBackground"
@@ -627,11 +691,14 @@ export default function OnboardingPage() {
                 className={styles.textarea}
                 placeholder="Describe your farming experience..."
                 rows={3}
+                required
               />
             </div>
 
             <div className={styles.field}>
-              <label htmlFor="cropsGrown" className={styles.label}>Crops Grown/Handled</label>
+              <label htmlFor="cropsGrown" className={styles.label}>
+                Crops Grown/Handled <span className={styles.required}>*</span>
+              </label>
               <input
                 type="text"
                 id="cropsGrown"
@@ -640,17 +707,21 @@ export default function OnboardingPage() {
                 onChange={handleChange}
                 className={styles.input}
                 placeholder="e.g., Wheat, Rice, Cotton"
+                required
               />
             </div>
 
             <div className={styles.field}>
-              <label htmlFor="primaryExpertise" className={styles.label}>Primary Area of Expertise</label>
+              <label htmlFor="primaryExpertise" className={styles.label}>
+                Primary Area of Expertise <span className={styles.required}>*</span>
+              </label>
               <select
                 id="primaryExpertise"
                 name="primaryExpertise"
                 value={formData.primaryExpertise}
                 onChange={handleChange}
                 className={styles.input}
+                required
               >
                 <option value="">Select...</option>
                 <option value="Crop Production">Crop Production</option>

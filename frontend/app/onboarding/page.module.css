@@ -360,6 +360,15 @@
   margin-top: -4px;
 }
 
+/* ─── Character counter ───────────────────────────────────────── */
+.charCount {
+  font-size: 12px;
+  color: #94a3b8;
+  text-align: right;
+  margin-top: 2px;
+  display: block;
+}
+
 /* ─── Frozen view ─────────────────────────────────────────────── */
 .frozenBanner {
   display: flex;

@@ -62,9 +62,9 @@ class InterviewState:
         context = []
         for msg in self.messages:
             if msg.get("role") == "user":
-                context.append(f"CANDIDATE: {msg['content']}")
+                context.append(f"Answer: {msg['content']}")
             elif msg.get("role") == "assistant":
-                context.append(f"INTERVIEWER: {msg['content']}")
+                context.append(f"Question: {msg['content']}")
         return "\n\n".join(context)
     
     def is_complete(self) -> bool:
@@ -210,6 +210,31 @@ class InterviewWorkflow:
         # Default to agricultural_concepts if no keyword matches
         return "agricultural_concepts"
 
+    # Phrases that indicate the LLM produced analysis/summary instead of a question
+    _INVALID_QUESTION_STARTERS = [
+        "the candidate", "looking at", "given their", "based on their",
+        "the interview", "we've covered", "since this is",
+        "let me ask", "a good follow-up", "asking about", "question about",
+        "a follow-up question", "let me ask a",
+    ]
+
+    def _is_valid_question(self, text: str) -> bool:
+        """Return True if text looks like an interview question, False if it's analysis/summary."""
+        if not text or len(text.strip()) < 10:
+            return False
+        t = text.strip().lower()
+        # Reject if it starts with known analysis/summary phrases
+        for starter in self._INVALID_QUESTION_STARTERS:
+            if t.startswith(starter):
+                return False
+        # Reject if it starts with "you" and continues with statement (not a question)
+        if t.startswith("you ") and "?" not in text:
+            return False
+        # Reject if it starts with a long running sentence about the conversation
+        if len(text) > 300:
+            return False
+        return True
+
     async def _generate_next_question(self, state: InterviewState) -> Dict[str, str]:
         """Generate the next interview question using LLM with full context.
 
@@ -268,19 +293,26 @@ class InterviewWorkflow:
 
         prompt += "\nAsk the next question based on the above context:"
 
-        try:
-            question_text = await llm_service.chat_completion(
-                messages=[{"role": "user", "content": prompt}],
-                system_prompt=system_prompt,
-                temperature=0.7,
-                max_tokens=250,
-            )
-            if question_text is None:
-                question_text = self._fallback_question(state)
-            question_text = question_text.strip()
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
+        # Try up to 2 times to get a valid question; fall back on failure
+        question_text = None
+        for attempt in range(2):
+            try:
+                raw = await llm_service.chat_completion(
+                    messages=[{"role": "user", "content": prompt}],
+                    system_prompt=system_prompt,
+                    temperature=0.7,
+                    max_tokens=250,
+                )
+                if raw:
+                    question_text = raw.strip()
+                if question_text and self._is_valid_question(question_text):
+                    break  # good question, exit retry loop
+            except Exception:
+                import traceback
+                traceback.print_exc()
+                break  # don't retry on exception
+
+        if not question_text or not self._is_valid_question(question_text):
             question_text = self._fallback_question(state)
 
         # Infer topic from question text

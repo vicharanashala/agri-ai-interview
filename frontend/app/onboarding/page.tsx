@@ -26,7 +26,6 @@ interface FormData {
   institution: string;
   farmingBackground: string;
   cropsGrown: string;
-  farmSize: string;
   primaryExpertise: string;
 }
 
@@ -44,7 +43,6 @@ export default function OnboardingPage() {
     institution: '',
     farmingBackground: '',
     cropsGrown: '',
-    farmSize: '',
     primaryExpertise: '',
   });
   const [phoneError, setPhoneError] = useState('');
@@ -90,7 +88,6 @@ export default function OnboardingPage() {
               institution: candidate.institution || '',
               farmingBackground: candidate.farmingBackground || '',
               cropsGrown: candidate.cropsGrown || '',
-              farmSize: candidate.farmSize || '',
               primaryExpertise: candidate.primaryExpertise || '',
             });
           }
@@ -393,21 +390,16 @@ export default function OnboardingPage() {
             </section>
 
             <section className={styles.section}>
-              <h2 className={styles.sectionTitle}>Agricultural Expertise</h2>
+              <h2 className={styles.sectionTitle}>Agricultural Field Experience</h2>
               
               <div className={styles.displayField}>
-                <span className={styles.displayLabel}>Farming Background</span>
+                <span className={styles.displayLabel}>Rural Agricultural Work Experience (RAWE)</span>
                 <span className={styles.displayValue}>{displayValue(formData.farmingBackground)}</span>
               </div>
 
               <div className={styles.displayField}>
                 <span className={styles.displayLabel}>Crops Grown/Handled</span>
                 <span className={styles.displayValue}>{displayValue(formData.cropsGrown)}</span>
-              </div>
-
-              <div className={styles.displayField}>
-                <span className={styles.displayLabel}>Farm Size</span>
-                <span className={styles.displayValue}>{displayValue(formData.farmSize)}</span>
               </div>
 
               <div className={styles.displayField}>
@@ -623,10 +615,10 @@ export default function OnboardingPage() {
           </section>
 
           <section className={styles.section}>
-            <h2 className={styles.sectionTitle}>Agricultural Expertise</h2>
+            <h2 className={styles.sectionTitle}>Agricultural Field Experience</h2>
             
             <div className={styles.field}>
-              <label htmlFor="farmingBackground" className={styles.label}>Farming Background</label>
+              <label htmlFor="farmingBackground" className={styles.label}>Rural Agricultural Work Experience (RAWE)</label>
               <textarea
                 id="farmingBackground"
                 name="farmingBackground"
@@ -648,19 +640,6 @@ export default function OnboardingPage() {
                 onChange={handleChange}
                 className={styles.input}
                 placeholder="e.g., Wheat, Rice, Cotton"
-              />
-            </div>
-
-            <div className={styles.field}>
-              <label htmlFor="farmSize" className={styles.label}>Farm Size</label>
-              <input
-                type="text"
-                id="farmSize"
-                name="farmSize"
-                value={formData.farmSize}
-                onChange={handleChange}
-                className={styles.input}
-                placeholder="e.g., 5 acres"
               />
             </div>
 

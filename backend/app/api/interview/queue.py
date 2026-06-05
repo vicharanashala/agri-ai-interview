@@ -35,7 +35,6 @@ def _fetch_candidate_data(candidate_id: str, db: Session) -> dict:
         "institution": cand.institution,
         "farming_background": cand.farmingBackground,
         "crops_grown": cand.cropsGrown,
-        "farm_size": cand.farmSize,
         "primary_expertise": cand.primaryExpertise,
         "candidate_id": candidate_id,
     }

@@ -237,7 +237,6 @@ class InterviewWorkflow:
             ("Institution", "institution"),
             ("Farming Background", "farming_background"),
             ("Crops Grown", "crops_grown"),
-            ("Farm Size", "farm_size"),
             ("Primary Expertise", "primary_expertise"),
         ]:
             label, key = field

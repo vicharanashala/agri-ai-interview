@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import styles from './page.module.css';
+import { interceptAuthFetch, authFetch } from '@/lib/auth-fetch';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -53,6 +54,12 @@ const JOIN_WINDOW_SECONDS = 5 * 60; // 5 minutes — must match JOIN_WINDOW_MINU
 
 export default function QueuePage() {
   const router = useRouter();
+
+  // Auto-attach Authorization: Bearer token to ALL fetch calls on this page
+  useEffect(() => {
+    const restore = interceptAuthFetch()
+    return restore
+  }, [])
 
   // Core state
   const [panel, setPanel] = useState<PanelState>('loading');
@@ -109,7 +116,7 @@ export default function QueuePage() {
     const id = sessionStorage.getItem('candidateId') || '';
     if (!id) return;
     try {
-      const res = await fetch(`/api/interview/queue/wait-time/${id}`);
+      const res = await authFetch(`/api/interview/queue/wait-time/${id}`);
       if (!res.ok) return;
       const data: WaitTime = await res.json();
       setWaitTime(data);
@@ -128,7 +135,7 @@ export default function QueuePage() {
     }
 
     try {
-      const res = await fetch(`/api/interview/queue/status/${id}`);
+      const res = await authFetch(`/api/interview/queue/status/${id}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data: QueueStatus = await res.json();
       setQueueStatus(data);
@@ -194,7 +201,7 @@ export default function QueuePage() {
   const handleResume = async () => {
     setIsResuming(true);
     try {
-      const res = await fetch('/api/interview/resume', {
+      const res = await authFetch('/api/interview/resume', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ candidate_id: sessionStorage.getItem('candidateId') || '' }),
@@ -222,7 +229,7 @@ export default function QueuePage() {
   const handleCancel = async () => {
     setIsCancelling(true);
     try {
-      const res = await fetch('/api/interview/queue/cancel', {
+      const res = await authFetch('/api/interview/queue/cancel', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ candidate_id: sessionStorage.getItem('candidateId') || '' }),
@@ -256,7 +263,7 @@ export default function QueuePage() {
   const handleJoin = async () => {
     setIsJoining(true);
     try {
-      const res = await fetch('/api/interview/queue/join', {
+      const res = await authFetch('/api/interview/queue/join', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ candidate_id: sessionStorage.getItem('candidateId') || '' }),
@@ -472,7 +479,7 @@ export default function QueuePage() {
 
         // Tell backend the candidate missed their window → skip + cooldown
         try {
-          await fetch(`/api/interview/queue/skip/${sessionStorage.getItem('candidateId') || ''}`, { method: 'POST' });
+          await authFetch(`/api/interview/queue/skip/${sessionStorage.getItem('candidateId') || ''}`, { method: 'POST' });
         } catch {
           // non-fatal — status refresh will pick up the new state
         }

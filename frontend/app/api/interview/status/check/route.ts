@@ -1,14 +1,20 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const backendUrl = process.env.BACKEND_URL ?? 'http://backend:8000';
-    const response = await fetch(`${backendUrl}/api/interview/status/check`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+    const { searchParams } = new URL(request.url);
+    const candidateId = searchParams.get('candidate_id');
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+    const authHeader = request.headers.get('Authorization');
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (authHeader) headers['Authorization'] = authHeader;
+
+    const url = candidateId
+      ? `${backendUrl}/api/interview/status/check?candidate_id=${candidateId}`
+      : `${backendUrl}/api/interview/status/check`;
+
+    const response = await fetch(url, { method: 'GET', headers });
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: 'Failed to check interview status' }));

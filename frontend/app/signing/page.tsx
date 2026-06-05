@@ -6,8 +6,15 @@ import styles from './page.module.css';
 import { syncPhaseToDb } from '@/lib/phaseSync';
 
 interface CandidateInfo {
+  id: string;
   name: string;
   email: string;
+}
+
+interface OfferLetterConfig {
+  position: string;
+  location: string;
+  stipend: string;
 }
 
 export default function SigningPage() {
@@ -16,41 +23,66 @@ export default function SigningPage() {
   const [signatureName, setSignatureName] = useState('');
   const [isAgreed, setIsAgreed] = useState(false);
   const [candidate, setCandidate] = useState<CandidateInfo | null>(null);
+  const [offerConfig, setOfferConfig] = useState<OfferLetterConfig | null>(null);
   const [isOfferSigned, setIsOfferSigned] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('offerSigned') === 'true';
     }
     return false;
   });
+  const [isSigning, setIsSigning] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
     const currentPhase = localStorage.getItem('interviewPhase');
+    const result = localStorage.getItem('interviewResult');
+    if (!result || result !== 'PASS') {
+      router.push('/dashboard');
+      return;
+    }
     if (currentPhase && parseInt(currentPhase) < 4) {
       router.push('/dashboard');
-    } else {
-      // Fetch candidate info for the offer letter name
-      const fetchCandidate = async () => {
-        try {
-          const response = await fetch('/api/candidate');
-          if (response.ok) {
-            const data = await response.json();
-            setCandidate(data);
-          }
-        } catch (error) {
-          console.error('Error fetching candidate:', error);
-        }
-      };
-      fetchCandidate();
-      setIsLoading(false);
+      return;
     }
+
+    const fetchCandidate = async () => {
+      try {
+        const response = await fetch('/api/candidate');
+        if (response.ok) {
+          const data = await response.json();
+          setCandidate({ id: data.id, name: data.fullName || 'Candidate', email: data.email || '' });
+        }
+      } catch (error) {
+        console.error('Error fetching candidate:', error);
+      }
+    };
+
+    const fetchOfferConfig = async () => {
+      try {
+        const response = await fetch('/api/settings/offer-letter');
+        if (response.ok) {
+          const data = await response.json();
+          setOfferConfig({
+            position: data.position ?? 'Agricultural Consultant',
+            location: data.location ?? 'Remote / Hybrid',
+            stipend: data.stipend ?? '₹15,000/month',
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching offer config:', error);
+      }
+    };
+
+    fetchCandidate();
+    fetchOfferConfig();
+    setIsLoading(false);
   }, [router]);
 
   const getSigningDate = () => {
     return new Date().toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'long',
-      day: 'numeric'
+      day: 'numeric',
     });
   };
 
@@ -65,35 +97,51 @@ export default function SigningPage() {
   };
 
   const updateSigningState = (name: string, agreed: boolean) => {
-    if (name.trim().length > 2 && agreed) {
-      setHasSigned(true);
-    } else {
-      setHasSigned(false);
-    }
+    setHasSigned(name.trim().length > 2 && agreed);
   };
 
   const handleSign = async () => {
-    if (!hasSigned) {
+    if (!hasSigned || !candidate) {
       alert('Please enter your full legal name and agree to the terms to sign.');
       return;
     }
-    // Update phase to 6 (Signing complete, Joining Details in progress)
-    localStorage.setItem('interviewPhase', '6');
-    sessionStorage.setItem('interviewPhase', '6');
-    localStorage.setItem('offerSigned', 'true');
-    setIsOfferSigned(true);
-    // Sync to DB so admin dashboard sees the correct phase
-    await syncPhaseToDb(6);
+
+    setIsSigning(true);
+    try {
+      const response = await fetch('/api/signed-offer-letter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          candidate_id: candidate.id,
+          signatureName,
+          signedAt: new Date().toISOString(),
+        }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.detail || 'Failed to sign offer letter');
+      }
+
+      localStorage.setItem('interviewPhase', '6');
+      sessionStorage.setItem('interviewPhase', '6');
+      localStorage.setItem('offerSigned', 'true');
+      setIsOfferSigned(true);
+      await syncPhaseToDb(6);
+    } catch (err) {
+      console.error('Sign error:', err);
+      alert(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+    } finally {
+      setIsSigning(false);
+    }
   };
 
   const handleDownloadSignedOfferLetter = () => {
-    const name = candidate?.name || 'Candidate';
-    const email = candidate?.email || '';
-    window.open(`/api/offer-letter?name=${encodeURIComponent(name)}&email=${encodeURIComponent(email)}&action=sign`, '_blank');
+    if (!candidate) return;
+    window.open(`/api/signed-offer-letter/${encodeURIComponent(candidate.id)}`, '_blank');
   };
 
   const handleGoToDashboard = () => {
-    // Force a hard navigation to ensure dashboard re-reads phase from storage
     window.location.href = '/dashboard';
   };
 
@@ -122,15 +170,15 @@ export default function SigningPage() {
                 <span>Your signature has been recorded on {getSigningDate()}</span>
               </div>
 
-              <button 
-                onClick={handleDownloadSignedOfferLetter} 
+              <button
+                onClick={handleDownloadSignedOfferLetter}
                 className={styles.downloadSignedButton}
               >
                 📄 Download Signed Offer Letter
               </button>
 
-              <button 
-                onClick={handleGoToDashboard} 
+              <button
+                onClick={handleGoToDashboard}
                 className={styles.dashboardButton}
               >
                 Go to Dashboard
@@ -149,19 +197,15 @@ export default function SigningPage() {
               <div className={styles.detailsGrid}>
                 <div className={styles.detailItem}>
                   <span className={styles.detailLabel}>Position</span>
-                  <span className={styles.detailValue}>Senior Agricultural Consultant</span>
-                </div>
-                <div className={styles.detailItem}>
-                  <span className={styles.detailLabel}>Start Date</span>
-                  <span className={styles.detailValue}>January 15, 2025</span>
+                  <span className={styles.detailValue}>{offerConfig?.position ?? 'Loading...'}</span>
                 </div>
                 <div className={styles.detailItem}>
                   <span className={styles.detailLabel}>Location</span>
-                  <span className={styles.detailValue}>Remote / Hybrid</span>
+                  <span className={styles.detailValue}>{offerConfig?.location ?? 'Loading...'}</span>
                 </div>
                 <div className={styles.detailItem}>
                   <span className={styles.detailLabel}>Salary</span>
-                  <span className={styles.detailValue}>₹5,000 per month</span>
+                  <span className={styles.detailValue}>{offerConfig?.stipend ?? 'Loading...'}</span>
                 </div>
               </div>
 
@@ -205,12 +249,12 @@ export default function SigningPage() {
                 </label>
               </div>
 
-              <button 
-                onClick={handleSign} 
+              <button
+                onClick={handleSign}
                 className={styles.signButton}
-                disabled={!hasSigned}
+                disabled={!hasSigned || isSigning}
               >
-                {hasSigned ? 'Sign & Accept Offer' : 'Agree to terms and enter your name to sign'}
+                {isSigning ? 'Signing...' : hasSigned ? 'Sign & Accept Offer' : 'Agree to terms and enter your name to sign'}
               </button>
 
               <p className={styles.terms}>

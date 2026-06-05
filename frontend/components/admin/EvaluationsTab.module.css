@@ -1,0 +1,390 @@
+/* ─── Container ────────────────────────────────────────────────────── */
+.container {
+  padding: 20px 24px;
+}
+
+/* ─── Filters ──────────────────────────────────────────────────────── */
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.searchInput {
+  padding: 7px 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 13px;
+  outline: none;
+  min-width: 200px;
+}
+
+.searchInput:focus {
+  border-color: #000;
+}
+
+.filterSelect {
+  padding: 7px 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  outline: none;
+}
+
+.searchBtn {
+  padding: 7px 16px;
+  background: #000;
+  color: #fff;
+  border: 1px solid #000;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.totalCount {
+  font-size: 12px;
+  color: #666;
+  margin-left: auto;
+}
+
+/* ─── Loading / Empty ──────────────────────────────────────────────── */
+.loading {
+  text-align: center;
+  color: #666;
+  font-size: 14px;
+  padding: 60px 0;
+}
+
+.empty {
+  text-align: center;
+  padding: 80px 0;
+  color: #666;
+  font-size: 14px;
+}
+
+/* ─── Table ────────────────────────────────────────────────────────── */
+.tableWrapper {
+  overflow-x: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.table thead tr {
+  background: #f5f5f5;
+  border-bottom: 1px solid #ddd;
+}
+
+.table th {
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: #333;
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid #eee;
+  vertical-align: middle;
+  color: #222;
+}
+
+/* ─── Row ──────────────────────────────────────────────────────────── */
+.row {
+  cursor: pointer;
+}
+
+.row:hover {
+  background: #f9f9f9;
+}
+
+.rowExpanded {
+  background: #f0f0f0 !important;
+}
+
+.expandIcon {
+  font-size: 11px;
+  color: #666;
+}
+
+/* Candidate cell */
+.candidateName {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.candidateEmail {
+  font-size: 11px;
+  color: #888;
+  display: block;
+}
+
+/* Result badge */
+.resultBadge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.resultPass {
+  background: #d1fae5;
+  color: #166534;
+}
+
+.resultFail {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.resultUnknown {
+  background: #f3f4f6;
+  color: #666;
+}
+
+/* Score cell */
+.scoreCell {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+}
+
+.scoreNum {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.scoreMax {
+  font-size: 11px;
+  color: #999;
+}
+
+/* End reason badge */
+.endReasonBadge {
+  font-size: 12px;
+  color: #555;
+}
+
+/* Attempt badge */
+.attemptBadge {
+  font-size: 12px;
+  color: #333;
+}
+
+/* Date cell */
+.dateCell {
+  font-size: 12px;
+  color: #666;
+  white-space: nowrap;
+}
+
+/* ─── Expanded Row ─────────────────────────────────────────────────── */
+.expandedRow {
+  background: #fafafa;
+}
+
+.expandedCell {
+  padding: 0 !important;
+}
+
+.expandedContent {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  padding: 20px 24px;
+  border-top: 1px solid #ddd;
+}
+
+.expandedLeft,
+.expandedRight {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.sectionHeader {
+  font-size: 12px;
+  font-weight: 700;
+  color: #333;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #eee;
+}
+
+/* Chat history */
+.chatHistory {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.chatEmpty {
+  color: #999;
+  font-size: 13px;
+  text-align: center;
+  padding: 20px 0;
+}
+
+.chatMsg {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 90%;
+}
+
+.aiMsg { align-self: flex-start; }
+.userMsg { align-self: flex-end; }
+
+.msgRole {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #666;
+}
+
+.msgText {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.aiMsg .msgText {
+  background: #f0f0f0;
+  color: #222;
+  border: 1px solid #ddd;
+}
+
+.userMsg .msgText {
+  background: #e8e8e8;
+  color: #222;
+  border: 1px solid #ccc;
+}
+
+.msgTime {
+  font-size: 10px;
+  color: #999;
+  padding: 0 2px;
+}
+
+.userMsg .msgTime { text-align: right; }
+
+/* Evaluation detail grid */
+.detailGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.detailCard {
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 12px;
+}
+
+.detailCardHeader {
+  font-size: 12px;
+  font-weight: 700;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.evalSummary {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: #333;
+  line-height: 1.5;
+}
+
+.evalRec {
+  margin: 0;
+  font-size: 12px;
+  color: #555;
+  line-height: 1.5;
+}
+
+/* Metric rows */
+.metricRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 7px;
+}
+
+.metricRow:last-child { margin-bottom: 0; }
+
+.metricName {
+  width: 130px;
+  font-size: 12px;
+  color: #444;
+  text-transform: capitalize;
+  flex-shrink: 0;
+}
+
+.metricBar {
+  flex: 1;
+  min-width: 60px;
+}
+
+.metricScore {
+  width: 28px;
+  text-align: right;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* Bullet list */
+.bulletList {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bulletList li {
+  font-size: 12px;
+  color: #333;
+  line-height: 1.4;
+}
+
+.noEval {
+  color: #999;
+  font-size: 13px;
+  text-align: center;
+  padding: 20px 0;
+}
+
+/* ─── Load More ────────────────────────────────────────────────────── */
+.loadMore {
+  display: flex;
+  justify-content: center;
+  padding: 20px 0 8px;
+}
+
+.loadMoreBtn {
+  padding: 8px 20px;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+}

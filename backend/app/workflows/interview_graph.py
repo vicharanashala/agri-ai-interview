@@ -1,7 +1,7 @@
 """
 Interview Graph - Manages interview state using the simplified workflow.
 """
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 from app.workflows.interview_workflow import interview_workflow
 
 
@@ -11,9 +11,18 @@ class InterviewGraphManager:
     def __init__(self):
         self.workflow = interview_workflow
     
-    async def initialize_interview(self, interview_id: str, candidate_data: Dict[str, Any]) -> str:
+    async def initialize_interview(
+        self,
+        interview_id: str,
+        candidate_data: Dict[str, Any],
+        resume_parsed: Optional[Dict[str, Any]] = None,
+    ) -> str:
         """Start a new interview and return the first question."""
-        return await self.workflow.initialize_interview(interview_id, candidate_data)
+        return await self.workflow.initialize_interview(
+            interview_id,
+            candidate_data,
+            resume_parsed=resume_parsed,
+        )
     
     async def process_answer(self, interview_id: str, user_answer: str) -> Dict[str, Any]:
         """Process an answer and get the next question."""
@@ -31,7 +40,7 @@ class InterviewGraphManager:
         """End an interview."""
         return self.workflow.end_interview(interview_id)
     
-    def get_evaluation(self, interview_id: str) -> Optional[Dict[str, Any]]:
+    async def get_evaluation(self, interview_id: str) -> Optional[Dict[str, Any]]:
         """Get evaluation for a completed interview by generating it from conversation history."""
         from app.llm import llm_service
 
@@ -44,22 +53,26 @@ class InterviewGraphManager:
         if state and hasattr(state, 'candidate_data'):
             candidate_data = state.candidate_data
 
-        import asyncio
         conversation_history = [
             {"role": m.get("role"), "content": m.get("content")}
             for m in messages
             if m.get("role") and m.get("content")
         ]
 
+        qa_pairs: List[Dict[str, Any]] = []
+        if state and hasattr(state, 'qa_pairs'):
+            qa_pairs = state.qa_pairs
+
         try:
-            evaluation = asyncio.get_event_loop().run_until_complete(
-                llm_service.generate_interview_evaluation(
-                    candidate_data=candidate_data,
-                    conversation_history=conversation_history
-                )
+            evaluation = await llm_service.generate_interview_evaluation(
+                candidate_data=candidate_data,
+                conversation_history=conversation_history,
+                qa_pairs=qa_pairs,
             )
             return evaluation
-        except Exception:
+        except Exception as e:
+            import logging
+            logging.error(f"[InterviewGraph] Evaluation failed for {interview_id}: {e}")
             return None
     
     def clear_interview(self, interview_id: str) -> bool:

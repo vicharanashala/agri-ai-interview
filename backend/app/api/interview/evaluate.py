@@ -68,17 +68,26 @@ async def evaluate_interview(request: EvaluationRequest):
         raise HTTPException(status_code=400, detail="interview_id is required")
     
     # Get interview data from workflow
-    interview_data = interview_workflow.get_interview(request.interview_id)
-    if not interview_data:
+    # Get conversation history from workflow (checks both active and completed stores)
+    messages = interview_workflow.get_conversation_history(request.interview_id)
+    if not messages:
         raise HTTPException(status_code=404, detail=f"Interview {request.interview_id} not found")
-    
-    # Use provided conversation history or get from workflow
+
+    # Use provided conversation history or derive from workflow messages
     conversation_history = request.conversation_history
     if not conversation_history:
-        conversation_history = interview_data.get("conversation_history", [])
-    
-    # Use provided candidate data or get from workflow
-    candidate_data = request.candidate_data if request.candidate_data else interview_data.get("candidate_data", {})
+        conversation_history = [
+            {"role": m.get("role"), "content": m.get("content")}
+            for m in messages
+            if m.get("role") and m.get("content")
+        ]
+
+    # Use provided candidate data or get from completed store
+    candidate_data = request.candidate_data if request.candidate_data else {}
+    if not candidate_data:
+        state = interview_workflow.get_completed_interview(request.interview_id)
+        if state and hasattr(state, 'candidate_data'):
+            candidate_data = state.candidate_data
     
     print(f"[Evaluate] Processing evaluation request")
     print(f"[Evaluate] Interview ID: {request.interview_id}")

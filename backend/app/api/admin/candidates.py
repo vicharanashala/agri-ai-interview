@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 
 from app.db.database import get_db
-from app.db.models.candidate import Candidate, User, InterviewSession
+from app.db.models.candidate import Candidate, User, InterviewSession, AntiCheatEvent
 from app.api.admin.middleware import require_admin_auth
 
 router = APIRouter(prefix="/api/admin", tags=["admin-candidates"])
@@ -273,6 +273,165 @@ async def get_active_interviews(db: Session = Depends(get_db), _admin=Depends(re
     return {"interviews": active, "total": len(active)}
 
 
+# ============ Interview Evaluations ============
+
+
+class EvaluationMetrics(BaseModel):
+    score: int
+    details: str
+
+
+class InterviewEvaluationRow(BaseModel):
+    id: str
+    candidateId: str
+    candidateName: str
+    email: Optional[str]
+    result: Optional[str]
+    endReason: Optional[str]
+    score: Optional[float]
+    startedAt: Optional[str]
+    completedAt: Optional[str]
+    messages: List[Dict[str, str]]
+    evaluation: Optional[Dict[str, Any]]
+    attempt: int
+
+
+@router.get("/interviews/evaluations")
+async def get_interview_evaluations(
+    candidateId: Optional[str] = Query(None),
+    result: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin_auth),
+):
+    import json
+
+    query = (
+        db.query(InterviewSession)
+        .filter(InterviewSession.status == "completed")
+        .order_by(InterviewSession.completedAt.desc())
+    )
+    if candidateId:
+        query = query.filter(InterviewSession.candidateId == candidateId)
+    if result:
+        query = query.filter(InterviewSession.result == result)
+
+    total = query.count()
+    rows = query.offset(offset).limit(limit).all()
+
+    if not rows:
+        return {"evaluations": [], "total": 0, "limit": limit, "offset": offset}
+
+    cand_ids = list({r.candidateId for r in rows if r.candidateId})
+
+    cand_map: Dict[str, Dict[str, Any]] = {}
+    if cand_ids:
+        rows2 = (
+            db.query(Candidate, User)
+            .outerjoin(User, Candidate.userId == User.id)
+            .filter(Candidate.id.in_(cand_ids))
+            .all()
+        )
+        for cand, user in rows2:
+            cand_map[cand.id] = {
+                "candidateName": cand.fullName or (user.name if user else None) or "Unknown",
+                "email": user.email if user else None,
+            }
+
+    attempt_counts: Dict[str, int] = {}
+    for r in rows:
+        if r.candidateId:
+            attempt_counts[r.candidateId] = attempt_counts.get(r.candidateId, 0) + 1
+
+    evaluations: List[Dict[str, Any]] = []
+    for row in rows:
+        messages: List[Dict[str, str]] = []
+        evaluation_data: Optional[Dict[str, Any]] = None
+        if row.interviewData:
+            try:
+                data = json.loads(row.interviewData)
+                messages = data.get("messages", [])
+                evaluation_data = data.get("evaluation") or data.get("llm_evaluation")
+            except Exception:
+                pass
+
+        cand_total = attempt_counts.get(row.candidateId, 1)
+        evaluations.append(
+            InterviewEvaluationRow(
+                id=row.id,
+                candidateId=row.candidateId or "",
+                candidateName=cand_map.get(row.candidateId, {}).get("candidateName", "Unknown"),
+                email=cand_map.get(row.candidateId, {}).get("email"),
+                result=row.result,
+                endReason=row.endReason,
+                score=row.score,
+                startedAt=row.startedAt.isoformat() if row.startedAt else None,
+                completedAt=row.completedAt.isoformat() if row.completedAt else None,
+                messages=messages,
+                evaluation=evaluation_data,
+                attempt=cand_total,
+            ).model_dump()
+        )
+        if row.candidateId:
+            attempt_counts[row.candidateId] -= 1
+
+    return {"evaluations": evaluations, "total": total, "limit": limit, "offset": offset}
+
+
+@router.get("/interviews/evaluations/{interview_id}")
+async def get_interview_evaluation(
+    interview_id: str,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin_auth),
+):
+    import json
+
+    row = db.query(InterviewSession).filter(InterviewSession.id == interview_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Interview session not found")
+
+    cand_name = "Unknown"
+    email: Optional[str] = None
+    if row.candidateId:
+        res = (
+            db.query(Candidate, User)
+            .outerjoin(User, Candidate.userId == User.id)
+            .filter(Candidate.id == row.candidateId)
+            .first()
+        )
+        if res:
+            cand, user = res
+            cand_name = cand.fullName or (user.name if user else None) or "Unknown"
+            email = user.email if user else None
+
+    messages: List[Dict[str, str]] = []
+    evaluation_data: Optional[Dict[str, Any]] = None
+    if row.interviewData:
+        try:
+            data = json.loads(row.interviewData)
+            messages = data.get("messages", [])
+            evaluation_data = data.get("evaluation") or data.get("llm_evaluation")
+        except Exception:
+            pass
+
+    return InterviewEvaluationRow(
+        id=row.id,
+        candidateId=row.candidateId or "",
+        candidateName=cand_name,
+        email=email,
+        result=row.result,
+        endReason=row.endReason,
+        score=row.score,
+        startedAt=row.startedAt.isoformat() if row.startedAt else None,
+        completedAt=row.completedAt.isoformat() if row.completedAt else None,
+        messages=messages,
+        evaluation=evaluation_data,
+        attempt=1,
+    ).model_dump()
+
+
 @router.get("/interviews/{interview_id}")
 async def get_interview(interview_id: str, db: Session = Depends(get_db), _admin=Depends(require_admin_auth)):
     """
@@ -448,3 +607,151 @@ async def get_state_funnel(
     result.sort(key=lambda x: sum(PHASE_ORDER.get(p, 0) * x.get(p, 0) for p in PHASES), reverse=True)
 
     return {"states": result, "totalStates": len(total_states)}
+
+
+# ============ Stats By State ============
+
+@router.get("/stats/by-state")
+async def get_stats_by_state(
+    state: Optional[str] = Query(None, description="Filter to a specific state"),
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin_auth),
+):
+    """
+    Per-state candidate counts broken down by phase.
+    Used by the admin analytics tab funnel chart.
+    """
+    query = db.query(
+        Candidate.state,
+        Candidate.currentPhase,
+        func.count(Candidate.id).label("count"),
+    ).filter(Candidate.state.isnot(None))
+
+    if state:
+        query = query.filter(Candidate.state.ilike(f"%{state}%"))
+
+    rows = query.group_by(Candidate.state, Candidate.currentPhase).all()
+
+    # Aggregate into state buckets
+    state_data: Dict[str, Dict[str, int]] = {}
+    for row in rows:
+        s = row.state
+        phase = row.currentPhase or "onboarding"
+        if s not in state_data:
+            state_data[s] = {
+                "state": s,
+                "onboarding": 0,
+                "interview": 0,
+                "summary": 0,
+                "offer": 0,
+                "signing": 0,
+                "joining": 0,
+            }
+        if phase in state_data[s]:
+            state_data[s][phase] += row.count
+
+    result = list(state_data.values())
+    result.sort(key=lambda x: sum(x[p] for p in PHASES), reverse=True)
+    return {"states": result, "totalStates": len(result)}
+
+
+# ============ Anti-Cheat Settings ============
+
+from app.db.models.settings import Settings as DbSettings
+from app.services.settings_service import get_anti_cheat_settings
+
+
+class AntiCheatSettingsResponse(BaseModel):
+    idle_threshold_ms: int
+    platform_idle_ms: int
+
+
+@router.get("/anti-cheat", response_model=AntiCheatSettingsResponse)
+async def get_anti_cheat_settings_endpoint(_admin=Depends(require_admin_auth)):
+    """
+    Get current anti-cheat thresholds.
+    """
+    config = get_anti_cheat_settings()
+    return AntiCheatSettingsResponse(
+        idle_threshold_ms=config["idle_threshold_ms"],
+        platform_idle_ms=config["platform_idle_ms"],
+    )
+
+
+class UpdateAntiCheatSettingsRequest(BaseModel):
+    idle_threshold_ms: Optional[int] = None
+    platform_idle_ms: Optional[int] = None
+
+
+@router.put("/anti-cheat")
+async def update_anti_cheat_settings(
+    request: UpdateAntiCheatSettingsRequest,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin_auth),
+):
+    """
+    Update anti-cheat thresholds (idle timeout and platform inactivity timeout).
+    """
+    if request.idle_threshold_ms is not None:
+        if request.idle_threshold_ms < 5000:
+            raise HTTPException(status_code=400, detail="idle_threshold_ms must be at least 5000")
+        _upsert_setting(db, "anti_cheat_idle_threshold_ms", str(request.idle_threshold_ms), "anti-cheat")
+
+    if request.platform_idle_ms is not None:
+        if request.platform_idle_ms < 60000:
+            raise HTTPException(status_code=400, detail="platform_idle_ms must be at least 60000")
+        _upsert_setting(db, "anti_cheat_platform_idle_ms", str(request.platform_idle_ms), "anti-cheat")
+
+    return {"success": True, "message": "Anti-cheat settings updated"}
+
+
+def _upsert_setting(db: Session, key: str, value: str, category: str) -> None:
+    """Insert or update a Settings row."""
+    now = datetime.utcnow()
+    row = db.query(DbSettings).filter(DbSettings.key == key).first()
+    if row:
+        row.value = value
+        row.updated_at = now
+    else:
+        row = DbSettings(key=key, value=value, category=category, description=key)
+        db.add(row)
+    db.commit()
+
+
+# ============ Anti-Cheat Violations ============
+
+@router.get("/anti-cheat/violations")
+async def get_anti_cheat_violations(
+    limit: int = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin_auth),
+):
+    """
+    Return all anti-cheat violations, enriched with candidate name and email.
+    """
+    rows = (
+        db.query(AntiCheatEvent, Candidate, User)
+        .outerjoin(Candidate, AntiCheatEvent.candidateId == Candidate.id)
+        .outerjoin(User, Candidate.userId == User.id)
+        .order_by(AntiCheatEvent.createdAt.desc())
+        .limit(limit)
+        .all()
+    )
+
+    violations = []
+    for event, cand, user in rows:
+        name = (cand.fullName if cand else None) or (user.name if user else None) or "Unknown"
+        email = (user.email if user else None) or "—"
+        violations.append({
+            "id": event.id,
+            "candidateId": event.candidateId,
+            "candidateName": name,
+            "email": email,
+            "eventType": event.eventType,
+            "severity": event.severity,
+            "message": event.message,
+            "createdAt": event.createdAt.isoformat() if event.createdAt else datetime.utcnow().isoformat(),
+            "autoClosed": event.severity == "critical",
+        })
+
+    return {"violations": violations, "total": len(violations)}

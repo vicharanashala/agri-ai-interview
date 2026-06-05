@@ -1,63 +1,109 @@
 services:
   agri-interview-backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    ports:
-      - "${BACKEND_PORT:-8001}:8000"
-    volumes:
-      - backend_uploads:/app/uploads
-    env_file:
-      - .env.prod
-    environment:
-      - REDIS_URL=redis://redis:6379
-    depends_on:
-      redis:
-        condition: service_healthy
+    image: vicharanashala/agri-interview-backend:${IMAGE_TAG:-latest}
+    container_name: agri-interview-backend
     restart: unless-stopped
 
-  agri-interview-frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
     ports:
-      - "${FRONTEND_PORT:-3001}:3000"
-    env_file:
-      - .env.prod
+      - "${BACKEND_PORT:-8003}:8000"
+
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: redis://redis:6379
+
+      CORS_ORIGINS: ${CORS_ORIGINS}
+
+      LLM_BASE_URL: ${LLM_BASE_URL}
+      LLM_API_KEY: ${LLM_API_KEY}
+      LLM_MODEL: ${LLM_MODEL}
+
+    volumes:
+      - backend_uploads:/app/uploads
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+
+
+    networks:
+      - agri-interview-net
+
+  agri-interview-frontend:
+    image: vicharanashala/agri-interview-frontend:${IMAGE_TAG:-latest}
+    container_name: agri-interview-frontend
+    restart: unless-stopped
+
+    ports:
+      - "${FRONTEND_PORT:-3003}:3000"
+
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      
+      NEXTAUTH_URL: ${NEXTAUTH_URL}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      NEXT_PUBLIC_ADMIN_API_URL: ${NEXT_PUBLIC_ADMIN_API_URL}
+
+      BACKEND_URL: http://agri-interview-backend:8000
+
     depends_on:
       agri-interview-backend:
         condition: service_started
-    restart: unless-stopped
+
+    networks:
+      - agri-interview-net
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
+    container_name: agri-interview-redis
+    restart: unless-stopped
+
     volumes:
       - redis_data:/data
+
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 3
 
+    networks:
+      - agri-interview-net
+
   postgres:
     image: postgres:16-alpine
+    container_name: agri-interview-postgres
+    restart: unless-stopped
+
     environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: ai_interview
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+
     volumes:
       - postgres_data:/var/lib/postgresql/data
+
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U user"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 10s
       timeout: 5s
       retries: 3
+
+    networks:
+      - agri-interview-net
 
 volumes:
   backend_uploads:
   redis_data:
   postgres_data:
+
+networks:
+  agri-interview-net:
+    driver: bridge

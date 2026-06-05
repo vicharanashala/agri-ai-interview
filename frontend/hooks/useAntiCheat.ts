@@ -16,19 +16,25 @@ interface AntiCheatConfig {
   onTerminate: (type: ViolationType) => void
   onLogEvent?: (type: ViolationType) => void  // called on every violation — hook doesn't await it
   enabled?: boolean
+  idleThresholdMs?: number  // admin-configurable; defaults to 15000
 }
 
 interface OffenseCount {
   [key: string]: number
 }
 
-const IDLE_THRESHOLD_MS = 10_000  // 10 seconds of no activity
+const DEFAULT_IDLE_THRESHOLD_MS = 15_000  // 15 seconds
 
-export function useAntiCheat({ onViolation, onTerminate, onLogEvent, enabled = true }: AntiCheatConfig) {
+export function useAntiCheat({ onViolation, onTerminate, onLogEvent, enabled = true, idleThresholdMs = DEFAULT_IDLE_THRESHOLD_MS }: AntiCheatConfig) {
   const offenseCount = useRef<OffenseCount>({})
   const prevScreen = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
   const lastActivityTime = useRef<number>(Date.now())
+  const lastContextMenuTime = useRef<number>(0)
+  // Per-type cooldown to prevent double-fire from browser chaining events
+  const lastViolationTime = useRef<Record<string, number>>({})
   const idleTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const COOLDOWN_MS = 500
 
   // Only access window/screen after mount (browser-only)
   useEffect(() => {
@@ -39,13 +45,23 @@ export function useAntiCheat({ onViolation, onTerminate, onLogEvent, enabled = t
   const checkAndRecord = useCallback(
     (type: ViolationType) => {
       if (!enabled) return
+      const now = Date.now()
+      // Ignore if same type fired within COOLDOWN_MS (browser event chaining)
+      if (lastViolationTime.current[type] && now - lastViolationTime.current[type] < COOLDOWN_MS) {
+        console.log('[AntiCheat] DROPPED (cooldown)', type, 'since last event was', now - lastViolationTime.current[type], 'ms ago')
+        return
+      }
+      lastViolationTime.current[type] = now
       offenseCount.current[type] = (offenseCount.current[type] || 0) + 1
       const count = offenseCount.current[type]
+      console.log('[AntiCheat] checkAndRecord', { type, count, allCounts: { ...offenseCount.current } })
       // Fire-and-forget backend log — don't block the UI
       onLogEvent?.(type)
       if (count >= 2) {
+        console.log('[AntiCheat] TERMINATE triggered for', type)
         onTerminate(type)
       } else {
+        console.log('[AntiCheat] VIOLATION warning for', type, 'count:', count)
         onViolation(type, count)
       }
     },
@@ -67,7 +83,7 @@ export function useAntiCheat({ onViolation, onTerminate, onLogEvent, enabled = t
 
     // Idle detection — check every 5 seconds
     idleTimerRef.current = setInterval(() => {
-      if (Date.now() - lastActivityTime.current >= IDLE_THRESHOLD_MS) {
+      if (Date.now() - lastActivityTime.current >= idleThresholdMs) {
         checkAndRecord('idle')
       }
     }, 5_000)
@@ -118,12 +134,15 @@ export function useAntiCheat({ onViolation, onTerminate, onLogEvent, enabled = t
       // Right-click
       contextmenu: (e) => {
         e.preventDefault()
+        lastContextMenuTime.current = Date.now()
         checkAndRecord('right_click')
       },
     }
 
     // Text selection — listen on mouseup
+    // Skip if a contextmenu just fired (right-click dismissal click shouldn't count as fresh selection)
     const handleSelection = () => {
+      if (Date.now() - lastContextMenuTime.current < 200) return
       const selection = window.getSelection()
       if (selection && selection.toString().trim().length > 0) {
         checkAndRecord('text_selection')

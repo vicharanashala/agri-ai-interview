@@ -1,14 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import crypto from 'crypto';
 
-const API_BASE_URL = process.env.BACKEND_URL ?? 'http://backend:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-// Pre-computed bcrypt hash of the admin password — same as backend auth.py
-// This avoids storing the raw password in env or client-visible code
-function getAdminToken(): string {
-  const secret = process.env.ANTI_CHEAT_ADMIN_SECRET || 'anti-cheat-internal';
-  return crypto.createHmac('sha256', secret).update('admin').digest('hex');
-}
+// Anti-cheat events are logged by the candidate frontend during interview.
+// The session token (Authorization: Bearer) is forwarded to the backend.
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,13 +18,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const token = getAdminToken();
+    // Forward candidate session token to backend
+    const authHeader = request.headers.get('authorization') ?? ''
 
-    const backendResponse = await fetch(`${API_BASE_URL}/api/admin/anti-cheat/events`, {
+    const backendResponse = await fetch(`${API_BASE_URL}/api/anti-cheat/log`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Admin-Token': token,
+        ...(authHeader ? { Authorization: authHeader } : {}),
       },
       body: JSON.stringify({
         candidateId,

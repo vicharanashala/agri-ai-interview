@@ -5,7 +5,8 @@ Completely separate from the NextAuth candidate session.
 Uses an httpOnly cookie scoped to /admin so signing out from
 either flow does not affect the other.
 """
-from fastapi import APIRouter, HTTPException, Response, Cookie
+from fastapi import APIRouter, HTTPException, Response, Cookie, Header
+import os
 from pydantic import BaseModel
 from typing import Optional
 import bcrypt
@@ -67,7 +68,7 @@ class AdminLoginResponse(BaseModel):
 async def admin_login(request: AdminLoginRequest, response: Response):
     """
     Authenticate an admin user and issue a session token.
-    Stores the token in an httpOnly cookie scoped to /admin so it is
+    Stores the token in an httpOnly cookie scoped to /api/admin so it is
     completely independent of the NextAuth session used by the candidate flow.
     """
     admin = _ADMINS.get(request.email)
@@ -84,15 +85,17 @@ async def admin_login(request: AdminLoginRequest, response: Response):
         "email": admin["email"],
     }
 
-    # Set httpOnly cookie scoped to /admin — no JS access, not sent to other paths
+    # secure=True only when running in production (HTTPS) — prevents cookie
+    # being silently ignored on HTTP dev URLs (e.g. localhost:3000).
+    is_production = os.environ.get("APP_ENV") == "production"
     response.set_cookie(
         key=_ADMIN_COOKIE_NAME,
         value=token,
         path=_ADMIN_COOKIE_PATH,
         max_age=_ADMIN_COOKIE_MAX_AGE,
         httponly=True,
-        secure=False,  # True in production (HTTPS)
-        samesite="none",
+        secure=is_production,
+        samesite="lax",
     )
 
     return AdminLoginResponse(
@@ -123,22 +126,28 @@ async def admin_logout(response: Response, admin_session: Optional[str] = Cookie
         path=_ADMIN_COOKIE_PATH,
         max_age=0,
         httponly=True,
-        secure=False,
-        samesite="none",
+        secure=True,
+        samesite="lax",
     )
     return {"success": True, "message": "Logged out successfully"}
 
 
 @router.get("/session")
-async def get_admin_session(admin_session: Optional[str] = Cookie(None)):
+async def get_admin_session(
+    x_admin_token: Optional[str] = Header(None),
+    admin_session: Optional[str] = Cookie(None),
+):
     """
-    Check whether the request has a valid admin_session cookie and return
-    session info.  Used by the frontend admin dashboard to verify auth on mount.
+    Check whether the request has a valid admin_session cookie or X-Admin-Token
+    header and return session info.  Used by the frontend admin dashboard to
+    verify auth on mount.
     """
-    if not admin_session or admin_session not in _active_tokens:
+    # Accept X-Admin-Token header (preferred for cross-origin / programmatic calls)
+    token = x_admin_token or admin_session
+    if not token or token not in _active_tokens:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    session = _active_tokens[admin_session]
+    session = _active_tokens[token]
     return {
         "valid": True,
         "admin_id": session["admin_id"],

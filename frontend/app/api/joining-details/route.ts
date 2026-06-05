@@ -1,16 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const API_BASE_URL = process.env.BACKEND_URL ?? 'http://backend:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
+    const authHeader = request.headers.get('Authorization');
+    const pdfHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (authHeader) pdfHeaders['Authorization'] = authHeader;
+
     const response = await fetch(`${API_BASE_URL}/pdf`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: pdfHeaders,
       body: JSON.stringify(body),
     });
 

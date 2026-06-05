@@ -261,3 +261,14 @@
   border-radius: 6px;
   border: 1px solid #fecaca;
 }
+
+.idleNotice {
+  color: #92400e;
+  font-size: 14px;
+  text-align: center;
+  margin: 0;
+  padding: 8px 12px;
+  background: #fef3c7;
+  border-radius: 6px;
+  border: 1px solid #fde68a;
+}

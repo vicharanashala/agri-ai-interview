@@ -1,7 +1,7 @@
 """
 Settings database model.
 """
-from sqlalchemy import Column, Integer, String, Text, JSON
+from sqlalchemy import Column, Integer, String, Text, JSON, DateTime
 from datetime import datetime, timezone
 from app.db.database import Base
 
@@ -16,5 +16,5 @@ class Settings(Base):
     value = Column(Text)
     description = Column(Text)
     category = Column(String(100), default="general")  # general, interview, evaluation, notification
-    created_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
-    updated_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

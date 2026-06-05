@@ -106,7 +106,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    return NextResponse.json(user.candidate, { status: 200 });
+    return NextResponse.json({ ...user.candidate, email: user.email }, { status: 200 });
   } catch (error) {
     console.error('Error fetching candidate:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

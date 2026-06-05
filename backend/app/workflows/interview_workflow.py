@@ -2,10 +2,12 @@
 Interview Workflow - Simple conversational interview without real-time evaluation.
 """
 from typing import Dict, Any, List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.llm.service import llm_service
-from app.services.settings_service import get_question_guidelines, get_interview_system, get_interview_settings
+from app.services.settings_service import get_question_guidelines, get_interview_system, get_first_question, get_interview_settings
+
+DEFAULT_MAX_DURATION_MINUTES = 30
 
 # Completed interviews — persists after end for evaluation retrieval
 _completed_interviews: Dict[str, Any] = {}
@@ -21,16 +23,39 @@ class InterviewState:
         self.messages: List[Dict[str, Any]] = []  # conversation history
         self.question_count = 0
         self.max_questions = get_interview_settings()["max_questions"]
+        self.max_duration_minutes = self._get_max_duration_minutes()
         self.status = "active"
-        self.created_at = datetime.now()
+        self.start_time = datetime.now()
+        self.qa_pairs: List[Dict[str, Any]] = []  # [{question, answer, topic}] populated per turn
+        self._pending_question: Dict[str, str] = {}  # {question, topic} awaiting the next answer
+
+    def _get_max_duration_minutes(self) -> int:
+        """Load max interview duration in minutes from DB settings, falling back to default."""
+        try:
+            from app.services.settings_service import _get_db, Settings
+            db = _get_db()
+            try:
+                setting = db.query(Settings).filter(
+                    Settings.key == "interview_max_duration_minutes"
+                ).first()
+                if setting and setting.value:
+                    return int(setting.value)
+            finally:
+                db.close()
+        except Exception:
+            pass
+        return DEFAULT_MAX_DURATION_MINUTES
     
-    def add_message(self, role: str, content: str):
+    def add_message(self, role: str, content: str, topic: Optional[str] = None):
         """Add a message to the conversation history."""
-        self.messages.append({
+        entry: Dict[str, Any] = {
             "role": role,
             "content": content,
-            "timestamp": datetime.now().isoformat()
-        })
+            "timestamp": datetime.now().isoformat(),
+        }
+        if topic:
+            entry["topic"] = topic
+        self.messages.append(entry)
     
     def get_conversation_context(self) -> str:
         """Build conversation context for generating next question."""
@@ -43,8 +68,19 @@ class InterviewState:
         return "\n\n".join(context)
     
     def is_complete(self) -> bool:
-        """Check if interview should end."""
-        return self.question_count >= self.max_questions
+        """Check if interview should end (question limit OR time limit reached)."""
+        if self.question_count >= self.max_questions:
+            return True
+        elapsed = datetime.now() - self.start_time
+        if elapsed >= timedelta(minutes=self.max_duration_minutes):
+            return True
+        return False
+
+    def time_remaining_seconds(self) -> int:
+        """Seconds left before time limit is reached. Returns 0 if already expired."""
+        elapsed = datetime.now() - self.start_time
+        remaining = int(self.max_duration_minutes * 60 - elapsed.total_seconds())
+        return max(0, remaining)
 
 
 # Global state storage
@@ -54,17 +90,19 @@ _interviews: Dict[str, InterviewState] = {}
 class InterviewWorkflow:
     """Main interview workflow orchestrator."""
     
-    async def initialize_interview(self, interview_id: str, candidate_data: Dict[str, Any]) -> str:
+    async def initialize_interview(self, interview_id: str, candidate_data: Dict[str, Any], resume_parsed: Optional[Dict[str, Any]] = None) -> str:
         """Initialize a new interview and return the first question."""
-        state = InterviewState(interview_id, candidate_data)
+        state = InterviewState(interview_id, candidate_data, resume_parsed=resume_parsed)
         _interviews[interview_id] = state
-        
-        # Fixed first question
-        first_question = "Hi, Welcome to the Interview. Please tell me about yourself"
-        
-        # Store the first question
-        state.add_message("assistant", first_question)
-        
+
+        # First question — from DB settings (admin-configurable), personalised with candidate name
+        candidate_name = candidate_data.get("name", "") if isinstance(candidate_data, dict) else ""
+        first_question = get_first_question(candidate_name=candidate_name)
+
+        # First question has no topic (it's the opening question)
+        state.add_message("assistant", first_question, topic=None)
+        state._pending_question = {"question": first_question, "topic": "opening"}
+
         return first_question
     
     async def process_answer(self, interview_id: str, user_answer: str) -> Dict[str, Any]:
@@ -73,73 +111,182 @@ class InterviewWorkflow:
         if not state:
             raise ValueError(f"Interview {interview_id} not found")
         
-        # Add the user's answer to history
-        state.add_message("user", user_answer)
+        # Add the user's answer to history (pair it with the pending question's topic)
+        pending = state._pending_question
+        state.add_message("user", user_answer, topic=pending.get("topic"))
         state.question_count += 1
-        
+
+        # Record the Q&A pair so evaluation can score per topic
+        if pending.get("question"):
+            state.qa_pairs.append({
+                "question": pending["question"],
+                "answer": user_answer,
+                "topic": pending.get("topic", "unknown"),
+            })
+
         # Check if interview is complete
         if state.is_complete():
             state.status = "completed"
+            if state.question_count >= state.max_questions:
+                end_reason = "question_limit"
+            else:
+                end_reason = "time_limit"
             return {
                 "response": "Thank you for completing the interview. Your responses have been recorded.",
                 "is_complete": True,
-                "messages": state.messages
+                "end_reason": end_reason,
+                "messages": state.messages,
+                "qa_pairs": state.qa_pairs,
             }
-        
+
         # Generate next question using LLM with candidate data and conversation
-        next_question = await self._generate_next_question(state)
-        
-        # Store the next question
-        state.add_message("assistant", next_question)
-        
+        next_q = await self._generate_next_question(state)
+        next_question = next_q["question"]
+        next_topic   = next_q["topic"]
+
+        # Store the next question — tag it with its topic (used when the answer arrives next turn)
+        state.add_message("assistant", next_question, topic=next_topic)
+        # Remember pending question so next turn we can pair it with the answer
+        state._pending_question = {"question": next_question, "topic": next_topic}
+
         return {
             "response": next_question,
             "is_complete": False,
-            "messages": state.messages
+            "messages": state.messages,
+            "qa_pairs": state.qa_pairs,
         }
     
-    async def _generate_next_question(self, state: InterviewState) -> str:
-        """Generate the next interview question using LLM with DB-sourced guidelines."""
+    # Ordered list of 6 topic labels — must match evaluation_system exactly
+    TOPIC_LABELS = [
+        "agricultural_concepts",
+        "crop_management_practices",
+        "pest_and_disease_management",
+        "nutrient_deficiencies",
+        "weather_related_advisories",
+        "field_level_technical_issues",
+    ]
+
+    # Keyword → topic label mapping (order-sensitive, checked in sequence)
+    TOPIC_KEYWORDS = [
+        ("agricultural_concepts", [
+            "soil type", "soil health", "crop cycle", "season", "land preparation",
+            "seed selection", "crop rotation", "pruning", "mulching", "nursery",
+            "transplanting", "fallow", "landholding",
+        ]),
+        ("crop_management_practices", [
+            "sowing", "spacing", "plant population", "irrigation", "drip", "sprinkler",
+            "fertiliser", "fertilization", "weed", "herbicide", "harvest", "harvesting",
+            "post-harvest", "yield", "intercropping", "mixed cropping",
+        ]),
+        ("pest_and_disease_management", [
+            "pest", "disease", "insect", "fungus", "bacterial", "blight", "rust",
+            "mildew", "IPM", "pesticide", "insecticide", "biological control",
+            "organic control", "resistance", " Bt ", "maruca", "fruit borer",
+        ]),
+        ("nutrient_deficiencies", [
+            "nitrogen", "phosphorus", "potassium", "NPK", "deficiency",
+            "micronutrient", "iron chlorosis", "zinc", "magnesium", "calcium",
+            "soil test", "yellowing", "stunting", "necrosis",
+        ]),
+        ("weather_related_advisories", [
+            "monsoon", "rainfall", "drought", "frost", "heat stress",
+            "waterlogging", "climate", "weather", "rain", "dry spell",
+            "irrigation scheduling", "climate change",
+        ]),
+        ("field_level_technical_issues", [
+            "drainage", "salinisation", "salinity", "erosion", "soil erosion",
+            "lodging", "lodging", "storage", "godown", "warehouse", "cold storage",
+            "post-harvest loss", "grading", "quality",
+        ]),
+    ]
+
+    def _infer_topic(self, question_text: str) -> str:
+        """Infer the topic label from question text using keyword matching."""
+        q_lower = question_text.lower()
+        for topic_label, keywords in self.TOPIC_KEYWORDS:
+            for kw in keywords:
+                if kw.lower() in q_lower:
+                    return topic_label
+        # Default to agricultural_concepts if no keyword matches
+        return "agricultural_concepts"
+
+    async def _generate_next_question(self, state: InterviewState) -> Dict[str, str]:
+        """Generate the next interview question using LLM with full context.
+
+        Returns:
+            {"question": str, "topic": str}
+        """
         candidate_data = state.candidate_data
-        conversation_history = [
-            {"role": m["role"], "content": m["content"]}
-            for m in state.messages
-            if m.get("role") and m.get("content")
-        ]
+        resume_parsed = state.resume_parsed or {}
         guidelines = self._get_question_guidelines()
         system_prompt = get_interview_system()
 
-        prompt = f"Candidate: {candidate_data.get('name', 'Unknown')}\n"
-        if candidate_data.get('farming_background'):
-            prompt += f"Background: {candidate_data['farming_background']}\n"
-        if candidate_data.get('experience_years'):
-            prompt += f"Experience: {candidate_data['experience_years']} years\n"
-        if candidate_data.get('crops_grown'):
-            prompt += f"Crops: {candidate_data['crops_grown']}\n"
-        if candidate_data.get('farming_type'):
-            prompt += f"Farming Type: {candidate_data['farming_type']}\n"
-        if candidate_data.get('land_size'):
-            prompt += f"Land Size: {candidate_data['land_size']}\n"
-        prompt += (
-            f"\nCONVERSATION: {state.get_conversation_context()}\n\n"
-            f"Based on the conversation, ask ONE short agriculture-related follow-up question (1-2 lines only). Return ONLY the question."
-        )
+        current_q = state.question_count + 1
+        max_q = state.max_questions
+
+        # ── 1. Candidate profile from onboarding form ──────────────────────
+        prompt = "=== CANDIDATE PROFILE ===\n"
+        prompt += f"Name: {candidate_data.get('name', 'Unknown')}\n"
+        for field in [
+            ("Phone", "phone"),
+            ("State", "state"),
+            ("District", "district"),
+            ("Current Role", "current_role"),
+            ("Experience (years)", "experience_years"),
+            ("Education", "education"),
+            ("Institution", "institution"),
+            ("Farming Background", "farming_background"),
+            ("Crops Grown", "crops_grown"),
+            ("Farm Size", "farm_size"),
+            ("Primary Expertise", "primary_expertise"),
+        ]:
+            label, key = field
+            val = candidate_data.get(key)
+            if val:
+                prompt += f"{label}: {val}\n"
+
+        # ── 2. Resume parsed data ───────────────────────────────────────────
+        if resume_parsed:
+            prompt += "\n=== RESUME DATA ===\n"
+            for key, val in resume_parsed.items():
+                if val not in (None, "", []):
+                    if isinstance(val, list):
+                        prompt += f"{key}: {', '.join(str(v) for v in val)}\n"
+                    else:
+                        prompt += f"{key}: {val}\n"
+
+        # ── 3. Question number context ──────────────────────────────────────
+        prompt += f"\n=== QUESTION {current_q} of {max_q} ===\n"
+        prompt += "You are conducting an agriculture internship interview. "
+        prompt += "Ask ONE short, focused follow-up question (1-2 lines). "
+        prompt += "Return ONLY the question, no preamble.\n"
+
+        # ── 4. Question guidelines ──────────────────────────────────────────
+        prompt += f"\n=== QUESTION GUIDELINES ===\n{guidelines}\n"
+
+        # ── 5. Chat history ────────────────────────────────────────────────
+        prompt += f"\n=== CONVERSATION HISTORY ===\n{state.get_conversation_context()}\n"
+
+        prompt += "\nAsk the next question based on the above context:"
 
         try:
-            question = await llm_service.chat_completion(
+            question_text = await llm_service.chat_completion(
                 messages=[{"role": "user", "content": prompt}],
                 system_prompt=system_prompt,
                 temperature=0.7,
-                max_tokens=200,
+                max_tokens=250,
             )
-            if question is None:
-                print("WARN: chat_completion returned None")
-                return self._fallback_question(state)
-            return question.strip()
+            if question_text is None:
+                question_text = self._fallback_question(state)
+            question_text = question_text.strip()
         except Exception as e:
             import traceback
             traceback.print_exc()
-            return self._fallback_question(state)
+            question_text = self._fallback_question(state)
+
+        # Infer topic from question text
+        topic = self._infer_topic(question_text)
+        return {"question": question_text, "topic": topic}
 
     FALLBACK_QUESTIONS = [
         "What challenges have you faced with pest management in your crops?",
@@ -159,7 +306,6 @@ class InterviewWorkflow:
         "What new techniques or technologies are you using?",
     ]
 
-    # Crop-specific fallback question sets — cycling prevents same question repeat
     CROP_FALLBACKS = {
         "tomato": [
             "How do you manage tomato blight and fruit rot in your fields?",
@@ -177,42 +323,26 @@ class InterviewWorkflow:
     }
 
     def _fallback_question(self, state: "InterviewState") -> str:
-        """
-        Return a contextually-chosen fallback question when the LLM is unavailable.
-        Cycles through questions so the same one is not repeated across fallback calls.
-        """
+        """Return a contextually-chosen fallback question string (no topic)."""
         idx = len(state.messages) % len(self.FALLBACK_QUESTIONS)
         base = self.FALLBACK_QUESTIONS[idx]
-
-        # Personalise with candidate data — also cycle through crop-specific questions
         crops = state.candidate_data.get("crops_grown", "") or ""
         farming_bg = str(state.candidate_data.get("farming_background", "")).lower()
         region = state.candidate_data.get("state", "") or ""
-
-        # Try crop-specific cycle first
         for crop_key, questions in self.CROP_FALLBACKS.items():
             if crop_key in crops.lower():
                 crop_idx = len(state.messages) % len(questions)
                 return questions[crop_idx]
-
         if "vegetable" in farming_bg:
             veg_idx = len(state.messages) % len(self.FALLBACK_QUESTIONS)
             return self.FALLBACK_QUESTIONS[veg_idx]
         if region:
             return f"What farming challenges are most pressing in {region} right now?"
-
         return base
     
     def _get_question_guidelines(self) -> str:
         """Get question generation guidelines from DB (or defaults)."""
         return get_question_guidelines()
-    
-    def get_conversation_history(self, interview_id: str) -> Optional[List[Dict[str, Any]]]:
-        """Get the full conversation history."""
-        state = _interviews.get(interview_id)
-        if not state:
-            return None
-        return state.messages
     
     def get_status(self, interview_id: str) -> Optional[Dict[str, Any]]:
         """Get interview status from active or completed store."""
@@ -221,9 +351,10 @@ class InterviewWorkflow:
             return None
         return {
             "status": state.status,
-            "messages_count": len(state.messages)
+            "messages_count": len(state.messages),
+            "time_remaining_seconds": state.time_remaining_seconds(),
         }
-    
+
     def end_interview(self, interview_id: str) -> bool:
         """
         End an interview session.

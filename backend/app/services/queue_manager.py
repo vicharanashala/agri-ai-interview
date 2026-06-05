@@ -16,7 +16,8 @@ from typing import Optional, Tuple
 from sqlalchemy.orm import Session
 
 from app.db.database import SessionLocal
-from app.db.models.candidate import ActiveInterviewCount, InterviewSession
+from app.db.models.candidate import ActiveInterviewCount, InterviewSession, Candidate, InterviewQueueEntry
+from app.services.settings_service import get_cooldown_days
 
 # -------------------------------------------------------------------
 # Config
@@ -150,7 +151,17 @@ class SlotManager:
                 pass
 
         # Build the InterviewState and add to _interviews
-        state = InterviewState(interview_id, candidate_data)
+        # Load resume parsedData for the rehydrated session
+        resume_parsed = None
+        try:
+            from app.db.models.candidate import Resume
+            resume = db.query(Resume).filter(Resume.candidateId == session.candidateId).first()
+            if resume and resume.parsedData:
+                resume_parsed = json.loads(resume.parsedData)
+        except Exception:
+            pass
+
+        state = InterviewState(interview_id, candidate_data, resume_parsed=resume_parsed)
         for msg in messages:
             role = msg.get("role")
             content = msg.get("content")
@@ -186,7 +197,35 @@ class SlotManager:
         """
         db = _get_db()
         try:
-            # Check for existing active session for this candidate
+            # 1. Attempts check — reject if candidate has exhausted all 3 attempts
+            completed_count = (
+                db.query(InterviewSession)
+                .filter(
+                    InterviewSession.candidateId == candidate_id,
+                    InterviewSession.status == "completed",
+                    InterviewSession.result.in_(["PASS", "FAIL", "WITHDRAWN"]),
+                )
+                .count()
+            )
+            if completed_count >= 3:
+                return {
+                    "result": "attempts_exhausted",
+                    "attempts_count": completed_count,
+                    "max_attempts": 3,
+                }
+
+            # 2. Cooldown check — reject if candidate is still within cooldown period
+            # cooldownUntil lives on InterviewQueueEntry (not Candidate)
+            queue_entry = db.query(InterviewQueueEntry).filter(InterviewQueueEntry.candidateId == candidate_id).first()
+            if queue_entry and queue_entry.cooldownUntil:
+                if _now() < queue_entry.cooldownUntil:
+                    return {
+                        "result": "cooldown",
+                        "message": f"You are in cooldown. Try again after {queue_entry.cooldownUntil.strftime('%Y-%m-%d %H:%M')} UTC.",
+                        "cooldown_until": queue_entry.cooldownUntil.isoformat(),
+                    }
+
+            # 3. Check for existing active session for this candidate
             existing_session = (
                 db.query(InterviewSession)
                 .filter(
@@ -232,21 +271,52 @@ class SlotManager:
                 startedViaQueue=False,
                 status="active",
                 startedAt=now,
-                interviewData=json.dumps({"candidate_data": candidate_data}),
+                interviewData=json.dumps({
+                    "candidate_data": candidate_data,
+                }),
             )
             db.add(session)
+
+            # Ensure InterviewQueueEntry exists for this candidate so cooldown can be set later
+            queue_entry = db.query(InterviewQueueEntry).filter(InterviewQueueEntry.candidateId == candidate_id).first()
+            if not queue_entry:
+                queue_entry = InterviewQueueEntry(
+                    id=str(uuid.uuid4()),
+                    candidateId=candidate_id,
+                    status="interviewing",
+                    startedAt=now,
+                )
+                db.add(queue_entry)
+
             db.commit()
 
             # Initialize langgraph workflow
             from app.workflows.interview_graph import interview_graph_manager
 
+            # Load resume parsedData for context-aware question generation
+            resume_parsed = None
+            try:
+                from app.db.models.candidate import Resume
+                resume = db.query(Resume).filter(Resume.candidateId == candidate_id).first()
+                if resume and resume.parsedData:
+                    resume_parsed = json.loads(resume.parsedData)
+            except Exception:
+                pass
+
             first_question = await interview_graph_manager.initialize_interview(
                 interview_id=interview_id,
                 candidate_data=candidate_data,
+                resume_parsed=resume_parsed,
             )
 
-            self._sync_active_count(db)
+            # Update interviewData with first_question now that it's available
+            session.interviewData = json.dumps({
+                "candidate_data": candidate_data,
+                "first_question": first_question,
+            })
             db.commit()
+
+            self._sync_active_count(db)
 
             return {
                 "result": "started",
@@ -260,9 +330,22 @@ class SlotManager:
     # Complete interview
     # -------------------------------------------------------------------
 
-    def complete_interview(self, candidate_id: str, interview_id: str) -> dict:
+    def complete_interview(
+        self,
+        candidate_id: str,
+        interview_id: str,
+        result: Optional[str] = None,
+        end_reason: Optional[str] = None,
+        overall_score: Optional[float] = None,
+        evaluation: Optional[dict] = None,
+    ) -> dict:
         """
         Mark an interview as completed and free the slot.
+        Persists the full chat history to InterviewSession.interviewData.
+        result: PASS | FAIL
+        end_reason: anti_cheat | withdrawn | question_limit | time_limit
+
+        Cooldown is set only when result is FAIL (regardless of end_reason).
         """
         db = _get_db()
         try:
@@ -277,6 +360,34 @@ class SlotManager:
             if session:
                 session.status = "completed"
                 session.completedAt = _now()
+                if result:
+                    session.result = result
+                if end_reason:
+                    session.endReason = end_reason
+                if overall_score is not None:
+                    session.score = overall_score
+
+                # ── Persist full chat history + LLM evaluation to InterviewSession.interviewData ──
+                from app.workflows.interview_graph import interview_graph_manager
+                messages = interview_graph_manager.get_conversation_history(interview_id) or []
+                try:
+                    existing_data: dict = {}
+                    if session.interviewData:
+                        existing_data = json.loads(session.interviewData)
+                    existing_data["messages"] = messages
+                    if evaluation:
+                        existing_data["evaluation"] = evaluation
+                    session.interviewData = json.dumps(existing_data)
+                except Exception:
+                    pass  # non-fatal — keep whatever was already stored
+
+            # Cooldown applies ONLY when result is FAIL — regardless of end_reason.
+            # PASS → no cooldown (candidate cannot re-attempt, already passed).
+            if result == "FAIL":
+                queue_entry = db.query(InterviewQueueEntry).filter(InterviewQueueEntry.candidateId == candidate_id).first()
+                if queue_entry:
+                    cooldown_days = get_cooldown_days()
+                    queue_entry.cooldownUntil = _now() + timedelta(days=cooldown_days)
 
             db.commit()
             self._sync_active_count(db)
@@ -417,7 +528,7 @@ class SlotManager:
             state.question_count = len([m for m in state.messages if m.get("role") == "user"])
         else:
             from app.workflows.interview_workflow import InterviewState
-            state = InterviewState(interview_id, candidate_data)
+            state = InterviewState(interview_id, candidate_data, resume_parsed=None)
             state.messages = [m for m in messages if m.get("role") in ("user", "assistant")]
             state.question_count = len([m for m in state.messages if m.get("role") == "user"])
             interview_workflow._interviews[interview_id] = state

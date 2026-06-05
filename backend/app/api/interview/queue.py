@@ -52,12 +52,15 @@ class SlotRequest(BaseModel):
 
 
 class StartResponse(BaseModel):
-    result: str           # started | no_slot | already_active
+    result: str           # started | no_slot | already_active | attempts_exhausted | cooldown
     interview_id: Optional[str] = None
     first_question: Optional[str] = None
     message: Optional[str] = None
     active_interview_count: Optional[int] = None
     max_concurrent: Optional[int] = None
+    attempts_count: Optional[int] = None
+    max_attempts: Optional[int] = None
+    cooldown_until: Optional[str] = None
 
 
 class StatsResponse(BaseModel):

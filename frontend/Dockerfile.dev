@@ -11,8 +11,10 @@ RUN apk add --no-cache \
 COPY package.json package-lock.json* ./
 RUN npm ci
 
-# Copy prisma schema and generate client
+# Copy prisma schema
 COPY prisma/schema.prisma ./prisma/
+
+# Generate Prisma client (bake it into image so volume mount can't override)
 RUN npx prisma generate
 
 # Copy all source

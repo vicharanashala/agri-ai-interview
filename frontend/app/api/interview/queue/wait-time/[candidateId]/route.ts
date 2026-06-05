@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const API_BASE_URL = process.env.BACKEND_URL ?? 'http://backend:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export async function GET(
   request: NextRequest,
@@ -8,9 +8,13 @@ export async function GET(
 ) {
   try {
     const { candidateId } = await params;
+    const authHeader = request.headers.get('Authorization');
+    const headers: Record<string, string> = {};
+    if (authHeader) headers['Authorization'] = authHeader;
+
     const response = await fetch(
       `${API_BASE_URL}/api/interview/queue/wait-time/${candidateId}`,
-      { method: 'GET' }
+      { method: 'GET', headers }
     );
 
     const data = await response.json();

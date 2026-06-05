@@ -1,5 +1,6 @@
 import './globals.css';
 import Providers from '@/components/Providers';
+import IdleTimerWrapper from '@/components/IdleTimerWrapper';
 
 export const metadata = {
   title: 'AI Interview Platform',
@@ -14,7 +15,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <Providers>{children}</Providers>
+        <Providers>
+          <IdleTimerWrapper>{children}</IdleTimerWrapper>
+        </Providers>
       </body>
     </html>
   );

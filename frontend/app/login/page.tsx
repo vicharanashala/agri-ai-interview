@@ -1,11 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { signIn } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import styles from './page.module.css';
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageInner />
+    </Suspense>
+  );
+}
+
+function LoginPageInner() {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -14,6 +22,8 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isIdleTimeout = searchParams.get('reason') === 'idle';
 
   const handleGoogleSignIn = () => {
     setGoogleLoading(true);
@@ -201,6 +211,12 @@ export default function LoginPage() {
           </div>
 
           {error && <p className={styles.error}>{error}</p>}
+
+          {isIdleTimeout && (
+            <p className={styles.idleNotice}>
+              Your session expired due to inactivity. Please sign in again.
+            </p>
+          )}
 
           <button type="submit" className={styles.button} disabled={isLoading}>
             {isLoading

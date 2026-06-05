@@ -30,7 +30,26 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: "desc" },
     });
 
-    let candidates = rows.map((row) => {
+    type CandidateWithUser = typeof rows[number];
+
+    interface TransformedCandidate {
+      id: string;
+      fullName: string | null;
+      email: string | null;
+      phone: string | null;
+      state: string | null;
+      district: string | null;
+      currentRole: string | null;
+      yearsOfExperience: number | null;
+      farmingBackground: string | null;
+      primaryExpertise: string | null;
+      currentPhase: string;
+      status: string;
+      phases: ReturnType<typeof buildPhases>;
+      createdAt: string;
+    }
+
+    let candidates: TransformedCandidate[] = rows.map((row: CandidateWithUser) => {
       const rawFullName = row.fullName || row.user?.email || "Unknown";
       const currentPhase = row.currentPhase || "onboarding";
 

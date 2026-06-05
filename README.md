@@ -1,4 +1,4 @@
-# Agri-AI Interview Platform
+# Agri-Agri AI Interview Platform
 
 AI-powered interview platform for agriculture domain candidates. Handles end-to-end hiring — onboarding, AI interviews, evaluation, and offer management.
 

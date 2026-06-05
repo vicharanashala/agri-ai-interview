@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
 }
 
 datasource db {
@@ -90,8 +91,23 @@ model Candidate {
   // Flag: candidate visited joining details
   joiningDetailsVisited Boolean  @default(false)
   
+  // Signed offer letter record (one per candidate)
+  signedOfferLetter SignedOfferLetter?
+  
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+}
+
+model SignedOfferLetter {
+  id            String    @id @default(cuid())
+  candidateId   String    @unique
+  candidate     Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  pdfData       Bytes                  // Full signed PDF as binary
+  signatureName String                 // E-signature name used
+  signedAt      DateTime @default(now())
+  createdAt     DateTime  @default(now())
+
+  @@map("signed_offer_letters")
 }
 
 model VerificationToken {
@@ -152,6 +168,9 @@ model InterviewSession {
   queueEntryId    String?
   startedViaQueue Boolean   @default(false)
   status          String    @default("active") // active, completed, cancelled
+  result          String?   // PASS, FAIL
+  endReason       String?   // anti_cheat, withdrawn, question_limit, time_limit
+  score           Float?    // 0–100 from LLM evaluation
   currentPhase    String    @default("interview")
   interviewData   String?   // JSON string for interview state
   startedAt       DateTime  @default(now())
@@ -229,8 +248,23 @@ model Resume {
   fileType    String   // "pdf" | "docx"
   rawText     String?  // extracted text content
   parsedData  String?  // JSON string — structured parsed output (Phase 2)
+  skills      String?  // JSON list string — normalised skills
+  summary     String?  // 2-3 sentence profile summary
   status      String   @default("pending") // "pending" | "uploaded" | "parsed" | "failed"
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@index([candidateId])
+}
+
+model Settings {
+  id          Int      @id @default(autoincrement())
+  key         String   @unique
+  value       String?
+  description String?
+  category    String   @default("general") // general | interview | evaluation | notification
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
 }

@@ -21,7 +21,7 @@ export const authOptions: NextAuthOptions = {
           return null
         }
 
-        // Look up user in Prisma/SQLite database
+        // Look up user in Prisma/PostgreSQL database
         const user = await prisma.user.findUnique({
           where: { email: credentials.email },
         })
@@ -58,6 +58,10 @@ export const authOptions: NextAuthOptions = {
         if (token.email) {
           ;(session.user as { email?: string }).email = token.email as string
         }
+        // Always expose candidateId from token (set during jwt callback)
+        if (token.candidateId) {
+          ;(session.user as { candidateId?: string }).candidateId = token.candidateId as string
+        }
       }
       return session
     },
@@ -68,6 +72,13 @@ export const authOptions: NextAuthOptions = {
         if (account?.provider === 'credentials') {
           token.sub = user.id
           token.email = user.email
+          // Look up candidateId for this user
+          try {
+            const cand = await prisma.candidate.findUnique({ where: { userId: user.id } })
+            if (cand) token.candidateId = cand.id
+          } catch (err) {
+            console.error('[next-auth] Failed to find candidate for credentials user:', err)
+          }
         }
         // Google OAuth: need to create/find our DB user and use OUR id
         if (account?.provider === 'google') {
@@ -79,19 +90,22 @@ export const authOptions: NextAuthOptions = {
               data: { email, name },
             })
           }
-          // Immediately create Candidate record so user appears in admin dashboard
+          // Create or find Candidate record — store candidateId in token
+          let candidateId: string | null = null
           try {
-            await prisma.candidate.upsert({
+            const cand = await prisma.candidate.upsert({
               where: { userId: dbUser.id },
               update: {},
               create: { userId: dbUser.id, currentPhase: 'onboarding' },
             })
+            candidateId = cand.id
           } catch (err) {
             // Non-fatal: auth succeeds even if candidate record creation fails
             console.error('[next-auth] Failed to create candidate record:', err)
           }
           token.sub = dbUser.id
           token.email = email
+          token.candidateId = candidateId
         }
       }
       return token

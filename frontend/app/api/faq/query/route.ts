@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Query must be at least 2 characters" }, { status: 400 });
     }
 
-    const response = await fetch(`${process.env.BACKEND_URL ?? "http://backend:8000"}/api/faq/query`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/faq/query`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ query: query.trim(), top_k, category }),

@@ -3,7 +3,7 @@ LLM Service for direct API calls to MiniMax.
 """
 import os
 import httpx
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 from app.core.config import settings
 from app.services.settings_service import get_evaluation_system
 
@@ -326,13 +326,14 @@ Return your evaluation as valid JSON only, no other text."""
             import json
             import re
 
-            json_match = re.search(r'\{[^{}]*\}', response, re.DOTALL)
+            json_match = re.search(r'\{[\s\S]*\}', response)
             if json_match:
                 evaluation = json.loads(json_match.group())
             else:
+                # JSON parse failed — fail-safe to 0 so candidate is not auto-passed
                 evaluation = {
-                    "overall_score": 70,
-                    "metrics": {"motivation": 7, "agri_knowledge": 7},
+                    "overall_score": 0,
+                    "metrics": {"motivation": 0, "agri_knowledge": 0},
                     "summary": response[:200] if len(response) > 200 else response
                 }
 
@@ -348,28 +349,47 @@ Return your evaluation as valid JSON only, no other text."""
     async def generate_interview_evaluation(
         self,
         candidate_data: Dict[str, Any],
-        conversation_history: List[Dict[str, str]]
+        conversation_history: List[Dict[str, str]],
+        qa_pairs: Optional[List[Dict[str, Any]]] = None,
+        criteria: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         """
         Generate comprehensive evaluation based on chat history, user details, and resume.
-        
+
         Args:
             candidate_data: Complete candidate profile including form data and resume
             conversation_history: Full interview conversation
-            
+            qa_pairs: List of {question, answer, topic} dicts for per-topic scoring
+            criteria: Admin-configured evaluation criteria (id, name, weight).
+                      Each criterion scores 0-10; weighted sum → overall_score 0-100.
+                      Deprecated when qa_pairs are provided (topic_scores take precedence).
+
         Returns:
-            Comprehensive evaluation with scores, summary, strengths, and recommendations
+            Comprehensive evaluation with overall_score, topic_scores, summary, strengths,
+            areas_for_improvement, and recommendation. Also retains legacy metrics for
+            backward compatibility when no qa_pairs are provided.
         """
         conversation_text = self._build_conversation_summary(conversation_history)
         candidate_context = self._build_candidate_context(candidate_data)
-        
+
         # Extract resume data if available
         resume_text = ""
         if candidate_data.get("resume"):
             resume_text = f"\n\nCandidate Resume:\n{candidate_data['resume']}"
         if candidate_data.get("resume_text"):
             resume_text = f"\n\nResume Content:\n{candidate_data['resume_text']}"
-        
+
+        # Build qa_pairs text block for per-topic scoring context
+        qa_text = ""
+        if qa_pairs:
+            qa_lines = []
+            for pair in qa_pairs:
+                qa_lines.append(f'Topic: {pair.get("topic", "unknown")}')
+                qa_lines.append(f'Q: {pair.get("question", "")}')
+                qa_lines.append(f'A: {pair.get("answer", "")}')
+                qa_lines.append("")
+            qa_text = "\n=== PER-TOPIC Q&A (use for per-topic scoring) ===\n" + "\n".join(qa_lines)
+
         system_prompt = (
             "You are an expert agricultural HR evaluator.\n\n"
             + get_evaluation_system()
@@ -377,17 +397,21 @@ Return your evaluation as valid JSON only, no other text."""
             + "You must return a valid JSON object with EXACTLY this structure:\n\n"
             + "{\n"
             + '"overall_score": 0-100,\n'
-            + '"metrics": {\n'
-            + '    "motivation": {"score": 0-10, "details": "explanation"},\n'
-            + '    "agri_knowledge": {"score": 0-10, "details": "explanation"},\n'
-            + '    "communication": {"score": 0-10, "details": "explanation"},\n'
-            + '    "problem_solving": {"score": 0-10, "details": "explanation"}\n'
-            + '},\n'
+            + '"topic_scores": {\n'
+            + '    "agricultural_concepts": {"score": 0-10, "details": "brief explanation"},\n'
+            + '    "crop_management_practices": {"score": 0-10, "details": "brief explanation"},\n'
+            + '    "pest_and_disease_management": {"score": 0-10, "details": "brief explanation"},\n'
+            + '    "nutrient_deficiencies": {"score": 0-10, "details": "brief explanation"},\n'
+            + '    "weather_related_advisories": {"score": 0-10, "details": "brief explanation"},\n'
+            + '    "field_level_technical_issues": {"score": 0-10, "details": "brief explanation"}\n'
+            + "},\n"
             + '"summary": "2-3 paragraph comprehensive summary",\n'
             + '"strengths": ["strength 1", "strength 2", "strength 3"],\n'
             + '"areas_for_improvement": ["area 1", "area 2"],\n'
-            + '"recommendation": "hire/consider/reject with brief explanation"\n'
-            + "}\n\nBe objective, fair, and base your evaluation on both the candidate's stated qualifications and their interview responses."
+            + '"recommendation": "pass/consider/reject with brief explanation"\n'
+            + "}\n\n"
+            + "Score each topic on a scale of 0-10. Topics with no questions get 0. "
+            + "Compute overall_score as: (sum of 6 topic scores / 6) * 10."
         )
 
         evaluation_prompt = f"""Evaluate this agricultural interview candidate comprehensively:
@@ -400,11 +424,11 @@ RESUME/CV:
 
 INTERVIEW CONVERSATION:
 {conversation_text}
-
+{qa_text}
 Return your evaluation as valid JSON only, no other text. Ensure all fields are present."""
 
         messages = [{"role": "user", "content": evaluation_prompt}]
-        
+
         try:
             response = await self.chat_completion(
                 messages=messages,
@@ -412,45 +436,59 @@ Return your evaluation as valid JSON only, no other text. Ensure all fields are 
                 temperature=0.3,
                 max_tokens=2000
             )
-            
+
             import json
             import re
-            
+
             # Try to extract and parse JSON from response
             try:
-                # Try direct JSON parse first
                 evaluation = json.loads(response)
             except json.JSONDecodeError:
-                # Try to extract JSON from response
                 json_match = re.search(r'\{[\s\S]*\}', response)
                 if json_match:
                     evaluation = json.loads(json_match.group())
                 else:
                     raise ValueError("Could not parse JSON from response")
-            
-            # Ensure all required fields exist
-            evaluation["metrics"] = evaluation.get("metrics", {})
-            expected_metrics = ["motivation", "agri_knowledge", "communication", "problem_solving"]
-            for metric in expected_metrics:
-                if metric not in evaluation["metrics"]:
-                    evaluation["metrics"][metric] = {"score": 7, "details": f"{metric.replace('_', ' ').title()} evaluation pending"}
-            
+
+            # Ensure all 6 topic score fields exist
+            required_topics = [
+                "agricultural_concepts",
+                "crop_management_practices",
+                "pest_and_disease_management",
+                "nutrient_deficiencies",
+                "weather_related_advisories",
+                "field_level_technical_issues",
+            ]
+            evaluation["topic_scores"] = evaluation.get("topic_scores", {})
+            for topic in required_topics:
+                if topic not in evaluation["topic_scores"]:
+                    evaluation["topic_scores"][topic] = {"score": 0, "details": f"{topic} evaluation pending"}
+
+            # Compute overall_score from topic_scores
+            ts = evaluation["topic_scores"]
+            topic_sum = sum(ts[t].get("score", 0) for t in required_topics)
+            evaluation["overall_score"] = int((topic_sum / len(required_topics)) * 10)
+
             return evaluation
-            
+
         except Exception as e:
-            # Return sensible default values on error instead of zeros
             return {
-                "overall_score": 75,
-                "metrics": {
-                    "motivation": {"score": 75, "details": "Evaluation complete based on available data"},
-                    "agri_knowledge": {"score": 75, "details": "Evaluation complete based on available data"},
-                    "communication": {"score": 75, "details": "Evaluation complete based on available data"},
-                    "problem_solving": {"score": 75, "details": "Evaluation complete based on available data"}
+                "overall_score": 0,
+                "topic_scores": {
+                    t: {"score": 0, "details": "Evaluation could not be completed"}
+                    for t in [
+                        "agricultural_concepts",
+                        "crop_management_practices",
+                        "pest_and_disease_management",
+                        "nutrient_deficiencies",
+                        "weather_related_advisories",
+                        "field_level_technical_issues",
+                    ]
                 },
-                "summary": f"Interview evaluation completed. Candidate demonstrated satisfactory performance in the agricultural interview session.",
-                "strengths": ["Good communication skills", "Shows interest in agriculture", "Willingness to learn"],
-                "areas_for_improvement": ["Continue developing technical knowledge", "Gain more hands-on experience"],
-                "recommendation": "Consider - The candidate shows promise and fits well with the team culture."
+                "summary": "Evaluation could not be completed. Please contact support.",
+                "strengths": [],
+                "areas_for_improvement": [],
+                "recommendation": "Unable to evaluate - please retry or contact support."
             }
 
 

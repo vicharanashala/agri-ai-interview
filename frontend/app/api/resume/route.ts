@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth-options'
 import { prisma } from '@/lib/prisma'
 
-const BACKEND_URL = process.env.BACKEND_URL ?? 'http://backend:8000'
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
 
 export async function POST(request: NextRequest) {
   try {
@@ -39,8 +39,13 @@ export async function POST(request: NextRequest) {
     backendFormData.append('file', file)
     backendFormData.append('candidateId', candidateId)
 
+    const authHeader = request.headers.get('Authorization');
+    const uploadHeaders: Record<string, string> = {};
+    if (authHeader) uploadHeaders['Authorization'] = authHeader;
+
     const backendRes = await fetch(`${BACKEND_URL}/api/resume/upload`, {
       method: 'POST',
+      headers: uploadHeaders,
       body: backendFormData,
     })
 

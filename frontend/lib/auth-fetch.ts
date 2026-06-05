@@ -48,13 +48,32 @@ export async function authFetch(
     console.log(`[authFetch] URL=${url} | token(first 8)=${token.substring(0, 8)}... | header set`);
   } else {
     console.warn(`[authFetch] URL=${url} | NO TOKEN in sessionStorage — no Authorization header`);
+    console.warn(`[authFetch] sessionStorage keys:`, Object.keys(sessionStorage));
   }
 
-  return fetch(url, {
+  const response = await fetch(url, {
     ...options,
     headers,
     credentials: 'include',
   })
+
+  // Single-device enforcement: if backend returns 401, the session was invalidated
+  // (kicked by another device). Clear local session state and redirect to login.
+  if (response.status === 401) {
+    console.warn('[authFetch] 401 received — session invalidated (device kicked). Redirecting to login.');
+    if (typeof window !== 'undefined') {
+      sessionStorage.clear();
+      // Preserve interviewInProgress flag so we can resume after re-login
+      const wasInInterview = sessionStorage.getItem('interviewInProgress') === 'true';
+      window.sessionStorage.clear();
+      if (wasInInterview) sessionStorage.setItem('interviewInProgress', 'true');
+      window.location.href = '/login';
+    }
+    // Return an invalid Response so callers that await this don't proceed
+    return new Response(null, { status: 401 });
+  }
+
+  return response
 }
 
 // ─── Singleton fetch interceptor ─────────────────────────────────────────────
@@ -74,7 +93,8 @@ export function interceptAuthFetch(): () => void {
 
   const orig = window.fetch.bind(window)
 
-  window.fetch = async (url: string | Request, init?: RequestInit) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ;(window.fetch as any) = async (url: Parameters<typeof orig>[0], init?: RequestInit | undefined) => {
     const token = getAuthToken()
     const urlStr = typeof url === 'string' ? url : (url as Request).url
     if (token) {
@@ -87,7 +107,22 @@ export function interceptAuthFetch(): () => void {
     } else {
       console.warn(`[interceptFetch] URL=${urlStr} | NO TOKEN in sessionStorage — request will go without auth`);
     }
-    return orig(url, init)
+    const response = await orig(url, init)
+
+    // Single-device enforcement: if backend returns 401, the session was invalidated
+    // (kicked by another device). Clear local session state and redirect to login.
+    if (response.status === 401) {
+      console.warn('[interceptFetch] 401 received — session invalidated. Redirecting to login.');
+      if (typeof window !== 'undefined') {
+        const wasInInterview = window.sessionStorage.getItem('interviewInProgress') === 'true'
+        window.sessionStorage.clear()
+        if (wasInInterview) window.sessionStorage.setItem('interviewInProgress', 'true')
+        window.location.href = '/login'
+      }
+      return new Response(null, { status: 401 })
+    }
+
+    return response
   }
 
   _restore = () => {

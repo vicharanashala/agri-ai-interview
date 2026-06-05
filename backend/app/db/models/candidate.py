@@ -1,7 +1,7 @@
 """
 Candidate database model — mirrors the Prisma schema (same PostgreSQL database).
 """
-from sqlalchemy import Column, String, Integer, DateTime, JSON, Boolean, Text
+from sqlalchemy import Column, String, Integer, DateTime, JSON, Boolean, Text, Float
 from datetime import datetime, timezone
 from app.db.database import Base
 
@@ -120,6 +120,9 @@ class InterviewSession(Base):
     queueEntryId = Column(String, nullable=True)
     startedViaQueue = Column(Boolean, default=False)
     status = Column(String, default="active")
+    result = Column(String, nullable=True)  # PASS | FAIL
+    endReason = Column(String, nullable=True)  # anti_cheat | withdrawn | question_limit | time_limit
+    score = Column(Float, nullable=True)  # 0–100 from LLM evaluation
     currentPhase = Column(String, default="interview")
     interviewData = Column(String, nullable=True)  # JSON string
     startedAt = Column(DateTime, default=_utcnow)
@@ -136,10 +139,10 @@ class AntiCheatEvent(Base):
     id = Column(String, primary_key=True)
     candidateId = Column(String, nullable=False)
     interviewId = Column(String, nullable=True)
-    eventType = Column(String, nullable=False)
+    eventType = Column(String, nullable=False)  # DB col: eventType (Prisma naming)
     severity = Column(String, default="warning")
     message = Column(String, nullable=True)
-    event_metadata = Column(String, nullable=True)  # JSON string
+    event_metadata = Column("metadata", String, nullable=True)  # DB col: metadata (name event_metadata avoids SQLAlchemy reserved word)
     createdAt = Column(DateTime, default=_utcnow)
 
 
@@ -155,5 +158,22 @@ class Resume(Base):
     rawText = Column(Text, nullable=True)
     parsedData = Column(Text, nullable=True)  # JSON string — structured parsed output
     status = Column(String, default="pending")  # pending | uploaded | parsed | failed
+    # Fields extracted from parsedData for direct Python access
+    # (parsedData is a JSON string; these columns are updated alongside it)
+    skills = Column(Text, nullable=True)       # JSON list string — normalised skills
+    summary = Column(Text, nullable=True)      # 2-3 sentence profile summary
     createdAt = Column(DateTime, default=_utcnow)
     updatedAt = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+
+class SignedOfferLetter(Base):
+    """Signed offer letter — mirrors frontend/prisma/schema.prisma SignedOfferLetter table."""
+
+    __tablename__ = "signed_offer_letters"
+
+    id = Column(String, primary_key=True)
+    candidateId = Column(String, unique=True, nullable=False)
+    pdfData = Column(Text, nullable=False)     # Base64-encoded PDF bytes
+    signatureName = Column(String, nullable=False)
+    signedAt = Column(DateTime, nullable=False, default=_utcnow)
+    createdAt = Column(DateTime, default=_utcnow)

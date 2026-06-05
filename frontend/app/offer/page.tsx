@@ -20,10 +20,14 @@ export default function OfferPage() {
   useEffect(() => {
     (async () => {
       const currentPhase = localStorage.getItem('interviewPhase');
+      const result = localStorage.getItem('interviewResult');
       const offerSigned = localStorage.getItem('offerSigned') === 'true';
       setIsOfferSigned(offerSigned);
 
-      if (currentPhase && parseInt(currentPhase) < 3) {
+      if (!result || result !== 'PASS') {
+        // Only PASS candidates may view the offer letter
+        router.push('/dashboard');
+      } else if (currentPhase && parseInt(currentPhase) < 3) {
         router.push('/dashboard');
       } else {
         // Phase 4 (View Offer Letter) — only update phase if offer is not already signed

@@ -45,8 +45,13 @@ export default function AdminLoginPage() {
         throw new Error(data.detail || "Login failed");
       }
 
-      // The admin_session cookie is already set by the backend (path=/admin).
-      // We navigate to dashboard; the dashboard will verify the cookie on mount.
+      // Store the admin token in localStorage so the dashboard can send it
+      // as X-Admin-Token header. This works across all deployments (local,
+      // same-origin, or cross-origin) without needing cookie domain tricks.
+      if (data.token) {
+        localStorage.setItem("admin_token", data.token);
+      }
+
       router.push("/admin/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");

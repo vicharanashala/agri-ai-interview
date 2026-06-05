@@ -29,7 +29,8 @@ for category_key, category_data in _SKILL_TAXONOMY.get("categories", {}).items()
 
 RESUME_PARSE_SYSTEM_PROMPT = """You are an expert resume parser and career analyst.
 Given raw resume text, extract structured information and return ONLY a valid JSON object.
-Be precise — use the exact field names specified. If a field cannot be determined from the text, use null.
+Be precise — use the exact field names specified.
+IMPORTANT: If a field cannot be determined from the text, use the string "Not Available" — NEVER use null, empty string, or a guess. The skills array may be an empty list if no skills are found.
 Do not add any explanatory text. Return ONLY the JSON object."""
 
 RESUME_PARSE_USER_PROMPT = """Extract structured information from this resume text.
@@ -63,7 +64,7 @@ IMPORTANT:
 - "skills" must be industry-standard tech/role keywords (normalise Python → Python, react.js → React, etc.)
 - "confidence_score" is 0.0 to 1.0 — estimate how confident you are in the extraction quality
 - "experience[].highlights" — extract 1-3 concrete achievements/responsibilities per role
-- If any field cannot be determined, use null (not empty string)
+- If any field cannot be determined from the resume text, use the string "Not Available" — NEVER use null or an empty string
 - Return ONLY the JSON object, no markdown fences, no commentary
 
 RESUME TEXT:
@@ -165,27 +166,39 @@ def _clamp_confidence(score: float) -> float:
 
 
 def _empty_result() -> Dict[str, Any]:
+    """
+    Returned when raw_text is empty/unreadable — e.g. scanned PDF or corrupt file.
+    All string fields use "Not Available" so downstream JSON consumers never
+    receive null and don't need defensive null-checks on every field access.
+    confidence_score = 0.0 signals that no real parsing happened.
+    """
     return {
-        "name": None,
-        "email": None,
-        "phone": None,
+        "name": "Not Available",
+        "email": "Not Available",
+        "phone": "Not Available",
         "skills": [],
         "experience": [],
         "education": [],
-        "summary": None,
+        "summary": "No resume content could be extracted. The uploaded file may be a scanned image, password-protected, or in an unsupported format. Candidate details were not parsed.",
         "confidence_score": 0.0,
     }
 
 
 def _error_result(reason: str) -> Dict[str, Any]:
+    """
+    Returned when the LLM call itself fails (network, API error, etc.).
+    Same "Not Available" pattern as _empty_result — downstream code gets
+    consistent string values regardless of why parsing failed.
+    confidence_score = 0.0 signals a failed parse.
+    """
     return {
-        "name": None,
-        "email": None,
-        "phone": None,
+        "name": "Not Available",
+        "email": "Not Available",
+        "phone": "Not Available",
         "skills": [],
         "experience": [],
         "education": [],
-        "summary": f"Parse error: {reason}",
+        "summary": f"Resume parsing failed: {reason}. Candidate details could not be extracted from the uploaded file.",
         "confidence_score": 0.0,
     }
 

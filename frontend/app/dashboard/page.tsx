@@ -22,6 +22,14 @@ interface EvaluationResult {
   status?: string;
 }
 
+interface Attempt {
+  id: string;
+  status: string;
+  overall_score: number | null;
+  result: string | null;
+  completedAt: string | null;
+}
+
 export default function DashboardPage() {
   const [currentPhase, setCurrentPhase] = useState<Phase>(1);
   const [isLoading, setIsLoading] = useState(true);
@@ -29,7 +37,12 @@ export default function DashboardPage() {
   const [hasCompletedInterview, setHasCompletedInterview] = useState(false);
   const [joiningCompleted, setJoiningCompleted] = useState(false);
   const [showAlreadyDoneDialog, setShowAlreadyDoneDialog] = useState(false);
+  const [showNoAttemptsLeftDialog, setShowNoAttemptsLeftDialog] = useState(false);
+  const [showCooldownDialog, setShowCooldownDialog] = useState(false);
+  const [cooldownUntil, setCooldownUntil] = useState<string | null>(null);
+  const [cooldownTimeLeft, setCooldownTimeLeft] = useState<string | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [attempts, setAttempts] = useState<Attempt[]>([]);
   const router = useRouter();
 
   const handleFaqClick = () => {
@@ -89,6 +102,16 @@ export default function DashboardPage() {
         if (dbSummaryVisited) localStorage.setItem('passedAndVisitedSummary', 'true');
         if (dbJoiningVisited) localStorage.setItem('joiningDetailsVisited',   'true');
 
+        // Persist candidate info in sessionStorage for downstream pages (offer letter, etc.)
+        if (candidate.fullName) sessionStorage.setItem('candidateName',  candidate.fullName);
+        if (candidate.phone)    sessionStorage.setItem('candidatePhone', candidate.phone);
+        if (candidate.email)    sessionStorage.setItem('candidateEmail', candidate.email);
+
+        // Also mirror to localStorage so values survive page refresh
+        if (candidate.fullName) localStorage.setItem('candidateName',  candidate.fullName);
+        if (candidate.phone)    localStorage.setItem('candidatePhone', candidate.phone);
+        if (candidate.email)    localStorage.setItem('candidateEmail', candidate.email);
+
         // If interview was just completed (redirect flag set by interview page), go to summary
         const justCompleted = sessionStorage.getItem('interviewJustCompleted') === 'true'
           || localStorage.getItem('interviewJustCompleted') === 'true';
@@ -104,8 +127,51 @@ export default function DashboardPage() {
       }
     };
 
+    const loadAttempts = async () => {
+      try {
+        const res = await fetch('/api/candidate/attempts');
+        if (res.ok) {
+          const data = await res.json();
+          setAttempts(data.attempts ?? []);
+          if (data.cooldownUntil) {
+            setCooldownUntil(data.cooldownUntil);
+          }
+        }
+      } catch (err) {
+        console.error('Error loading attempts:', err);
+      }
+    };
+
     checkProfile();
+    loadAttempts();
   }, [router]);
+
+  // ── Cooldown countdown timer ──────────────────────────────────────────────
+  useEffect(() => {
+    if (!cooldownUntil) {
+      setCooldownTimeLeft(null);
+      return;
+    }
+    const tick = () => {
+      const remaining = new Date(cooldownUntil).getTime() - Date.now();
+      if (remaining <= 0) {
+        setCooldownTimeLeft(null);
+        setCooldownUntil(null);
+        return;
+      }
+      const totalSec = Math.floor(remaining / 1000);
+      const d = Math.floor(totalSec / 86400);
+      const h = Math.floor((totalSec % 86400) / 3600);
+      const m = Math.floor((totalSec % 3600) / 60);
+      const s = totalSec % 60;
+      if (d > 0) setCooldownTimeLeft(`${d}d ${h}h ${m}m`);
+      else if (h > 0) setCooldownTimeLeft(`${h}h ${m}m ${s}s`);
+      else setCooldownTimeLeft(`${m}m ${s}s`);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [cooldownUntil]);
 
   // Compute phases dynamically based on state
   const phases: PhaseInfo[] = [
@@ -163,10 +229,22 @@ export default function DashboardPage() {
           break;
         case 2:
           if (phase.status === 'current') {
-            // Go directly to the interview instructions page.
-            // handleBeginInterview handles queue join + confirm silently
-            // before starting the interview.
-            router.push('/interview');
+            // Check cooldown first
+            if (cooldownUntil && new Date(cooldownUntil).getTime() > Date.now()) {
+              setShowCooldownDialog(true);
+              return;
+            }
+            // Check attempts count
+            const usedAttempts = attempts.filter(
+              (a: { result?: string | null }) => ['PASS', 'FAIL', 'WITHDRAWN'].includes(a.result ?? '')
+            ).length;
+            if (usedAttempts >= 3) {
+              setShowNoAttemptsLeftDialog(true);
+              return;
+            }
+            // Always go through /post-login to ensure candidate_session_token
+            // is created and stored in sessionStorage before entering /interview.
+            router.push('/post-login?callbackUrl=/interview');
           } else {
             router.push('/interview/queue');
           }
@@ -210,10 +288,21 @@ export default function DashboardPage() {
 
   const handleLogout = async () => {
     setLoggingOut(true);
-    await signOut({ redirect: false });
-    localStorage.clear();
-    sessionStorage.clear();
-    router.push('/login');
+
+    // Destroy Redis session (best-effort — don't block if it fails)
+    const redisToken = sessionStorage.getItem('candidate_session_token')
+    if (redisToken) {
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      fetch(`${backendUrl}/api/candidate/session/logout`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${redisToken}` },
+      }).catch(() => {})
+    }
+
+    sessionStorage.clear()
+    localStorage.clear()
+    await signOut({ redirect: false })
+    router.push('/login')
   };
 
   const handleReset = async () => {
@@ -331,6 +420,62 @@ export default function DashboardPage() {
         </span>
       </div>
 
+      {/* Cooldown countdown banner */}
+      {cooldownTimeLeft && (
+        <div className={styles.attemptsCard}>
+          <h2 className={styles.attemptsTitle}>⏳ Interview Cooldown Active</h2>
+          <p style={{ color: '#374151', fontSize: '15px', margin: 0 }}>
+            You can retry the interview after <strong style={{ fontWeight: 700 }}>{cooldownTimeLeft}</strong>.
+          </p>
+        </div>
+      )}
+
+      {/* Past Interview Attempts */}
+      {attempts.length > 0 && (
+        <div className={styles.attemptsCard}>
+          <h2 className={styles.attemptsTitle}>
+            Interview Attempts ({attempts.length}/3)
+          </h2>
+          <div className={styles.attemptsList}>
+            {attempts.map((attempt, index) => {
+              const date = attempt.completedAt
+                ? new Date(attempt.completedAt).toLocaleDateString('en-IN', {
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric',
+                  })
+                : '—';
+
+              const badgeClass =
+                attempt.result === 'PASS'
+                  ? styles.badgePass
+                  : attempt.result === 'FAIL'
+                  ? styles.badgeFail
+                  : attempt.result === 'WITHDRAWN'
+                  ? styles.badgeWithdrawn
+                  : attempt.result === 'ANTI_CHEAT'
+                  ? styles.badgeAntiCheat
+                  : styles.badgeCompleted;
+
+              return (
+                <div key={attempt.id} className={styles.attemptRow}>
+                  <span className={styles.attemptNumber}>#{index + 1}</span>
+                  <span className={badgeClass}>
+                    {attempt.result ?? 'COMPLETED'}
+                  </span>
+                  {attempt.overall_score != null && (
+                    <span className={styles.attemptScore}>
+                      Score: {attempt.overall_score}/100
+                    </span>
+                  )}
+                  <span className={styles.attemptDate}>{date}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div className={styles.phasesList}>
         {phases.map((phase, index) => (
           <div
@@ -383,6 +528,50 @@ export default function DashboardPage() {
                 }}
               >
                 View Results
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* No Attempts Left Dialog */}
+      {showNoAttemptsLeftDialog && (
+        <div className={styles.popupOverlay} onClick={() => setShowNoAttemptsLeftDialog(false)}>
+          <div className={styles.popupDialog} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.popupIcon}>🚫</div>
+            <h2 className={styles.popupTitle}>No Attempts Remaining</h2>
+            <p className={styles.popupMessage}>
+              You have used all 3 available interview attempts. No further interviews can be started.
+            </p>
+            <div className={styles.popupButtons}>
+              <button
+                className={styles.popupSecondaryButton}
+                onClick={() => setShowNoAttemptsLeftDialog(false)}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cooldown Active Dialog */}
+      {showCooldownDialog && (
+        <div className={styles.popupOverlay} onClick={() => setShowCooldownDialog(false)}>
+          <div className={styles.popupDialog} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.popupIcon}>⏳</div>
+            <h2 className={styles.popupTitle}>Cooldown Active</h2>
+            <p className={styles.popupMessage}>
+              {cooldownTimeLeft
+                ? <>You can retry the interview in <strong>{cooldownTimeLeft}</strong>.</>
+                : 'You are currently in cooldown and cannot start a new interview yet.'}
+            </p>
+            <div className={styles.popupButtons}>
+              <button
+                className={styles.popupSecondaryButton}
+                onClick={() => setShowCooldownDialog(false)}
+              >
+                OK
               </button>
             </div>
           </div>

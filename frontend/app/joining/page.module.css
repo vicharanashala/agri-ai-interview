@@ -11,11 +11,11 @@
 .content {
   max-width: 700px;
   width: 100%;
+  text-align: center;
 }
 
 .icon {
   font-size: 64px;
-  text-align: center;
   margin-bottom: 16px;
 }
 
@@ -23,210 +23,35 @@
   font-size: 36px;
   font-weight: 700;
   color: white;
-  text-align: center;
-  margin: 0 0 12px 0;
+  margin: 0 0 24px 0;
 }
 
-.subtitle {
+.message {
   font-size: 18px;
-  color: rgba(255, 255, 255, 0.9);
-  text-align: center;
-  margin: 0 0 32px 0;
-}
-
-.joiningCard {
-  background: white;
-  border-radius: 16px;
-  padding: 32px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
-}
-
-.section {
-  margin-bottom: 32px;
-  padding-bottom: 24px;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.section:last-of-type {
-  border-bottom: none;
-  margin-bottom: 0;
-  padding-bottom: 0;
-}
-
-.sectionTitle {
-  font-size: 20px;
-  font-weight: 700;
-  color: #1e293b;
-  margin: 0 0 16px 0;
-}
-
-.sectionSubtitle {
-  font-size: 14px;
-  color: #64748b;
-  margin: 0 0 16px 0;
-}
-
-.detailsTable {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.detailsTable tr {
-  border-bottom: 1px solid #f1f5f9;
-}
-
-.detailsTable tr:last-child {
-  border-bottom: none;
-}
-
-.label {
-  padding: 12px 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: #64748b;
-  width: 40%;
-  vertical-align: top;
-}
-
-.value {
-  padding: 12px 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: #1e293b;
-}
-
-.documentsList {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.documentItem {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 16px;
-  background: #f8fafc;
-  border-radius: 12px;
-  border: 1px solid #e2e8f0;
-  transition: all 0.2s ease;
-}
-
-.documentItem:hover {
-  background: #f0fdf4;
-  border-color: #bbf7d0;
-}
-
-.documentIcon {
-  font-size: 28px;
-  flex-shrink: 0;
-}
-
-.documentInfo {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.documentName {
-  font-size: 15px;
-  font-weight: 600;
-  color: #1e293b;
-}
-
-.documentDescription {
-  font-size: 13px;
-  color: #64748b;
-}
-
-.documentCheck {
-  font-size: 20px;
-  color: #94a3b8;
-  cursor: pointer;
-  padding: 4px;
-  transition: color 0.2s ease;
-}
-
-.documentCheck:hover {
-  color: #059669;
-}
-
-.actions {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 32px;
-}
-
-.downloadButton {
-  width: 100%;
-  background: linear-gradient(135deg, #059669 0%, #10b981 100%);
-  color: white;
-  border: none;
-  padding: 16px;
-  font-size: 16px;
-  font-weight: 600;
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 15px rgba(5, 150, 105, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-
-.downloadButton:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(5, 150, 105, 0.5);
-}
-
-.dashboardButton {
-  width: 100%;
-  background: white;
-  color: #64748b;
-  border: 2px solid #e2e8f0;
-  padding: 14px;
-  font-size: 16px;
-  font-weight: 600;
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.dashboardButton:hover {
-  background: #f8fafc;
-  border-color: #cbd5e1;
-}
-
-.note {
-  margin-top: 24px;
+  color: rgba(255, 255, 255, 0.95);
   background: rgba(255, 255, 255, 0.15);
   border-radius: 12px;
-  padding: 20px;
-}
-
-.note p {
-  color: white;
-  margin: 0;
-  font-size: 14px;
+  padding: 24px;
+  margin: 0 0 32px 0;
   line-height: 1.6;
 }
 
-.loading {
-  color: white;
-  font-size: 24px;
-  text-align: center;
+.dashboardButton {
+  background: white;
+  color: #059669;
+  border: none;
+  padding: 16px 32px;
+  font-size: 16px;
+  font-weight: 600;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
 }
 
-.error {
-  color: white;
-  font-size: 18px;
-  text-align: center;
-  padding: 40px;
-  background: rgba(220, 38, 38, 0.2);
-  border-radius: 12px;
+.dashboardButton:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
 }
 
 @media (max-width: 600px) {
@@ -234,23 +59,7 @@
     font-size: 28px;
   }
 
-  .joiningCard {
-    padding: 24px;
-  }
-
-  .label {
-    width: 35%;
-  }
-
-  .value {
-    width: 65%;
-  }
-
-  .documentItem {
-    flex-wrap: wrap;
-  }
-
-  .documentCheck {
-    align-self: flex-start;
+  .message {
+    font-size: 16px;
   }
 }

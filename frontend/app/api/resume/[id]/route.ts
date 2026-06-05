@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth-options'
 
-const BACKEND_URL = process.env.BACKEND_URL ?? 'http://backend:8000'
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
 
 export async function GET(
   request: NextRequest,
@@ -17,10 +17,12 @@ export async function GET(
     const { id } = await params
 
     // Proxy download request to FastAPI backend
+    const authHeader = request.headers.get('Authorization');
+    const downloadHeaders: Record<string, string> = { 'Accept': 'application/octet-stream' };
+    if (authHeader) downloadHeaders['Authorization'] = authHeader;
+
     const backendRes = await fetch(`${BACKEND_URL}/api/resume/${id}`, {
-      headers: {
-        'Accept': 'application/octet-stream',
-      },
+      headers: downloadHeaders,
     })
 
     if (!backendRes.ok) {

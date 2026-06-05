@@ -284,6 +284,113 @@
   padding: 100px 0;
 }
 
+/* Interview Attempts Card */
+.attemptsCard {
+  max-width: 700px;
+  margin: 0 auto 30px;
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 16px;
+  padding: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(8px);
+}
+
+.attemptsTitle {
+  font-size: 20px;
+  font-weight: 700;
+  color: white;
+  margin: 0 0 16px 0;
+}
+
+.attemptsList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.attemptRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.attemptNumber {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 14px;
+  font-weight: 600;
+  min-width: 28px;
+}
+
+.attemptDate {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 14px;
+  margin-left: auto;
+}
+
+.attemptScore {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+}
+
+.badgePass {
+  background: rgba(8, 203, 0, 0.2);
+  color: #08CB00;
+  border: 1px solid rgba(8, 203, 0, 0.4);
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.badgeFail {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.badgeWithdrawn {
+  background: rgba(245, 158, 11, 0.2);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.badgeAntiCheat {
+  background: rgba(168, 85, 247, 0.2);
+  color: #a855f7;
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.badgeCompleted {
+  background: rgba(100, 116, 139, 0.2);
+  color: #94a3b8;
+  border: 1px solid rgba(100, 116, 139, 0.4);
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
 /* Interview Status Card */
 .interviewStatusCard {
   max-width: 700px;

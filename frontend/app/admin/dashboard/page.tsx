@@ -5,6 +5,8 @@ import styles from "./dashboard.module.css";
 import { useRouter } from "next/navigation";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import LiveTab from "../../../components/admin/LiveTab";
+import EvaluationsTab from "../../../components/admin/EvaluationsTab";
+import OfferLetterTab from "../../../components/admin/OfferLetterTab";
 
 // Types
 interface Candidate {
@@ -21,6 +23,8 @@ interface Candidate {
   currentPhase: string;
   status: string;
   phases: PhaseStatus[];
+  attemptsDone: number;
+  maxAttempts: number;
   createdAt?: string;
 }
 
@@ -93,8 +97,8 @@ interface Guidelines {
 }
 
 // Tabs
-type Tab = "live" | "candidates" | "analytics" | "anti-cheat" | "settings";
-type SettingsTab = "guidelines" | "criteria" | "interview-config";
+type Tab = "live" | "candidates" | "analytics" | "evaluations" | "anti-cheat" | "settings";
+type SettingsTab = "guidelines" | "criteria" | "interview-config" | "anti-cheat" | "offer-letter";
 
 // Chart colors
 const CHART_COLORS = ["#08CB00", "#10b981", "#f59e0b", "#ef4444", "#059669", "#22c55e"];
@@ -117,11 +121,26 @@ const ADMIN_API_BASE =
 
 export default function AdminDashboard() {
   const router = useRouter();
-  // Authenticated fetch helper — browser automatically sends the admin_session
-  // cookie (httpOnly, path=/api/admin) with every proxied /api/admin/* request.
-  // No localStorage or X-Admin-Token header needed.
+
+  // Get the stored admin token (set by the login page).
+   // Send it as X-Admin-Token on every admin API call.
+  // This works for all deployment types: local, same-origin, cross-origin.
+  const getAdminToken = () => {
+    if (typeof window === "undefined") return null;
+    return localStorage.getItem("admin_token");
+  };
+
   const withAuth = (url: string, opts: RequestInit = {}) => {
-    return fetch(`${ADMIN_API_BASE}${url}`, { ...opts, credentials: "include" });
+    const token = getAdminToken();
+    const headers = {
+      ...(token ? { "X-Admin-Token": token } : {}),
+      ...((opts.headers as Record<string, string>) || {}),
+    };
+    return fetch(`${ADMIN_API_BASE}${url}`, {
+      ...opts,
+      headers,
+      credentials: "include",
+    });
   };
 
   const [activeTab, setActiveTab] = useState<Tab>("live");
@@ -146,9 +165,16 @@ export default function AdminDashboard() {
   const [guidelineContent, setGuidelineContent] = useState("");
   const [editingCriteria, setEditingCriteria] = useState<string | null>(null);
   const [criteriaForm, setCriteriaForm] = useState<Partial<EvaluationCriteria>>({});
-  const [interviewConfig, setInterviewConfig] = useState<{ max_questions: number }>({ max_questions: 10 });
+  const [interviewConfig, setInterviewConfig] = useState<{ max_questions: number; max_duration_minutes: number; cooldown_days: number; pass_threshold: number }>({ max_questions: 10, max_duration_minutes: 30, cooldown_days: 3, pass_threshold: 60 });
   const [maxQuestionsInput, setMaxQuestionsInput] = useState<number>(10);
+  const [maxDurationInput, setMaxDurationInput] = useState<number>(30);
+  const [cooldownDaysInput, setCooldownDaysInput] = useState<number>(3);
+  const [passThresholdInput, setPassThresholdInput] = useState<number>(60);
   const [savingConfig, setSavingConfig] = useState(false);
+  const [antiCheatConfig, setAntiCheatConfig] = useState<{ idle_threshold_ms: number; platform_idle_ms: number }>({ idle_threshold_ms: 15_000, platform_idle_ms: 15 * 60_000 });
+  const [idleThresholdInput, setIdleThresholdInput] = useState<number>(15);
+  const [platformIdleInput, setPlatformIdleInput] = useState<number>(15);
+  const [savingAntiCheat, setSavingAntiCheat] = useState(false);
   const [stats, setStats] = useState({ 
     totalCandidates: 0, 
     activeInterviews: 0, 
@@ -219,6 +245,7 @@ export default function AdminDashboard() {
         loadGuidelines().catch(err => console.error("loadGuidelines error:", err)),
         loadCriteria().catch(err => console.error("loadCriteria error:", err)),
         loadInterviewConfig().catch(err => console.error("loadInterviewConfig error:", err)),
+        loadAntiCheatConfig().catch(err => console.error("loadAntiCheatConfig error:", err)),
         loadGeoStats().catch(err => console.error("loadGeoStats error:", err)),
         loadStateFunnel().catch(err => console.error("loadStateFunnel error:", err)),
         loadViolations().catch(err => console.error("loadViolations error:", err)),
@@ -531,11 +558,57 @@ export default function AdminDashboard() {
       const res = await withAuth("/api/admin/settings/interview-config");
       if (res.ok) {
         const data = await res.json();
-        setInterviewConfig({ max_questions: data.max_questions });
+        setInterviewConfig({
+          max_questions: data.max_questions,
+          max_duration_minutes: data.max_duration_minutes,
+          cooldown_days: data.cooldown_days,
+          pass_threshold: data.pass_threshold ?? 60,
+        });
         setMaxQuestionsInput(data.max_questions);
+        setMaxDurationInput(data.max_duration_minutes ?? 30);
+        setCooldownDaysInput(data.cooldown_days ?? 3);
+        setPassThresholdInput(data.pass_threshold ?? 60);
       }
     } catch (err) {
       console.error("Failed to load interview config:", err);
+    }
+  };
+
+  const loadAntiCheatConfig = async () => {
+    try {
+      const res = await withAuth("/api/admin/anti-cheat");
+      if (res.ok) {
+        const data = await res.json();
+        setAntiCheatConfig(data);
+        setIdleThresholdInput(Math.round((data.idle_threshold_ms ?? 15000) / 1000));
+        setPlatformIdleInput(Math.round((data.platform_idle_ms ?? 900000) / 60000));
+      }
+    } catch (err) {
+      console.error("Failed to load anti-cheat config:", err);
+    }
+  };
+
+  const handleSaveAntiCheatConfig = async () => {
+    setSavingAntiCheat(true);
+    try {
+      const res = await withAuth("/api/admin/anti-cheat", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          idle_threshold_ms: idleThresholdInput * 1000,
+          platform_idle_ms: platformIdleInput * 60000,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAntiCheatConfig(data);
+        setIdleThresholdInput(Math.round((data.idle_threshold_ms ?? 15000) / 1000));
+        setPlatformIdleInput(Math.round((data.platform_idle_ms ?? 900000) / 60000));
+      }
+    } catch (err) {
+      console.error("Failed to save anti-cheat config:", err);
+    } finally {
+      setSavingAntiCheat(false);
     }
   };
 
@@ -545,12 +618,25 @@ export default function AdminDashboard() {
       const res = await withAuth("/api/admin/settings/interview-config", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ max_questions: maxQuestionsInput }),
+        body: JSON.stringify({
+        max_questions: maxQuestionsInput,
+        max_duration_minutes: maxDurationInput,
+        cooldown_days: cooldownDaysInput,
+        pass_threshold: passThresholdInput,
+      }),
       });
       if (res.ok) {
         const data = await res.json();
-        setInterviewConfig({ max_questions: data.max_questions });
+        setInterviewConfig({
+          max_questions: data.max_questions,
+          max_duration_minutes: data.max_duration_minutes,
+          cooldown_days: data.cooldown_days,
+          pass_threshold: data.pass_threshold ?? 60,
+        });
         setMaxQuestionsInput(data.max_questions);
+        setMaxDurationInput(data.max_duration_minutes ?? 30);
+        setCooldownDaysInput(data.cooldown_days ?? 3);
+        setPassThresholdInput(data.pass_threshold ?? 60);
       }
     } catch (err) {
       console.error("Failed to save interview config:", err);
@@ -674,6 +760,12 @@ export default function AdminDashboard() {
           📊 Analytics
         </button>
         <button
+          className={`${styles.tab} ${activeTab === "evaluations" ? styles.activeTab : ""}`}
+          onClick={() => setActiveTab("evaluations")}
+        >
+          📋 Evaluations
+        </button>
+        <button
           className={`${styles.tab} ${activeTab === "anti-cheat" ? styles.activeTab : ""}`}
           onClick={() => setActiveTab("anti-cheat")}
         >
@@ -762,6 +854,7 @@ export default function AdminDashboard() {
                       <th>State</th>
                       <th>Current Phase</th>
                       <th>Phase Progress</th>
+                      <th>Attempts</th>
                       <th>Resume</th>
                       <th>Created</th>
                     </tr>
@@ -791,6 +884,11 @@ export default function AdminDashboard() {
                               />
                             ))}
                           </div>
+                        </td>
+                        <td>
+                          <span className={styles.phaseBadge}>
+                            {candidate.attemptsDone}/{candidate.maxAttempts}
+                          </span>
                         </td>
                         <td>
                           {candidateResumes[candidate.id] ? (
@@ -1407,6 +1505,14 @@ export default function AdminDashboard() {
           </div>
         )}
 
+        {/* Evaluations Tab */}
+        {activeTab === "evaluations" && (
+          <EvaluationsTab
+            adminApiBase={ADMIN_API_BASE}
+            getAdminToken={getAdminToken}
+          />
+        )}
+
         {/* Anti-Cheat Tab */}
         {activeTab === "anti-cheat" && (
           <div className={styles.antiCheatContainer}>
@@ -1479,6 +1585,18 @@ export default function AdminDashboard() {
                 onClick={() => setSettingsTab("interview-config")}
               >
                 Interview Config
+              </button>
+              <button
+                className={`${styles.settingsTab} ${settingsTab === "anti-cheat" ? styles.activeSettingsTab : ""}`}
+                onClick={() => setSettingsTab("anti-cheat")}
+              >
+                Anti-Cheat
+              </button>
+              <button
+                className={`${styles.settingsTab} ${settingsTab === "offer-letter" ? styles.activeSettingsTab : ""}`}
+                onClick={() => setSettingsTab("offer-letter")}
+              >
+                Offer Letter
               </button>
             </div>
 
@@ -1611,12 +1729,12 @@ export default function AdminDashboard() {
             {settingsTab === "interview-config" && (
               <div className={styles.interviewConfigSection}>
                 <p className={styles.settingsDescription}>
-                  Configure how many questions each candidate will answer per interview session.
+                  Configure interview session limits and candidate cooldown period.
                 </p>
+
+                {/* Max Questions */}
                 <div className={styles.interviewConfigCard}>
-                  <label className={styles.interviewConfigLabel}>
-                    Maximum Questions Per Interview
-                  </label>
+                  <label className={styles.interviewConfigLabel}>Maximum Questions Per Interview</label>
                   <div className={styles.interviewConfigRow}>
                     <input
                       type="number"
@@ -1635,10 +1753,151 @@ export default function AdminDashboard() {
                     </button>
                   </div>
                   <p className={styles.interviewConfigHint}>
-                    Current value: <strong>{interviewConfig.max_questions}</strong>. New interviews will use this value.
+                    Current: <strong>{interviewConfig.max_questions}</strong> questions per session.
+                  </p>
+                </div>
+
+                {/* Max Duration */}
+                <div className={styles.interviewConfigCard} style={{ marginTop: "1rem" }}>
+                  <label className={styles.interviewConfigLabel}>Maximum Interview Duration</label>
+                  <div className={styles.interviewConfigRow}>
+                    <input
+                      type="number"
+                      min={5}
+                      max={120}
+                      value={maxDurationInput}
+                      onChange={(e) => setMaxDurationInput(Number(e.target.value))}
+                      className={styles.interviewConfigInput}
+                    />
+                    <span style={{ fontSize: "0.875rem", color: "#666", marginRight: "0.5rem" }}>minutes</span>
+                    <button
+                      onClick={handleSaveInterviewConfig}
+                      disabled={savingConfig || maxDurationInput === (interviewConfig.max_duration_minutes ?? 30)}
+                      className={styles.saveBtn}
+                    >
+                      {savingConfig ? "Saving…" : "Save"}
+                    </button>
+                  </div>
+                  <p className={styles.interviewConfigHint}>
+                    Current: <strong>{interviewConfig.max_duration_minutes ?? 30}</strong> minutes per session.
+                  </p>
+                </div>
+
+                {/* Cooldown Days */}
+                <div className={styles.interviewConfigCard} style={{ marginTop: "1rem" }}>
+                  <label className={styles.interviewConfigLabel}>Cooldown Period After Fail / Withdrawn</label>
+                  <div className={styles.interviewConfigRow}>
+                    <input
+                      type="number"
+                      min={0}
+                      max={365}
+                      value={cooldownDaysInput}
+                      onChange={(e) => setCooldownDaysInput(Number(e.target.value))}
+                      className={styles.interviewConfigInput}
+                    />
+                    <span style={{ fontSize: "0.875rem", color: "#666", marginRight: "0.5rem" }}>days</span>
+                    <button
+                      onClick={handleSaveInterviewConfig}
+                      disabled={savingConfig || cooldownDaysInput === (interviewConfig.cooldown_days ?? 3)}
+                      className={styles.saveBtn}
+                    >
+                      {savingConfig ? "Saving…" : "Save"}
+                    </button>
+                  </div>
+                  <p className={styles.interviewConfigHint}>
+                    Current: <strong>{interviewConfig.cooldown_days ?? 3}</strong> days. Set to 0 to disable.
+                  </p>
+                </div>
+
+                {/* Pass Threshold */}
+                <div className={styles.interviewConfigCard} style={{ marginTop: "1rem" }}>
+                  <label className={styles.interviewConfigLabel}>Pass Threshold (Score out of 100)</label>
+                  <div className={styles.interviewConfigRow}>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={passThresholdInput}
+                      onChange={(e) => setPassThresholdInput(Number(e.target.value))}
+                      className={styles.interviewConfigInput}
+                    />
+                    <span style={{ fontSize: "0.875rem", color: "#666", marginRight: "0.5rem" }}>/ 100</span>
+                    <button
+                      onClick={handleSaveInterviewConfig}
+                      disabled={savingConfig || passThresholdInput === (interviewConfig.pass_threshold ?? 60)}
+                      className={styles.saveBtn}
+                    >
+                      {savingConfig ? "Saving…" : "Save"}
+                    </button>
+                  </div>
+                  <p className={styles.interviewConfigHint}>
+                    Current: <strong>{interviewConfig.pass_threshold ?? 60}</strong>. Candidates scoring below this are marked FAIL.
                   </p>
                 </div>
               </div>
+            )}
+
+            {/* Anti-Cheat Settings Section */}
+            {settingsTab === "anti-cheat" && (
+              <div className={styles.interviewConfigSection}>
+                <p className={styles.settingsDescription}>
+                  Configure anti-cheat thresholds for candidate interviews and platform-wide inactivity timeouts.
+                </p>
+                <div className={styles.interviewConfigCard}>
+                  <label className={styles.interviewConfigLabel}>
+                    Interview Idle Threshold (seconds)
+                  </label>
+                  <div className={styles.interviewConfigRow}>
+                    <input
+                      type="number"
+                      min={5}
+                      max={300}
+                      value={idleThresholdInput}
+                      onChange={(e) => setIdleThresholdInput(Number(e.target.value))}
+                      className={styles.interviewConfigInput}
+                    />
+                    <span style={{ fontSize: '0.875rem', color: '#666' }}>seconds</span>
+                  </div>
+                  <p className={styles.interviewConfigHint}>
+                    After {idleThresholdInput}s of no activity during interview → 1st warning. Same trigger again → interview closed. Default: 15s.
+                  </p>
+                </div>
+                <div className={styles.interviewConfigCard} style={{ marginTop: '1rem' }}>
+                  <label className={styles.interviewConfigLabel}>
+                    Platform Idle Timeout (minutes)
+                  </label>
+                  <div className={styles.interviewConfigRow}>
+                    <input
+                      type="number"
+                      min={1}
+                      max={120}
+                      value={platformIdleInput}
+                      onChange={(e) => setPlatformIdleInput(Number(e.target.value))}
+                      className={styles.interviewConfigInput}
+                    />
+                    <span style={{ fontSize: '0.875rem', color: '#666' }}>minutes</span>
+                  </div>
+                  <p className={styles.interviewConfigHint}>
+                    After {platformIdleInput}min of no activity on any candidate page → forced re-login. Applies to all candidate pages except during live interview. Default: 15min.
+                  </p>
+                </div>
+                <button
+                  onClick={handleSaveAntiCheatConfig}
+                  disabled={
+                    savingAntiCheat ||
+                    idleThresholdInput === Math.round(antiCheatConfig.idle_threshold_ms / 1000)
+                  }
+                  className={styles.saveBtn}
+                  style={{ marginTop: '1rem' }}
+                >
+                  {savingAntiCheat ? "Saving…" : "Save Settings"}
+                </button>
+              </div>
+            )}
+
+            {/* Offer Letter Section */}
+            {settingsTab === "offer-letter" && (
+              <OfferLetterTab adminToken={getAdminToken()} />
             )}
           </div>
         )}

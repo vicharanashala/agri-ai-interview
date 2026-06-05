@@ -118,8 +118,10 @@ async def upload_resume(
     db.add(resume)
     db.commit()
 
-    if raw_text and raw_text.strip():
-        background_tasks.add_task(_run_llm_parse, resume_id, raw_text)
+    # Always trigger LLM parsing — even if raw_text is empty (unreadable PDF/DOCX),
+    # the parser will return "Not Available" for all fields so downstream uses
+    # have consistent, non-null data and don't need defensive null-checks everywhere.
+    background_tasks.add_task(_run_llm_parse, resume_id, raw_text or "")
 
     return ResumeUploadResponse(
         resumeId=resume_id,

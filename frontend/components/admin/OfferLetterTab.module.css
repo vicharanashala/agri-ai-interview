@@ -1,0 +1,308 @@
+/* ─── Container ─────────────────────────────────────────────────────── */
+.container {
+  padding: 24px 28px;
+  max-width: 1100px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.loading {
+  padding: 40px;
+  text-align: center;
+  font-size: 15px;
+  color: #666;
+}
+
+/* ─── Header ─────────────────────────────────────────────────────────── */
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid #ccc;
+  padding-bottom: 16px;
+}
+
+.title {
+  margin: 0 0 4px;
+  font-size: 20px;
+  font-weight: 700;
+  color: #000;
+}
+
+.subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: #555;
+}
+
+.headerActions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.previewBtn,
+.saveBtn {
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid #000;
+  background: #fff;
+  color: #000;
+}
+
+.previewBtn:hover,
+.saveBtn:hover {
+  background: #f0f0f0;
+}
+
+.previewBtn:disabled,
+.saveBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ─── Banners ──────────────────────────────────────────────────────── */
+.successBanner {
+  padding: 10px 14px;
+  border: 1px solid #080;
+  color: #060;
+  font-size: 14px;
+  font-weight: 600;
+  background: #f0fff0;
+}
+
+.errorBanner {
+  padding: 10px 14px;
+  border: 1px solid #c00;
+  color: #600;
+  font-size: 14px;
+  font-weight: 600;
+  background: #fff0f0;
+}
+
+/* ─── Grid / sections ──────────────────────────────────────────────── */
+.grid {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.section {
+  border: 1px solid #000;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #000;
+  border-bottom: 1px solid #ccc;
+  padding-bottom: 8px;
+}
+
+.sectionHint {
+  margin: 0;
+  font-size: 12px;
+  color: #666;
+}
+
+/* ─── Field grid ───────────────────────────────────────────────────── */
+.fieldGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #000;
+}
+
+.input {
+  padding: 8px 12px;
+  border: 1px solid #000;
+  color: #000;
+  font-size: 14px;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+  background: #fff;
+}
+
+.input:focus {
+  border-color: #000;
+  background: #fafafa;
+}
+
+.input::placeholder {
+  color: #999;
+}
+
+/* ─── Dynamic list ──────────────────────────────────────────────────── */
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.listItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid #ccc;
+  font-size: 13px;
+  color: #000;
+  background: #fff;
+}
+
+.listItem span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.removeBtn {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border: 1px solid #c00;
+  background: #fff;
+  color: #c00;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.removeBtn:hover {
+  background: #ffe0e0;
+}
+
+.addRow {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.addRow .input {
+  flex: 1;
+}
+
+.addBtn {
+  flex-shrink: 0;
+  padding: 8px 16px;
+  border: 1px solid #000;
+  background: #fff;
+  color: #000;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.addBtn:hover {
+  background: #f0f0f0;
+}
+
+/* ─── Placeholder grid ──────────────────────────────────────────────── */
+.placeholderGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 4px 0;
+}
+
+.placeholderChip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid #ccc;
+  font-size: 11px;
+}
+
+.placeholderChip code {
+  color: #000;
+  font-family: monospace;
+  font-weight: 700;
+}
+
+.placeholderChip span {
+  color: #555;
+}
+
+.code {
+  background: #f0f0f0;
+  border: 1px solid #ccc;
+  padding: 1px 5px;
+  font-family: monospace;
+  font-size: 12px;
+  color: #000;
+}
+
+/* ─── Template textarea ─────────────────────────────────────────────── */
+.templateArea {
+  width: 100%;
+  min-height: 400px;
+  padding: 12px 14px;
+  border: 1px solid #000;
+  color: #000;
+  font-family: monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  resize: vertical;
+  outline: none;
+  box-sizing: border-box;
+  background: #fff;
+}
+
+.templateArea:focus {
+  background: #fafafa;
+}
+
+.templateArea::placeholder {
+  color: #999;
+}
+
+/* ─── Footer save ───────────────────────────────────────────────────── */
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 4px;
+  border-top: 1px solid #ccc;
+  padding-top: 16px;
+}
+
+/* ─── Scrollbar styling ─────────────────────────────────────────────── */
+.list::-webkit-scrollbar {
+  width: 5px;
+}
+.list::-webkit-scrollbar-track {
+  background: #f0f0f0;
+}
+.list::-webkit-scrollbar-thumb {
+  background: #ccc;
+}

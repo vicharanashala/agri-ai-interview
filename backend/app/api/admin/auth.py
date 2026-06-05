@@ -7,6 +7,7 @@ either flow does not affect the other.
 """
 from fastapi import APIRouter, HTTPException, Response, Cookie, Header
 import os
+import json
 from pydantic import BaseModel
 from typing import Optional
 import bcrypt
@@ -23,8 +24,38 @@ _ADMINS = {
     }
 }
 
-# Active session tokens: token → {admin_id, email}
-_active_tokens: dict[str, dict] = {}
+# ── Redis-backed session store ────────────────────────────────────────────────
+# Sessions survive backend restarts/redeployments.
+_ADMIN_SESSION_PREFIX = "admin_session:"
+_ADMIN_SESSION_TTL = 60 * 60 * 24 * 7  # 7 days, matches cookie max_age
+
+
+def _get_redis():
+    from app.core.redis import get_redis_client
+    return get_redis_client()
+
+
+def _redis_get(token: str) -> Optional[dict]:
+    """Return session dict for a token, or None if not found/expired."""
+    raw = _get_redis().get(f"{_ADMIN_SESSION_PREFIX}{token}")
+    if raw is None:
+        return None
+    return json.loads(raw)
+
+
+def _redis_set(token: str, session: dict) -> None:
+    """Store a session under the given token with TTL."""
+    _get_redis().setex(
+        f"{_ADMIN_SESSION_PREFIX}{token}",
+        _ADMIN_SESSION_TTL,
+        json.dumps(session),
+    )
+
+
+def _redis_delete(token: str) -> None:
+    """Revoke a session."""
+    _get_redis().delete(f"{_ADMIN_SESSION_PREFIX}{token}")
+
 
 # Cookie-based session constants
 # path=/api/admin matches the FastAPI origin (localhost:8000/api/admin/*)
@@ -32,7 +63,7 @@ _active_tokens: dict[str, dict] = {}
 # The cookie is NOT sent to other origins or paths, keeping it isolated.
 _ADMIN_COOKIE_NAME = "admin_session"
 _ADMIN_COOKIE_PATH = "/api/admin"
-_ADMIN_COOKIE_MAX_AGE = 60 * 60 * 24 * 7  # 7 days
+_ADMIN_COOKIE_MAX_AGE = _ADMIN_SESSION_TTL
 
 router = APIRouter(prefix="/api/admin/auth", tags=["admin-auth"])
 
@@ -80,10 +111,10 @@ async def admin_login(request: AdminLoginRequest, response: Response):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     token = create_token()
-    _active_tokens[token] = {
+    _redis_set(token, {
         "admin_id": admin["id"],
         "email": admin["email"],
-    }
+    })
 
     # secure=True only when running in production (HTTPS) — prevents cookie
     # being silently ignored on HTTP dev URLs (e.g. localhost:3000).
@@ -117,8 +148,8 @@ async def admin_logout(response: Response, admin_session: Optional[str] = Cookie
     clear the cookie.  Only the admin_session cookie is touched — the
     candidate NextAuth session is not affected.
     """
-    if admin_session and admin_session in _active_tokens:
-        del _active_tokens[admin_session]
+    if admin_session:
+        _redis_delete(admin_session)
 
     response.set_cookie(
         key=_ADMIN_COOKIE_NAME,
@@ -144,10 +175,9 @@ async def get_admin_session(
     """
     # Accept X-Admin-Token header (preferred for cross-origin / programmatic calls)
     token = x_admin_token or admin_session
-    if not token or token not in _active_tokens:
+    session = _redis_get(token) if token else None
+    if not session:
         raise HTTPException(status_code=401, detail="Not authenticated")
-
-    session = _active_tokens[token]
     return {
         "valid": True,
         "admin_id": session["admin_id"],
@@ -158,10 +188,9 @@ async def get_admin_session(
 @router.get("/verify")
 async def verify_token(admin_session: Optional[str] = Cookie(None)):
     """Check whether an admin session cookie is valid and return session info."""
-    if not admin_session or admin_session not in _active_tokens:
+    session = _redis_get(admin_session) if admin_session else None
+    if not session:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
-
-    session = _active_tokens[admin_session]
     return {
         "valid": True,
         "admin_id": session["admin_id"],

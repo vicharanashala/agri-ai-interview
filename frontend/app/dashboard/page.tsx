@@ -305,24 +305,7 @@ export default function DashboardPage() {
     router.push('/login')
   };
 
-  const handleReset = async () => {
-    // Clear ALL candidate-related data from localStorage and sessionStorage
-    localStorage.clear();
-    sessionStorage.clear();
-
-    // Wipe DB (User + Candidate) and in-memory interview state — no auth required
-    try {
-      await fetch('http://localhost:8000/api/dev/reset', { method: 'POST' });
-    } catch (e) {
-      console.error('[handleReset] Backend reset failed:', e);
-    }
-
-    // Sign out of NextAuth (destroys session cookie) and redirect to login
-    await signOut({ redirect: false });
-    window.location.href = '/login';
-  };
-
-  const handleViewSummary = () => {
+const handleViewSummary = () => {
     router.push('/summary');
   };
 
@@ -498,11 +481,7 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      <div className={styles.actions}>
-        <button onClick={handleReset} className={styles.resetButton}>
-          Reset Progress
-        </button>
-      </div>
+
 
       {/* Interview Already Done Popup */}
       {showAlreadyDoneDialog && (

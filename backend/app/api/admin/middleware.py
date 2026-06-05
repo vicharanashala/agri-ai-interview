@@ -16,10 +16,14 @@ _INTERNAL_SERVICE_TOKEN = os.environ.get("INTERNAL_SERVICE_TOKEN", "")
 _ADMIN_COOKIE_NAME = "admin_session"
 
 
-def get_auth_token_store() -> dict[str, dict]:
-    """Lazily access the token store from auth.py to avoid circular imports."""
-    from app.api.admin import auth as auth_module
-    return auth_module._active_tokens
+def _redis_get(token: str) -> Optional[dict]:
+    """Return session dict for a token from Redis, or None if not found/expired."""
+    from app.core.redis import get_redis_client
+    import json
+    raw = get_redis_client().get(f"admin_session:{token}")
+    if raw is None:
+        return None
+    return json.loads(raw)
 
 
 def require_admin_auth(
@@ -48,8 +52,7 @@ def require_admin_auth(
             detail="Missing admin authentication — provide X-Admin-Token header or have admin_session cookie",
         )
 
-    store = get_auth_token_store()
-    session = store.get(token)
+    session = _redis_get(token)
 
     if not session:
         raise HTTPException(

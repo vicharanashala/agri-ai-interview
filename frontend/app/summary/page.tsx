@@ -35,7 +35,7 @@ export default function SummaryPage() {
     const fetchCooldown = async () => {
       try {
         const res = await fetch('/api/candidate/attempts', {
-          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+          headers: { Authorization: `Bearer ${sessionStorage.getItem('candidate_session_token')}` },
         });
         if (res.ok) {
           const data = await res.json();

@@ -7,6 +7,7 @@ import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveCo
 import LiveTab from "../../../components/admin/LiveTab";
 import EvaluationsTab from "../../../components/admin/EvaluationsTab";
 import OfferLetterTab from "../../../components/admin/OfferLetterTab";
+import DocumentsTab from "../../../components/admin/DocumentsTab";
 
 // Types
 interface Candidate {
@@ -26,6 +27,7 @@ interface Candidate {
   attemptsDone: number;
   maxAttempts: number;
   createdAt?: string;
+  documentsSubmitted: boolean;
 }
 
 interface ParsedResumeData {
@@ -97,7 +99,7 @@ interface Guidelines {
 }
 
 // Tabs
-type Tab = "live" | "candidates" | "analytics" | "evaluations" | "anti-cheat" | "settings";
+type Tab = "live" | "candidates" | "analytics" | "evaluations" | "anti-cheat" | "settings" | "documents";
 type SettingsTab = "guidelines" | "criteria" | "interview-config" | "anti-cheat" | "offer-letter";
 
 // Chart colors
@@ -107,9 +109,7 @@ const PHASE_LABELS: Record<string, string> = {
   onboarding: "Onboarding",
   interview: "Interview",
   summary: "Summary",
-  offer: "Offer",
-  signing: "Signing",
-  joining: "Joining",
+  documents: "Documents",
 };
 
 // Points to the Next.js rewrite proxy so the browser talks to a single origin.
@@ -770,6 +770,12 @@ export default function AdminDashboard() {
           onClick={() => setActiveTab("anti-cheat")}
         >
           🛡️ Anti-Cheat
+        </button>
+        <button
+          className={`${styles.tab} ${activeTab === "documents" ? styles.activeTab : ""}`}
+          onClick={() => setActiveTab("documents")}
+        >
+          📎 Documents
         </button>
         <button
           className={`${styles.tab} ${activeTab === "settings" ? styles.activeTab : ""}`}
@@ -1511,6 +1517,11 @@ export default function AdminDashboard() {
             adminApiBase={ADMIN_API_BASE}
             getAdminToken={getAdminToken}
           />
+        )}
+
+        {/* Documents Tab */}
+        {activeTab === "documents" && (
+          <DocumentsTab adminToken={getAdminToken()} />
         )}
 
         {/* Anti-Cheat Tab */}

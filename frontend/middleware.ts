@@ -7,9 +7,7 @@ const protectedRoutes = [
   '/interview',
   '/onboarding',
   '/summary',
-  '/offer',
-  '/signing',
-  '/joining',
+  '/upload-documents',
 ];
 
 // Routes only accessible when NOT logged in (redirect to dashboard)

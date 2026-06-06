@@ -18,7 +18,7 @@ from app.api.admin.middleware import require_admin_auth
 router = APIRouter(prefix="/api/admin", tags=["admin-candidates"])
 
 # Phase definitions in order
-PHASES = ["onboarding", "interview", "summary", "offer", "signing", "joining"]
+PHASES = ["onboarding", "interview", "summary", "documents"]
 PHASE_ORDER = {p: i for i, p in enumerate(PHASES)}  # {"onboarding": 0, "interview": 1, ...}
 
 
@@ -47,6 +47,7 @@ class CandidateResponse(BaseModel):
     status: str
     phases: List[PhaseStatus]
     createdAt: Optional[str] = None
+    documentsSubmitted: bool = False
 
 
 def _build_phases(current_phase: str) -> List[PhaseStatus]:
@@ -93,6 +94,7 @@ def _candidate_to_response(cand: Candidate, user_email: Optional[str]) -> Candid
         status="active",
         phases=_build_phases(current_phase),
         createdAt=cand.createdAt.isoformat() if cand.createdAt else datetime.now().isoformat(),
+        documentsSubmitted=cand.documentsSubmitted,
     )
 
 
@@ -484,7 +486,7 @@ async def get_stats(db: Session = Depends(get_db), _admin=Depends(require_admin_
 
     # Status distribution (active = not completed)
     active_count = db.query(func.count(Candidate.id)).filter(
-        Candidate.currentPhase.notin_(["joining", "completed"])
+        Candidate.currentPhase.notin_(["documents", "completed"])
     ).scalar() or 0
     completed_count = total - active_count
 
@@ -638,15 +640,7 @@ async def get_stats_by_state(
         s = row.state
         phase = row.currentPhase or "onboarding"
         if s not in state_data:
-            state_data[s] = {
-                "state": s,
-                "onboarding": 0,
-                "interview": 0,
-                "summary": 0,
-                "offer": 0,
-                "signing": 0,
-                "joining": 0,
-            }
+            state_data[s] = {"state": s, **{p: 0 for p in PHASES}}
         if phase in state_data[s]:
             state_data[s][phase] += row.count
 

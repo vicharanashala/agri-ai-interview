@@ -80,6 +80,7 @@ model Candidate {
   interviewSessions InterviewSession[]
   phaseHistory      PhaseHistory[]
   resumes           Resume[]
+  documents         CandidateDocument[]
   
   // Current pipeline phase (onboarding | interview | summary | offer | signing | joining)
   currentPhase      String   @default("onboarding")
@@ -90,6 +91,9 @@ model Candidate {
   passedAndVisitedSummary Boolean @default(false)
   // Flag: candidate visited joining details
   joiningDetailsVisited Boolean  @default(false)
+  
+  // Flag: candidate submitted documents (Phase 4)
+  documentsSubmitted Boolean @default(false)
   
   // Signed offer letter record (one per candidate)
   signedOfferLetter SignedOfferLetter?
@@ -108,6 +112,22 @@ model SignedOfferLetter {
   createdAt     DateTime  @default(now())
 
   @@map("signed_offer_letters")
+}
+
+model CandidateDocument {
+  id          String    @id @default(cuid())
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  fieldName   String    // field key from DOCUMENT_FIELDS
+  fileIndex   Int       @default(1)            // allows multiple files per field (semester marksheets, payslips, etc.)
+  fileName    String
+  fileType    String    // 'pdf' | 'docx' | 'doc'
+  fileData    String    // file stored as base64-encoded string
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([candidateId, fieldName, fileIndex])
+  @@index([candidateId])
 }
 
 model VerificationToken {

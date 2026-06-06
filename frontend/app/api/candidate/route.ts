@@ -117,18 +117,14 @@ const PHASE_MAP: Record<number, string> = {
   1: "onboarding",
   2: "interview",
   3: "summary",
-  4: "offer",
-  5: "signing",
-  6: "joining",
+  4: "documents",
 };
 
 const REVERSE_PHASE_MAP: Record<string, number> = {
   "onboarding": 1,
   "interview": 2,
   "summary": 3,
-  "offer": 4,
-  "signing": 5,
-  "joining": 6,
+  "documents": 4,
 };
 
 export async function PATCH(request: NextRequest) {
@@ -139,7 +135,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { phase, offerLetterViewed, passedAndVisitedSummary, joiningDetailsVisited } = body;
+    const { phase, offerLetterViewed, passedAndVisitedSummary, joiningDetailsVisited, documentsSubmitted } = body;
 
     const user = await prisma.user.findUnique({ where: { email: session.user.email } });
     if (!user) {
@@ -159,17 +155,24 @@ export async function PATCH(request: NextRequest) {
     if (joiningDetailsVisited !== undefined) {
       updateData.joiningDetailsVisited = joiningDetailsVisited;
     }
+    if (documentsSubmitted !== undefined) {
+      updateData.documentsSubmitted = documentsSubmitted;
+    }
 
     const candidate = await prisma.candidate.update({
       where: { userId: user.id },
       data: updateData,
     });
 
+    // Cast to include documentsSubmitted — Prisma types regenerated after schema change
+    const c = candidate as typeof candidate & { documentsSubmitted: boolean };
+
     return NextResponse.json({
-      currentPhase: candidate.currentPhase,
-      offerLetterViewed: candidate.offerLetterViewed,
-      passedAndVisitedSummary: candidate.passedAndVisitedSummary,
-      joiningDetailsVisited: candidate.joiningDetailsVisited,
+      currentPhase: c.currentPhase,
+      offerLetterViewed: c.offerLetterViewed,
+      passedAndVisitedSummary: c.passedAndVisitedSummary,
+      joiningDetailsVisited: c.joiningDetailsVisited,
+      documentsSubmitted: c.documentsSubmitted,
     }, { status: 200 });
   } catch (error) {
     console.error("Error updating candidate phase:", error);

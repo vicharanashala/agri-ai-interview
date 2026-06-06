@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import styles from './page.module.css';
 
-type Phase = 1 | 2 | 3 | 4 | 5 | 6;
+type Phase = 1 | 2 | 3 | 4;
 
 interface PhaseInfo {
   id: Phase;
@@ -35,7 +35,6 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [interviewResult, setInterviewResult] = useState<EvaluationResult | null>(null);
   const [hasCompletedInterview, setHasCompletedInterview] = useState(false);
-  const [joiningCompleted, setJoiningCompleted] = useState(false);
   const [showAlreadyDoneDialog, setShowAlreadyDoneDialog] = useState(false);
   const [showNoAttemptsLeftDialog, setShowNoAttemptsLeftDialog] = useState(false);
   const [showCooldownDialog, setShowCooldownDialog] = useState(false);
@@ -55,9 +54,7 @@ export default function DashboardPage() {
       'onboarding': 1,
       'interview':  2,
       'summary':    3,
-      'offer':      4,
-      'signing':    5,
-      'joining':    6,
+      'documents':  4,
     };
 
     const checkProfile = async () => {
@@ -75,32 +72,21 @@ export default function DashboardPage() {
         const dbPhaseNum = (DB_PHASE_NUM[candidate.currentPhase] ?? 1) as Phase;
 
         // 2. Pull latest flag values from DB (authoritative) and localStorage (for in-flight updates)
-        const dbOfferViewed     = !!candidate.offerLetterViewed;
         const dbSummaryVisited  = !!candidate.passedAndVisitedSummary;
-        const dbJoiningVisited  = !!candidate.joiningDetailsVisited;
-        const lsOfferViewed     = localStorage.getItem('offerLetterViewed') === 'true';
         const lsSummaryVisited  = localStorage.getItem('passedAndVisitedSummary') === 'true';
-        const lsJoiningVisited  = localStorage.getItem('joiningDetailsVisited') === 'true';
 
-        const offerViewed    = dbOfferViewed    || lsOfferViewed;
         const summaryVisited = dbSummaryVisited || lsSummaryVisited;
-        const joiningVisited = dbJoiningVisited || lsJoiningVisited;
 
         // 3. Reconstruct actual phase from DB phase + flags
-        // Flags can push the phase forward beyond what DB's currentPhase alone says
         let actualPhase: Phase = dbPhaseNum;
 
-        if (summaryVisited && actualPhase < 4) actualPhase = 4;
-        if (offerViewed    && actualPhase < 5) actualPhase = 5;
-        if (joiningVisited) setJoiningCompleted(true);
+        if (summaryVisited && actualPhase < 3) actualPhase = 3;
 
         setCurrentPhase(actualPhase);
         setHasCompletedInterview(actualPhase >= 3);
 
-        // Sync storage flags from DB (keeps localStorage in sync for downstream pages)
-        if (dbOfferViewed)    localStorage.setItem('offerLetterViewed',      'true');
+        // Sync storage flags from DB
         if (dbSummaryVisited) localStorage.setItem('passedAndVisitedSummary', 'true');
-        if (dbJoiningVisited) localStorage.setItem('joiningDetailsVisited',   'true');
 
         // Persist candidate info in sessionStorage for downstream pages (offer letter, etc.)
         if (candidate.fullName) sessionStorage.setItem('candidateName',  candidate.fullName);
@@ -195,21 +181,9 @@ export default function DashboardPage() {
     },
     {
       id: 4,
-      name: 'View Offer Letter',
-      description: 'Check your interview results and offer',
+      name: 'Upload Documents',
+      description: 'Submit required documents to complete the process',
       status: currentPhase > 4 ? 'completed' : currentPhase >= 4 ? 'current' : 'locked',
-    },
-    {
-      id: 5,
-      name: 'Submit Signed Offer',
-      description: 'Upload your signed offer letter',
-      status: currentPhase > 5 ? 'completed' : currentPhase >= 5 ? 'current' : 'locked',
-    },
-    {
-      id: 6,
-      name: 'Joining Details',
-      description: 'Complete your joining formalities',
-      status: joiningCompleted || currentPhase > 6 ? 'completed' : currentPhase >= 6 ? 'current' : 'locked',
     },
   ];
 
@@ -253,13 +227,7 @@ export default function DashboardPage() {
           router.push('/summary');
           break;
         case 4:
-          router.push('/offer');
-          break;
-        case 5:
-          router.push('/signing');
-          break;
-        case 6:
-          router.push('/joining');
+          router.push('/upload-documents');
           break;
       }
     }
@@ -279,7 +247,7 @@ export default function DashboardPage() {
   const handleAdvancePhase = (completedPhase: Phase) => {
     // Only advance if the current phase is completed
     // This is called by child pages when they finish their tasks
-    if (completedPhase === currentPhase && currentPhase < 6) {
+    if (completedPhase === currentPhase && currentPhase < 4) {
       const nextPhase = (currentPhase + 1) as Phase;
       setCurrentPhase(nextPhase);
       sessionStorage.setItem('interviewPhase', String(nextPhase));
@@ -303,38 +271,6 @@ export default function DashboardPage() {
     localStorage.clear()
     await signOut({ redirect: false })
     router.push('/login')
-  };
-
-const handleViewSummary = () => {
-    router.push('/summary');
-  };
-
-  const handleRetakeInterview = async () => {
-    // Clear interview-related data but keep onboarding info
-    sessionStorage.removeItem('interviewEvaluation');
-    sessionStorage.removeItem('currentInterview');
-    sessionStorage.removeItem('interviewConversationHistory');
-    sessionStorage.removeItem('interviewCompleted');
-    
-    // Also clear any existing interview session from backend memory
-    try {
-      await fetch('/api/interview/reset', {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-    } catch (error) {
-      console.error('Error clearing interview sessions:', error);
-    }
-    
-    sessionStorage.setItem('interviewPhase', '2');
-    setCurrentPhase(2);
-    router.push('/interview');
-  };
-
-  const handleViewOfferLetter = () => {
-    router.push('/offer');
   };
 
   const isPassed = interviewResult && interviewResult.overall_score >= 60;
@@ -395,11 +331,11 @@ const handleViewSummary = () => {
         <div className={styles.progressBar}>
           <div 
             className={styles.progressFill} 
-            style={{ width: `${((currentPhase - 1) / 5) * 100}%` }}
+            style={{ width: `${((currentPhase - 1) / 3) * 100}%` }}
           />
         </div>
         <span className={styles.progressPercent}>
-          {Math.round(((currentPhase - 1) / 5) * 100)}% Complete
+          {Math.round(((currentPhase - 1) / 3) * 100)}% Complete
         </span>
       </div>
 

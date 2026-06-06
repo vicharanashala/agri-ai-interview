@@ -57,6 +57,7 @@ class Candidate(Base):
     offerLetterViewed = Column(Boolean, default=False)
     passedAndVisitedSummary = Column(Boolean, default=False)
     joiningDetailsVisited = Column(Boolean, default=False)
+    documentsSubmitted = Column(Boolean, default=False)
 
     createdAt = Column(DateTime, default=_utcnow)
     updatedAt = Column(DateTime, default=_utcnow, onupdate=_utcnow)
@@ -177,3 +178,19 @@ class SignedOfferLetter(Base):
     signatureName = Column(String, nullable=False)
     signedAt = Column(DateTime, nullable=False, default=_utcnow)
     createdAt = Column(DateTime, default=_utcnow)
+
+
+class CandidateDocument(Base):
+    """Candidate document — mirrors frontend/prisma/schema.prisma CandidateDocument table."""
+
+    __tablename__ = "CandidateDocument"
+
+    id = Column(String, primary_key=True)
+    candidateId = Column(String, nullable=False)
+    fieldName = Column(String, nullable=False)  # field key from DOCUMENT_FIELDS
+    fileIndex = Column(Integer, nullable=False, default=1)  # multiple files per field
+    fileName = Column(String, nullable=False)
+    fileType = Column(String, nullable=False)   # 'pdf' | 'docx' | 'doc'
+    fileData = Column(Text, nullable=False)     # Base64-encoded file bytes
+    createdAt = Column(DateTime, default=_utcnow)
+    updatedAt = Column(DateTime, default=_utcnow, onupdate=_utcnow)

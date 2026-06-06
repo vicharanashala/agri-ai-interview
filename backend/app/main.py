@@ -7,10 +7,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Request
 
 from app.core.config import settings as app_settings
-from app.api.admin import auth, candidates, settings as admin_settings
+from app.api.admin import auth, candidates, settings as admin_settings, documents as admin_documents
 from app.api.candidate import auth as candidate_auth
 from app.api.candidate.session import router as candidate_session_router
 from app.api.candidate.route import router as candidate_router
+from app.api.candidate.documents import router as candidate_documents_router
 from app.api.anti_cheat import router as anti_cheat_router
 from app.api import interview, joining_details, offer
 from app.api.interview.queue import router as interview_queue_router
@@ -59,6 +60,7 @@ async def debug_headers(request: Request):
 app.include_router(auth.router)
 app.include_router(candidates.router)
 app.include_router(admin_settings.router)
+app.include_router(admin_documents.router)
 
 
 from app.middleware.candidate_auth import get_candidate_session
@@ -79,4 +81,5 @@ app.include_router(resume_router)
 app.include_router(candidate_auth.router)
 app.include_router(candidate_session_router)
 app.include_router(candidate_router)
+app.include_router(candidate_documents_router)
 app.include_router(anti_cheat_router)

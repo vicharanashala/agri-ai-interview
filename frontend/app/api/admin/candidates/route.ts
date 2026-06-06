@@ -26,7 +26,21 @@ export async function GET(request: NextRequest) {
     const district = searchParams.get("district");
 
     const rows = await prisma.candidate.findMany({
-      include: { user: { select: { email: true } } },
+      select: {
+        id: true,
+        fullName: true,
+        phone: true,
+        state: true,
+        district: true,
+        currentRole: true,
+        yearsOfExperience: true,
+        farmingBackground: true,
+        primaryExpertise: true,
+        currentPhase: true,
+        documentsSubmitted: true,
+        createdAt: true,
+        user: { select: { email: true, id: true } },
+      },
       orderBy: { createdAt: "desc" },
     });
 
@@ -44,6 +58,7 @@ export async function GET(request: NextRequest) {
       farmingBackground: string | null;
       primaryExpertise: string | null;
       currentPhase: string;
+      documentsSubmitted: boolean;
       status: string;
       phases: ReturnType<typeof buildPhases>;
       createdAt: string;
@@ -65,6 +80,7 @@ export async function GET(request: NextRequest) {
         farmingBackground: row.farmingBackground ?? null,
         primaryExpertise: row.primaryExpertise ?? null,
         currentPhase,
+        documentsSubmitted: row.documentsSubmitted ?? false,
         status: currentPhase === "joining" ? "completed" : "active",
         phases: buildPhases(currentPhase),
         createdAt: row.createdAt.toISOString(),

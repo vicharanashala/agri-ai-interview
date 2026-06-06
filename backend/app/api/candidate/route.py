@@ -22,19 +22,18 @@ _PHASE_MAP = {
     1: "onboarding",
     2: "interview",
     3: "summary",
-    4: "offer",
-    5: "signing",
-    6: "joining",
+    4: "documents",
 }
 
 
 # ── Request / Response models ─────────────────────────────────────────────────
 
 class CandidatePatchRequest(BaseModel):
-    phase: Optional[int] = None          # 1-6
+    phase: Optional[int] = None          # 1-4
     offerLetterViewed: Optional[bool] = None
     passedAndVisitedSummary: Optional[bool] = None
     joiningDetailsVisited: Optional[bool] = None
+    documentsSubmitted: Optional[bool] = None
 
 
 class CandidatePatchResponse(BaseModel):
@@ -80,7 +79,7 @@ async def patch_candidate(request: Request, body: CandidatePatchRequest):
     """
     Update the candidate's currentPhase and/or milestone flags in PostgreSQL.
 
-    phase values: 1=onboarding, 2=interview, 3=summary, 4=offer, 5=signing, 6=joining
+    phase values: 1=onboarding, 2=interview, 3=summary, 4=documents
     """
     candidate_id = _get_candidate_id_from_request(request)
 
@@ -100,6 +99,9 @@ async def patch_candidate(request: Request, body: CandidatePatchRequest):
 
     if body.joiningDetailsVisited is not None:
         updates["joiningDetailsVisited"] = body.joiningDetailsVisited
+
+    if body.documentsSubmitted is not None:
+        updates["documentsSubmitted"] = body.documentsSubmitted
 
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")

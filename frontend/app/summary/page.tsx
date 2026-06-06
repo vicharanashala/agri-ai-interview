@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import styles from './page.module.css';
+import { syncPhaseToDb } from '@/lib/phaseSync';
 
 interface Attempt {
   id: string;
@@ -28,8 +29,11 @@ export default function SummaryPage() {
     setScore(storedScore ? Number(storedScore) : null);
     setEndReason(storedEndReason);
 
-    // Mark summary as visited so dashboard unlocks the next phase (offer letter = phase 4)
+    // Mark summary as visited and unlock Phase 4 (Upload Documents) for PASS candidates
     localStorage.setItem('summaryVisited', 'true');
+    if (storedResult === 'PASS') {
+      syncPhaseToDb(4);
+    }
 
     // Fetch cooldown days from the admin-configured setting
     const fetchCooldown = async () => {
@@ -101,7 +105,8 @@ export default function SummaryPage() {
         {/* PASS path */}
         {isPass && (
           <div className={styles.passMessage}>
-            <p>Congratulations! Proceed to view your offer letter from the dashboard.</p>
+            <p>Congratulations on passing the interview!</p>
+            <p>Please upload the required documents to complete your application.</p>
           </div>
         )}
 

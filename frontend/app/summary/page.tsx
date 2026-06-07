@@ -18,10 +18,11 @@ export default function SummaryPage() {
   const [score, setScore] = useState<number | null>(null);
   const [endReason, setEndReason] = useState<string | null>(null);
   const [cooldownDays, setCooldownDays] = useState<number>(0);
+  // Track whether phase sync to DB is complete — button is disabled until true
+  const [phaseSynced, setPhaseSynced] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
-    // Result is set by the interview page before redirecting here
     const storedResult = localStorage.getItem('interviewResult');
     const storedScore = localStorage.getItem('interviewScore');
     const storedEndReason = localStorage.getItem('interviewEndReason');
@@ -29,14 +30,16 @@ export default function SummaryPage() {
     setScore(storedScore ? Number(storedScore) : null);
     setEndReason(storedEndReason);
 
-    // Mark summary as visited and unlock Phase 4 (Upload Documents) for PASS candidates
     localStorage.setItem('summaryVisited', 'true');
-    if (storedResult === 'PASS') {
-      syncPhaseToDb(4);
-    }
 
-    // Fetch cooldown days from the admin-configured setting
-    const fetchCooldown = async () => {
+    (async () => {
+      // For PASS candidates: await phase sync to DB before dashboard loads
+      if (storedResult === 'PASS') {
+        await syncPhaseToDb(4);
+      }
+      setPhaseSynced(true);
+
+      // Fetch cooldown days — runs in parallel with sync, finishes independently
       try {
         const res = await fetch('/api/candidate/attempts', {
           headers: { Authorization: `Bearer ${sessionStorage.getItem('candidate_session_token')}` },
@@ -52,9 +55,7 @@ export default function SummaryPage() {
       } finally {
         setLoading(false);
       }
-    };
-
-    fetchCooldown();
+    })();
   }, []);
 
   const formatEndReason = (reason: string | null): string => {
@@ -140,8 +141,10 @@ export default function SummaryPage() {
           <button
             onClick={() => router.push('/dashboard')}
             className={styles.dashboardBtn}
+            disabled={!phaseSynced}
+            style={!phaseSynced ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
           >
-            Go to Dashboard
+            {!phaseSynced ? 'Syncing...' : 'Go to Dashboard'}
           </button>
         </div>
       </div>

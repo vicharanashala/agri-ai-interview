@@ -99,12 +99,18 @@ export default function DashboardPage() {
         if (candidate.email)    localStorage.setItem('candidateEmail', candidate.email);
 
         // If interview was just completed (redirect flag set by interview page), go to summary
+        // Only redirect if: phase >= 3 AND summary hasn't already been visited this session
         const justCompleted = sessionStorage.getItem('interviewJustCompleted') === 'true'
           || localStorage.getItem('interviewJustCompleted') === 'true';
-        if (actualPhase >= 3 && justCompleted) {
+        if (actualPhase >= 3 && justCompleted && !summaryVisited) {
+          // Clear flag immediately so re-renders don't re-trigger the redirect
           sessionStorage.removeItem('interviewJustCompleted');
           localStorage.removeItem('interviewJustCompleted');
           setTimeout(() => router.push('/summary'), 500);
+        } else {
+          // Summary already visited or flag absent — ensure flag is clean
+          sessionStorage.removeItem('interviewJustCompleted');
+          localStorage.removeItem('interviewJustCompleted');
         }
       } catch (error) {
         console.error('Error fetching candidate profile:', error);
@@ -331,11 +337,11 @@ export default function DashboardPage() {
         <div className={styles.progressBar}>
           <div 
             className={styles.progressFill} 
-            style={{ width: `${((currentPhase - 1) / 3) * 100}%` }}
+            style={{ width: `${(currentPhase - 1) * 25}%` }}
           />
         </div>
         <span className={styles.progressPercent}>
-          {Math.round(((currentPhase - 1) / 3) * 100)}% Complete
+          {(currentPhase - 1) * 25}% Complete
         </span>
       </div>
 

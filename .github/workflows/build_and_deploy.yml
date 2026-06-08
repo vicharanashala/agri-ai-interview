@@ -56,35 +56,40 @@ jobs:
             NEXT_PUBLIC_API_URL=http://100.100.108.101:8003
 
   deploy:
-    name: Deploy to GCP VM
+    name: Deploy to VM
     needs: build-and-push
     runs-on: ubuntu-latest
-
+  
     steps:
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.2.0
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v2
         with:
-          host: ${{ secrets.VM_HOST_1 }}
-          username: ${{ secrets.VM_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-
-          script: |
+          oauth-client-id: ${{ secrets.TS_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_CLIENT_SECRET }}
+          tags: tag:ci-cd
+  
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H ${{ secrets.VM_HOST }} >> ~/.ssh/known_hosts
+  
+      - name: Deploy via Docker Compose on VM
+        run: |
+          ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} << 'EOF'
             set -e
-
+  
             cd /home/krngodara83/apps/agri-ai-interview
-
-            # Update IMAGE_TAG safely
-            grep -q "^IMAGE_TAG=" .env \
-              && sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=${{ github.sha }}/" .env \
-              || echo "IMAGE_TAG=${{ github.sha }}" >> .env
-
-            # Pull new images
+  
+            echo "Pulling latest images..."
             docker compose pull
-
-            # Restart services
-            docker compose up -d --remove-orphans
-
-            # Cleanup old images
+  
+            echo "Restarting stack..."
+            docker compose up -d
+  
+            echo "Cleaning unused images..."
             docker image prune -f
-
-            echo "Deployment successful: ${{ github.sha }}"
+  
+            echo "Deployment completed successfully"
+          EOF

@@ -53,7 +53,7 @@ jobs:
             ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.FRONTEND_IMAGE }}:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
           build-args: |
-            NEXT_PUBLIC_API_URL=http://agri-interview-backend:8000
+            NEXT_PUBLIC_API_URL=http://100.100.108.101:8003
 
   deploy:
     name: Deploy to GCP VM
@@ -61,7 +61,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy Application
+      - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.VM_HOST }}
@@ -71,18 +71,20 @@ jobs:
           script: |
             set -e
 
-            cd /home/deploy/apps/agri-interview
+            cd /home/krngodara83/apps/agri-ai-interview
 
-            if grep -q "^IMAGE_TAG=" .env; then
-              sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=${{ github.sha }}/" .env
-            else
-              echo "IMAGE_TAG=${{ github.sha }}" >> .env
-            fi
+            # Update IMAGE_TAG safely
+            grep -q "^IMAGE_TAG=" .env \
+              && sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=${{ github.sha }}/" .env \
+              || echo "IMAGE_TAG=${{ github.sha }}" >> .env
 
+            # Pull new images
             docker compose pull
 
-            docker compose up -d
+            # Restart services
+            docker compose up -d --remove-orphans
 
+            # Cleanup old images
             docker image prune -f
 
-            echo "Deployment completed with IMAGE_TAG=${{ github.sha }}"
+            echo "Deployment successful: ${{ github.sha }}"

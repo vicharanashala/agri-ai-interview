@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import styles from './page.module.css';
+import HowToUseModal from '@/components/HowToUseModal';
 
 type Phase = 1 | 2 | 3 | 4;
 
@@ -41,6 +42,7 @@ export default function DashboardPage() {
   const [cooldownUntil, setCooldownUntil] = useState<string | null>(null);
   const [cooldownTimeLeft, setCooldownTimeLeft] = useState<string | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [showVideoModal, setShowVideoModal] = useState(false);
   const [attempts, setAttempts] = useState<Attempt[]>([]);
   const router = useRouter();
 
@@ -345,6 +347,52 @@ export default function DashboardPage() {
         </span>
       </div>
 
+      {/* How to Use / Tutorial Video */}
+      <div style={{ maxWidth: 700, margin: '0 auto 12px' }}>
+        <div
+          onClick={() => setShowVideoModal(true)}
+          style={{
+            background: 'linear-gradient(135deg, rgba(8,203,0,0.12) 0%, rgba(139,92,246,0.12) 100%)',
+            border: '1px solid rgba(8,203,0,0.25)',
+            borderRadius: 12,
+            padding: '16px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 16,
+            cursor: 'pointer',
+            transition: 'all 0.3s ease',
+          }}
+          onMouseEnter={e => {
+            (e.currentTarget as HTMLElement).style.borderColor = 'rgba(8,203,0,0.5)';
+            (e.currentTarget as HTMLElement).style.transform = 'translateY(-1px)';
+          }}
+          onMouseLeave={e => {
+            (e.currentTarget as HTMLElement).style.borderColor = 'rgba(8,203,0,0.25)';
+            (e.currentTarget as HTMLElement).style.transform = 'translateY(0)';
+          }}
+        >
+          <div style={{
+            width: 52, height: 52,
+            borderRadius: '50%',
+            background: 'rgba(8,203,0,0.2)',
+            border: '2px solid rgba(8,203,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 22, color: '#08CB00', flexShrink: 0,
+          }}>
+            ▶
+          </div>
+          <div>
+            <p style={{ color: 'rgba(255,255,255,0.9)', fontSize: '15px', fontWeight: 700, margin: 0, padding: 0 }}>
+              🎥 Watch: How to Use This App & Take the Interview
+            </p>
+            <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '13px', margin: '4px 0 0 0', padding: 0 }}>
+              Click to watch the tutorial video before proceeding
+            </p>
+          </div>
+          <span style={{ marginLeft: 'auto', color: 'rgba(8,203,0,0.7)', fontSize: 20 }}>→</span>
+        </div>
+      </div>
+
       <div style={{ maxWidth: 700, margin: '0 auto 12px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '16px 20px', fontFamily: 'system-ui, sans-serif' }}>
         <p style={{ color: 'rgba(255,200,0,0.9)', fontSize: '13px', fontWeight: 700, margin: '0 0 8px 0', padding: 0 }}>Important Instructions</p>
         <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: '13px', lineHeight: 1.8, margin: 0, padding: 0 }}>
@@ -433,6 +481,11 @@ export default function DashboardPage() {
       </div>
 
 
+
+      {/* Video Modal */}
+      {showVideoModal && (
+        <HowToUseModal onClose={() => setShowVideoModal(false)} videoUrl="/videos/tutorial.mp4" />
+      )}
 
       {/* Interview Already Done Popup */}
       {showAlreadyDoneDialog && (

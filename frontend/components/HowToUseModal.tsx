@@ -4,10 +4,27 @@ import styles from './HowToUseModal.module.css';
 
 interface HowToUseModalProps {
   onClose: () => void;
-  videoUrl?: string; // Optional: pass a specific video URL if you have one hosted
+  videoUrl?: string; // YouTube URL or local file path e.g. /videos/tutorial.mp4
+}
+
+function getYouTubeEmbedUrl(url: string): string | null {
+  // Handles:
+  // - https://www.youtube.com/watch?v=VIDEO_ID
+  // - https://youtu.be/VIDEO_ID
+  // - https://www.youtube.com/embed/VIDEO_ID
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]{11})/,
+  ];
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) return `https://www.youtube-nocookie.com/embed/${match[1]}?autoplay=1`;
+  }
+  return null;
 }
 
 export default function HowToUseModal({ onClose, videoUrl }: HowToUseModalProps) {
+  const youtubeEmbedUrl = videoUrl ? getYouTubeEmbedUrl(videoUrl) : null;
+
   return (
     <div className={styles.overlay} onClick={onClose}>
       <div className={styles.modal} onClick={e => e.stopPropagation()}>
@@ -23,12 +40,21 @@ export default function HowToUseModal({ onClose, videoUrl }: HowToUseModalProps)
         {/* Video Area */}
         <div className={styles.videoWrapper}>
           {videoUrl ? (
-            <video
-              src={videoUrl}
-              controls
-              autoPlay
-              className={styles.video}
-            />
+            youtubeEmbedUrl ? (
+              <iframe
+                src={youtubeEmbedUrl}
+                allow="autoplay; encrypted-media"
+                allowFullScreen
+                className={styles.video}
+              />
+            ) : (
+              <video
+                src={videoUrl}
+                controls
+                autoPlay
+                className={styles.video}
+              />
+            )
           ) : (
             // Placeholder — replace with your actual tutorial video
             <div className={styles.videoPlaceholder}>

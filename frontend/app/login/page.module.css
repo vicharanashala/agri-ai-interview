@@ -52,6 +52,15 @@
   text-align: center;
 }
 
+.subHeading {
+  display: block;
+  font-size: 18px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.65);
+  margin-top: 6px;
+  letter-spacing: 0.3px;
+}
+
 /* ─── FAQ card ────────────────────────────────────────────── */
 .faqCard {
   display: flex;

@@ -133,7 +133,8 @@ function LoginPageInner() {
       {/* Hero heading */}
       <div className={styles.hero}>
         <h1 className={styles.heading}>
-          Welcome to Annam.ai AI-Powered Agri Interview Platform
+          Welcome to Anveshan<br />
+          <span className={styles.subHeading}>AI-Powered Agri Interview Platform</span>
         </h1>
       </div>
 

@@ -345,6 +345,15 @@ export default function DashboardPage() {
         </span>
       </div>
 
+      <div style={{ maxWidth: 700, margin: '0 auto 12px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '16px 20px', fontFamily: 'system-ui, sans-serif' }}>
+        <p style={{ color: 'rgba(255,200,0,0.9)', fontSize: '13px', fontWeight: 700, margin: '0 0 8px 0', padding: 0 }}>Important Instructions</p>
+        <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: '13px', lineHeight: 1.8, margin: 0, padding: 0 }}>
+          1. The candidate will be allowed maximum 3 attempts.<br/>
+          2. On failing the interview there will be a cooldown period after which candidate is allowed next attempt.<br/>
+          3. Please read the interview instructions carefully, failing which may lead to interview closure.
+        </p>
+      </div>
+
       {/* Cooldown countdown banner */}
       {cooldownTimeLeft && (
         <div className={styles.attemptsCard}>

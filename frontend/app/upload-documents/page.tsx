@@ -242,6 +242,11 @@ export default function UploadDocumentsPage() {
         )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24, marginBottom: 28 }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 4 }}>
+            <span style={{ fontSize: 12, color: 'rgba(255,200,0,0.85)', background: 'rgba(255,200,0,0.08)', border: '1px solid rgba(255,200,0,0.2)', borderRadius: 6, padding: '5px 12px' }}>
+              Please upload all documents only in .pdf, .doc, or .docx format
+            </span>
+          </div>
           {SECTIONS.map(section => (
             <div key={section.title}>
               <div style={{ fontSize: 18, fontWeight: 700, color: '#fff', marginBottom: 10, paddingBottom: 6, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>

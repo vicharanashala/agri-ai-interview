@@ -148,7 +148,7 @@ function LoginPageInner() {
           </svg>
         </div>
         <div className={styles.faqContent}>
-          <h2 className={styles.faqTitle}>FAQ & Help</h2>
+          <h2 className={styles.faqTitle}>FAQs</h2>
           <p className={styles.faqDesc}>
             Get instant answers about internships, interview process, required documents,
             eligibility criteria, and more — before you even sign up.

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 // Phase definitions in order (must match backend/app/api/admin/candidates.py)
-const PHASES = ["onboarding", "interview", "summary", "offer", "signing", "joining"];
+const PHASES = ["onboarding", "interview", "summary", "documents"];
 const PHASE_ORDER: Record<string, number> = Object.fromEntries(
   PHASES.map((p, i) => [p, i])
 );

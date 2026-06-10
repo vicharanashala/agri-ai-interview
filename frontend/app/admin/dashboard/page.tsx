@@ -235,6 +235,11 @@ export default function AdminDashboard() {
     loadStateFunnel();
   }, [stateFunnelFilter]);
 
+  // Reload data when tab changes
+  useEffect(() => {
+    loadData();
+  }, [activeTab]);
+
   const loadData = async () => {
     setLoading(true);
     try {

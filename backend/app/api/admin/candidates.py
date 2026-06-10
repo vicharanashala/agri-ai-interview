@@ -48,6 +48,8 @@ class CandidateResponse(BaseModel):
     phases: List[PhaseStatus]
     createdAt: Optional[str] = None
     documentsSubmitted: bool = False
+    attemptsDone: int = 0
+    maxAttempts: int = 3
 
 
 def _build_phases(current_phase: str) -> List[PhaseStatus]:
@@ -70,7 +72,7 @@ def _build_phases(current_phase: str) -> List[PhaseStatus]:
     return phases
 
 
-def _candidate_to_response(cand: Candidate, user_email: Optional[str]) -> CandidateResponse:
+def _candidate_to_response(cand: Candidate, user_email: Optional[str], db: Session) -> CandidateResponse:
     """
     Convert a SQLAlchemy Candidate model (optionally joined with User)
     to a CandidateResponse.
@@ -78,6 +80,17 @@ def _candidate_to_response(cand: Candidate, user_email: Optional[str]) -> Candid
     # fullName may be null (pre-onboarding) — fall back to user email
     raw_full_name = cand.fullName or user_email or "Unknown"
     current_phase = cand.currentPhase or "onboarding"
+
+    # Count completed interview attempts (same logic as queue_manager.py)
+    attempts_done = (
+        db.query(InterviewSession)
+        .filter(
+            InterviewSession.candidateId == cand.id,
+            InterviewSession.status == "completed",
+            InterviewSession.result.in_(["PASS", "FAIL", "WITHDRAWN"]),
+        )
+        .count()
+    )
 
     return CandidateResponse(
         id=cand.id,
@@ -95,6 +108,8 @@ def _candidate_to_response(cand: Candidate, user_email: Optional[str]) -> Candid
         phases=_build_phases(current_phase),
         createdAt=cand.createdAt.isoformat() if cand.createdAt else datetime.now().isoformat(),
         documentsSubmitted=cand.documentsSubmitted,
+        attemptsDone=attempts_done,
+        maxAttempts=3,
     )
 
 
@@ -125,7 +140,7 @@ async def get_candidates(
 
     candidates = []
     for cand, user_email in rows:
-        response = _candidate_to_response(cand, user_email)
+        response = _candidate_to_response(cand, user_email, db)
 
         # Apply filters
         if phase and response.currentPhase != phase:
@@ -162,7 +177,7 @@ async def get_candidate(candidate_id: str, db: Session = Depends(get_db), _admin
     if not row:
         raise HTTPException(status_code=404, detail="Candidate not found")
     cand, user_email = row
-    return _candidate_to_response(cand, user_email)
+    return _candidate_to_response(cand, user_email, db)
 
 
 @router.put("/candidates/{candidate_id}/phase/{phase}")

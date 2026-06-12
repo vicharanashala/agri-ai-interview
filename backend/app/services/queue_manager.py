@@ -215,14 +215,26 @@ class SlotManager:
                 }
 
             # 2. Cooldown check — reject if candidate is still within cooldown period
-            # cooldownUntil lives on InterviewQueueEntry (not Candidate)
-            queue_entry = db.query(InterviewQueueEntry).filter(InterviewQueueEntry.candidateId == candidate_id).first()
-            if queue_entry and queue_entry.cooldownUntil:
-                if _now() < queue_entry.cooldownUntil:
+            # Deadline is computed dynamically from the most recent FAILED InterviewSession's
+            # completedAt + current cooldown_days setting. No stored absolute timestamp used.
+            latest_failed = (
+                db.query(InterviewSession)
+                .filter(
+                    InterviewSession.candidateId == candidate_id,
+                    InterviewSession.status == "completed",
+                    InterviewSession.result == "FAIL",
+                )
+                .order_by(InterviewSession.completedAt.desc())
+                .first()
+            )
+            if latest_failed and latest_failed.completedAt:
+                cooldown_days = get_cooldown_days()
+                deadline = latest_failed.completedAt + timedelta(days=cooldown_days)
+                if _now() < deadline:
                     return {
                         "result": "cooldown",
-                        "message": f"You are in cooldown. Try again after {queue_entry.cooldownUntil.strftime('%Y-%m-%d %H:%M')} UTC.",
-                        "cooldown_until": queue_entry.cooldownUntil.isoformat(),
+                        "message": f"You are in cooldown. Try again after {deadline.strftime('%Y-%m-%d %H:%M')} UTC.",
+                        "cooldown_until": deadline.isoformat(),
                     }
 
             # 3. Check for existing active session for this candidate
@@ -382,12 +394,11 @@ class SlotManager:
                     pass  # non-fatal — keep whatever was already stored
 
             # Cooldown applies ONLY when result is FAIL — regardless of end_reason.
-            # PASS → no cooldown (candidate cannot re-attempt, already passed).
+            # FAIL: record failure timestamp on the session so cooldown can be derived dynamically.
+            # No cooldownUntil is stored on InterviewQueueEntry — deadline is always computed
+            # from InterviewSession.completedAt + current cooldown_days setting.
             if result == "FAIL":
-                queue_entry = db.query(InterviewQueueEntry).filter(InterviewQueueEntry.candidateId == candidate_id).first()
-                if queue_entry:
-                    cooldown_days = get_cooldown_days()
-                    queue_entry.cooldownUntil = _now() + timedelta(days=cooldown_days)
+                session.completedAt = _now()
 
             db.commit()
             self._sync_active_count(db)

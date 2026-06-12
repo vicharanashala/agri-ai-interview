@@ -337,20 +337,11 @@ async def reevaluate_interview(
             candidate.documentsSubmitted = False       # they haven't uploaded yet — fresh for this PASS path
 
     elif new_result == "FAIL":
-        # Revert candidate from PASS path back to interview phase with cooldown
-        from app.db.models.candidate import InterviewQueueEntry, SignedOfferLetter
-        from app.services.settings_service import get_cooldown_days
-        from datetime import timedelta
+        # Revert candidate from PASS path back to interview phase with cooldown.
+        # Set session.completedAt to now so cooldown deadline is derived from here
+        # (InterviewSession.completedAt + current cooldown_days setting).
         from app.services.queue_manager import _now
-
-        queue_entry = (
-            db.query(InterviewQueueEntry)
-            .filter(InterviewQueueEntry.candidateId == session.candidateId)
-            .first()
-        )
-        if queue_entry:
-            cooldown_days = get_cooldown_days()
-            queue_entry.cooldownUntil = _now() + timedelta(days=cooldown_days)
+        session.completedAt = _now()
 
         from app.db.models.candidate import Candidate
         candidate = db.query(Candidate).filter(Candidate.id == session.candidateId).first()

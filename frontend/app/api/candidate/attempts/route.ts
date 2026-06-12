@@ -20,29 +20,34 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ attempts: [], cooldownUntil: null })
     }
 
-    // Fetch score from the most recent completed InterviewSession
-    const latestSession = await prisma.interviewSession.findFirst({
+    // Read admin-set cooldown days from Settings table (always live, never stale)
+    const setting = await prisma.settings.findFirst({
+      where: { key: "interview_cooldown_days" },
+    })
+    const cooldownDays = setting?.value ? parseInt(String(setting.value), 10) : 3
+
+    // Cooldown deadline is computed dynamically from the most recent FAILED
+    // InterviewSession.completedAt + current cooldown_days setting.
+    // This means any admin change to cooldown_days takes immediate effect
+    // for all candidates — no stale absolute timestamps stored in DB.
+    const latestFailedSession = await prisma.interviewSession.findFirst({
       where: {
         candidateId: user.candidate.id,
         status: 'completed',
+        result: 'FAIL',
       },
       orderBy: { completedAt: 'desc' },
     })
-    const score = latestSession?.score ?? null
 
-    // Fetch the most recent InterviewQueueEntry that has a cooldown set
-    // (new interview attempts create a fresh entry with no cooldownUntil,
-    // so we must explicitly filter for entries that actually have one)
-    const latestQueueEntry = await prisma.interviewQueueEntry.findFirst({
-      where: {
-        candidateId: user.candidate.id,
-        cooldownUntil: { not: null },
-      },
-      orderBy: { createdAt: 'desc' },
-    })
-    const cooldownUntil = latestQueueEntry?.cooldownUntil
-      ? (latestQueueEntry.cooldownUntil as Date).toISOString()
-      : null
+    let cooldownUntil: string | null = null
+    if (latestFailedSession?.completedAt) {
+      const failedAtMs = new Date(latestFailedSession.completedAt).getTime()
+      const deadlineMs = failedAtMs + cooldownDays * 24 * 60 * 60 * 1000
+      if (deadlineMs > Date.now()) {
+        cooldownUntil = new Date(deadlineMs).toISOString()
+      }
+      // If deadline has passed, cooldownUntil is null → candidate can retry
+    }
 
     const attempts = user.candidate.interviewSessions
       .filter((s: { status: string }) => s.status === 'completed')
@@ -60,17 +65,6 @@ export async function GET(request: NextRequest) {
         if (!b.completedAt) return -1
         return new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime()
       })
-
-    // Read admin-set cooldown days from Settings table
-    let cooldownDays = 3; // default fallback
-    if (cooldownUntil) {
-      const setting = await prisma.settings.findFirst({
-        where: { key: "interview_cooldown_days" },
-      });
-      if (setting && setting.value) {
-        cooldownDays = parseInt(String(setting.value), 10);
-      }
-    }
 
     return NextResponse.json({ attempts, cooldownUntil, cooldownDays });
   } catch (error) {

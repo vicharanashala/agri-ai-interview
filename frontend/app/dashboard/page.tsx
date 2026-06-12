@@ -127,8 +127,14 @@ export default function DashboardPage() {
         if (res.ok) {
           const data = await res.json();
           setAttempts(data.attempts ?? []);
+          // Always sync cooldown from fresh API response — deadline is computed
+          // dynamically so stale localStorage values must not override it.
           if (data.cooldownUntil) {
             setCooldownUntil(data.cooldownUntil);
+            localStorage.setItem('cooldownUntil', data.cooldownUntil);
+          } else {
+            setCooldownUntil(null);
+            localStorage.removeItem('cooldownUntil');
           }
         }
       } catch (err) {

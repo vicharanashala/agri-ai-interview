@@ -328,6 +328,40 @@ async def reevaluate_interview(
         if queue_entry:
             queue_entry.cooldownUntil = None
 
+        # Move candidate to documents phase so their dashboard unlocks upload-documents
+        from app.db.models.candidate import Candidate
+        candidate = db.query(Candidate).filter(Candidate.id == session.candidateId).first()
+        if candidate:
+            candidate.currentPhase = "documents"
+            candidate.passedAndVisitedSummary = True  # prevents phase reconstruct from dropping back to 3
+            candidate.documentsSubmitted = False       # they haven't uploaded yet — fresh for this PASS path
+
+    elif new_result == "FAIL":
+        # Revert candidate from PASS path back to interview phase with cooldown
+        from app.db.models.candidate import InterviewQueueEntry, SignedOfferLetter
+        from app.services.settings_service import get_cooldown_days
+        from datetime import timedelta
+        from app.services.queue_manager import _now
+
+        queue_entry = (
+            db.query(InterviewQueueEntry)
+            .filter(InterviewQueueEntry.candidateId == session.candidateId)
+            .first()
+        )
+        if queue_entry:
+            cooldown_days = get_cooldown_days()
+            queue_entry.cooldownUntil = _now() + timedelta(days=cooldown_days)
+
+        from app.db.models.candidate import Candidate
+        candidate = db.query(Candidate).filter(Candidate.id == session.candidateId).first()
+        if candidate:
+            candidate.currentPhase = "interview"
+            candidate.passedAndVisitedSummary = False
+            candidate.offerLetterViewed = False
+
+        # Delete signed offer letter record so they cannot re-sign
+        db.query(SignedOfferLetter).filter(SignedOfferLetter.candidateId == session.candidateId).delete(synchronize_session=False)
+
     db.commit()
 
     return {

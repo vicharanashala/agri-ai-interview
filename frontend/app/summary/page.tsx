@@ -83,6 +83,12 @@ export default function SummaryPage() {
         } catch {
           // non-fatal — fall back to localStorage
         } finally {
+          // On revisit (including re-evaluation), sync phase if PASS — backend already updated
+          // currentPhase to 'documents', so re-syncing is safe and idempotent.
+          // Skip for FAIL so their phase stays as the backend set it (interview / summary).
+          if (localStorage.getItem('interviewResult') === 'PASS') {
+            await syncPhaseToDb(4);
+          }
           setPhaseSynced(true);
           setLoading(false);
         }

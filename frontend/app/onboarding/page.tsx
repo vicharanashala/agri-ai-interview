@@ -27,6 +27,7 @@ interface FormData {
   farmingBackground: string;
   cropsGrown: string;
   primaryExpertise: string;
+  districtCustom?: string;
 }
 
 export default function OnboardingPage() {
@@ -44,6 +45,7 @@ export default function OnboardingPage() {
     farmingBackground: '',
     cropsGrown: '',
     primaryExpertise: '',
+    districtCustom: '',
   });
   const [phoneError, setPhoneError] = useState('');
   const [pincodeError, setPincodeError] = useState('');
@@ -89,6 +91,7 @@ export default function OnboardingPage() {
               farmingBackground: candidate.farmingBackground || '',
               cropsGrown: candidate.cropsGrown || '',
               primaryExpertise: candidate.primaryExpertise || '',
+              districtCustom: candidate.districtCustom || '',
             });
           }
         }
@@ -226,6 +229,11 @@ export default function OnboardingPage() {
       return;
     }
 
+    if (formData.district === 'Others' && !formData.districtCustom?.trim()) {
+      setError('Please specify your district name');
+      return;
+    }
+
     // Validate phone
     if (!validatePhone(formData.phone)) {
       return;
@@ -285,12 +293,17 @@ export default function OnboardingPage() {
     setIsLoading(true);
 
     try {
+      // When "Others" is selected, use the custom district name instead
+      const districtToSubmit =
+        formData.district === 'Others' ? formData.districtCustom?.trim() : formData.district;
+      const payload = { ...formData, district: districtToSubmit || formData.district };
+
       // Save candidate profile to database via API
       const response = await fetch('/api/candidate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
@@ -553,12 +566,36 @@ export default function OnboardingPage() {
                 name="district"
                 value={formData.district}
                 onChange={handleChange}
-                options={INDIA_STATES_DISTRICTS[formData.state] || []}
+                options={[
+                  ...(INDIA_STATES_DISTRICTS[formData.state] || []),
+                  'Others',
+                ]}
                 placeholder={formData.state ? 'Search or select district…' : 'Select a state first'}
                 disabled={!formData.state}
                 required
               />
             </div>
+
+            {formData.district === 'Others' && (
+              <div className={styles.field}>
+                <label htmlFor="districtCustom" className={styles.label}>
+                  Specify District <span className={styles.required}>*</span>
+                </label>
+                <input
+                  type="text"
+                  id="districtCustom"
+                  name="districtCustom"
+                  value={formData.districtCustom || ''}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, districtCustom: e.target.value }))
+                  }
+                  className={styles.input}
+                  placeholder="Enter your district name"
+                  maxLength={30}
+                  required
+                />
+              </div>
+            )}
 
             <div className={styles.field}>
               <label htmlFor="pincode" className={styles.label}>

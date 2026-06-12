@@ -242,6 +242,104 @@ async def create_candidate(
     return {"id": cand.id, "name": cand.fullName, "email": email}
 
 
+# ============ Clear Cooldown ============
+
+
+# ============ Re-evaluate Interview ============
+
+
+@router.post("/interviews/{interview_id}/reevaluate")
+async def reevaluate_interview(
+    interview_id: str,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin_auth),
+):
+    """
+    Re-run LLM evaluation on a completed interview.
+
+    Reads the stored chat history from InterviewSession.interviewData,
+    calls the LLM evaluator, then updates the session with the new score,
+    result, and evaluation data. Clears cooldown if the new result is PASS.
+    """
+    import json
+    from app.llm import llm_service
+    from app.services.settings_service import get_evaluation_settings
+
+    session = db.query(InterviewSession).filter(InterviewSession.id == interview_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Interview session not found")
+
+    if session.status != "completed":
+        raise HTTPException(status_code=400, detail="Only completed interviews can be re-evaluated")
+
+    # Pull stored data
+    try:
+        data = json.loads(session.interviewData) if session.interviewData else {}
+    except Exception:
+        raise HTTPException(status_code=500, detail="Corrupted interview data")
+
+    messages = data.get("messages", [])
+    candidate_data = data.get("candidate_data", {})
+
+    if not messages:
+        raise HTTPException(status_code=400, detail="No chat history found for this interview")
+
+    # Build conversation_history in the format the LLM expects
+    conversation_history = [
+        {"role": m.get("role"), "content": m.get("content")}
+        for m in messages
+        if m.get("role") and m.get("content")
+    ]
+
+    # Run LLM evaluation
+    try:
+        evaluation = await llm_service.generate_interview_evaluation(
+            candidate_data=candidate_data,
+            conversation_history=conversation_history,
+        )
+    except Exception as e:
+        import logging
+        logging.error(f"[Re-evaluate] LLM evaluation failed for {interview_id}: {e}")
+        raise HTTPException(status_code=502, detail="Evaluation service failed. Please try again.")
+
+    # Compute new result
+    threshold = get_evaluation_settings().get("pass_threshold", 60)
+    overall_score = evaluation.get("overall_score")
+    if overall_score is None:
+        overall_score = 0
+    new_result = "PASS" if overall_score >= threshold else "FAIL"
+
+    # Update session
+    session.score = overall_score
+    session.result = new_result
+
+    # Persist updated evaluation in interviewData
+    data["evaluation"] = evaluation
+    session.interviewData = json.dumps(data)
+
+    # Clear cooldown if candidate now PASSes (they may have previously failed)
+    if new_result == "PASS":
+        from app.db.models.candidate import InterviewQueueEntry
+        queue_entry = (
+            db.query(InterviewQueueEntry)
+            .filter(InterviewQueueEntry.candidateId == session.candidateId)
+            .first()
+        )
+        if queue_entry:
+            queue_entry.cooldownUntil = None
+
+    db.commit()
+
+    return {
+        "success": True,
+        "interview_id": interview_id,
+        "result": new_result,
+        "overall_score": overall_score,
+        "evaluation": evaluation,
+        "message": f"Re-evaluation complete. New result: {new_result} ({overall_score}/100)",
+    }
+
+
 # ============ Active Interviews (in-memory for real-time monitoring) ============
 
 

@@ -202,10 +202,66 @@ function EvaluationDetail({ eval_ }: { eval_: Evaluation }) {
 
 // ─── Expanded Row ────────────────────────────────────────────────────
 
-function ExpandedRow({ evaluation }: { evaluation: InterviewEvaluation }) {
+function ExpandedRow({
+  evaluation,
+  adminApiBase,
+  getAdminToken,
+  onReevaluate,
+}: {
+  evaluation: InterviewEvaluation;
+  adminApiBase: string;
+  getAdminToken: () => string | null;
+  onReevaluate: (id: string, newScore: number, newResult: string) => void;
+}) {
+  const [reevaluating, setReevaluating] = useState(false);
+
+  const handleReevaluate = async () => {
+    if (!confirm(`Re-evaluate interview for ${evaluation.candidateName}? This will update their score and result.`)) return;
+    setReevaluating(true);
+    try {
+      const token = getAdminToken();
+      const res = await fetch(`${adminApiBase}/api/admin/interviews/${evaluation.id}/reevaluate`, {
+        method: "POST",
+        headers: token ? { "X-Admin-Token": token } : {},
+        credentials: "include",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        onReevaluate(evaluation.id, data.overall_score, data.result);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(`Re-evaluation failed: ${err.detail || res.statusText}`);
+      }
+    } catch {
+      alert("Network error — could not reach server.");
+    } finally {
+      setReevaluating(false);
+    }
+  };
+
   return (
     <tr className={styles.expandedRow}>
       <td colSpan={7} className={styles.expandedCell}>
+        {/* Action buttons bar */}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginBottom: "12px" }}>
+          <button
+            onClick={handleReevaluate}
+            disabled={reevaluating}
+            style={{
+              padding: "6px 16px",
+              fontSize: "13px",
+              background: reevaluating ? "#9ca3af" : "#f59e0b",
+              color: "white",
+              border: "none",
+              borderRadius: "6px",
+              cursor: reevaluating ? "not-allowed" : "pointer",
+              fontWeight: 500,
+            }}
+          >
+            {reevaluating ? "Re-evaluating…" : "🔄 Re-evaluate"}
+          </button>
+        </div>
+
         <div className={styles.expandedContent}>
           {/* Left: chat history */}
           <div className={styles.expandedLeft}>
@@ -279,6 +335,14 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
 
   const toggleExpand = (id: string) => {
     setExpandedId(prev => prev === id ? null : id);
+  };
+
+  const handleReevaluate = (id: string, newScore: number, newResult: string) => {
+    setEvaluations(prev =>
+      prev.map(e =>
+        e.id === id ? { ...e, score: newScore, result: newResult } : e
+      )
+    );
   };
 
   const filtered = evaluations; // filtering is server-side; client-side search is supplemental
@@ -378,7 +442,12 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
                       </td>
                     </tr>
                     {expandedId === evaluation.id && (
-                      <ExpandedRow evaluation={evaluation} />
+                      <ExpandedRow
+                        evaluation={evaluation}
+                        adminApiBase={adminApiBase}
+                        getAdminToken={getAdminToken}
+                        onReevaluate={handleReevaluate}
+                      />
                     )}
                   </React.Fragment>
                 ))}

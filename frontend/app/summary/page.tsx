@@ -23,39 +23,71 @@ export default function SummaryPage() {
   const router = useRouter();
 
   useEffect(() => {
-    const storedResult = localStorage.getItem('interviewResult');
-    const storedScore = localStorage.getItem('interviewScore');
-    const storedEndReason = localStorage.getItem('interviewEndReason');
-    setResult(storedResult);
-    setScore(storedScore ? Number(storedScore) : null);
-    setEndReason(storedEndReason);
+    // First load = candidate just completed interview (interviewJustCompleted flag is set).
+    // Subsequent visits = no flag → candidate returning to summary later (including after a re-evaluation).
+    const justCompleted =
+      sessionStorage.getItem('interviewJustCompleted') === 'true' ||
+      localStorage.getItem('interviewJustCompleted') === 'true';
 
-    localStorage.setItem('summaryVisited', 'true');
+    if (justCompleted) {
+      // ── First load: use localStorage for instant display (no DB round-trip needed) ──
+      const storedResult = localStorage.getItem('interviewResult');
+      const storedScore = localStorage.getItem('interviewScore');
+      const storedEndReason = localStorage.getItem('interviewEndReason');
+      setResult(storedResult);
+      setScore(storedScore ? Number(storedScore) : null);
+      setEndReason(storedEndReason);
+      localStorage.setItem('summaryVisited', 'true');
+      // Clear the completion flag so future visits go through the DB path
+      sessionStorage.removeItem('interviewJustCompleted');
+      localStorage.removeItem('interviewJustCompleted');
 
-    (async () => {
-      // For PASS candidates: await phase sync to DB before dashboard loads
-      if (storedResult === 'PASS') {
-        await syncPhaseToDb(4);
-      }
-      setPhaseSynced(true);
-
-      // Fetch cooldown days — runs in parallel with sync, finishes independently
-      try {
-        const res = await fetch('/api/candidate/attempts', {
-          headers: { Authorization: `Bearer ${sessionStorage.getItem('candidate_session_token')}` },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.cooldownDays) {
-            setCooldownDays(data.cooldownDays);
-          }
+      (async () => {
+        if (storedResult === 'PASS') {
+          await syncPhaseToDb(4);
         }
-      } catch {
-        // non-fatal
-      } finally {
-        setLoading(false);
-      }
-    })();
+        setPhaseSynced(true);
+
+        try {
+          const res = await fetch('/api/candidate/attempts', {
+            headers: { Authorization: `Bearer ${sessionStorage.getItem('candidate_session_token')}` },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.cooldownDays) setCooldownDays(data.cooldownDays);
+          }
+        } catch {
+          // non-fatal
+        } finally {
+          setLoading(false);
+        }
+      })();
+    } else {
+      // ── Subsequent visit: always read fresh from DB so re-evaluations are reflected ──
+      (async () => {
+        try {
+          const res = await fetch('/api/candidate/attempts', {
+            headers: { Authorization: `Bearer ${sessionStorage.getItem('candidate_session_token')}` },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const latest = data.attempts?.[0];
+            if (latest) {
+              setResult(latest.result);
+              setScore(latest.overall_score);
+              localStorage.setItem('interviewResult', latest.result || '');
+              localStorage.setItem('interviewScore', String(latest.overall_score ?? ''));
+            }
+            if (data.cooldownDays) setCooldownDays(data.cooldownDays);
+          }
+        } catch {
+          // non-fatal — fall back to localStorage
+        } finally {
+          setPhaseSynced(true);
+          setLoading(false);
+        }
+      })();
+    }
   }, []);
 
   const formatEndReason = (reason: string | null): string => {

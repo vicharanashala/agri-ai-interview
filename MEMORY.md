@@ -3,10 +3,9 @@
 ## Deployment Flow
 Karan's deployment pipeline (permanent, do not ask again):
 1. **Code push** → GitHub
-2. **GitHub Actions** → `deploy.yml` builds & pushes Docker images to **Docker Hub**
-3. **Portainer** → Stack with compose file + env vars pulls latest image from Docker Hub and deploys
+2. **Manually run** `build_and_deploy.yml` GitHub Actions workflow → builds Docker images, pushes to **Docker Hub**, and deploys directly to **GCP**
 
-**Files used in Portainer stack:**
+**Files used in deployment:**
 - `docker-compose.yml` — defines all 4 services (backend, frontend, redis, postgres)
 - `stack.env` — contains all environment variables for the stack
 

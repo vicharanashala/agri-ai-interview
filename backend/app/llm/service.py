@@ -319,7 +319,7 @@ Return your evaluation as valid JSON only, no other text."""
             response = await self.chat_completion(
                 messages=messages,
                 system_prompt=system_prompt,
-                temperature=0.3,
+                temperature=0.0,
                 max_tokens=500
             )
 
@@ -433,7 +433,7 @@ Return your evaluation as valid JSON only, no other text. Ensure all fields are 
             response = await self.chat_completion(
                 messages=messages,
                 system_prompt=system_prompt,
-                temperature=0.3,
+                temperature=0.0,
                 max_tokens=2000
             )
 

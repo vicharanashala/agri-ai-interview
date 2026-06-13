@@ -176,6 +176,7 @@ async def check_interview_status(candidate_id: Optional[str] = None):
                 .filter(
                     InterviewSession.candidateId == candidate_id,
                     InterviewSession.status == "completed",
+                    InterviewSession.result == "PASS",
                 )
                 .first()
             )

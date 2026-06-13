@@ -245,17 +245,7 @@ export default function InterviewPage() {
     if (!candidateId) return;
 
     const checkInterviewStatus = async () => {
-      // First check localStorage
-      const wasCompleted = localStorage.getItem('interviewCompleted') === 'true' || 
-                           sessionStorage.getItem('interviewCompleted') === 'true';
-      
-      if (wasCompleted) {
-        setIsInterviewCompleted(true);
-        setShowInstructions(false);
-        return;
-      }
-
-      // Then check backend — pass candidateId so we check THIS candidate's session, not all sessions
+      // Check backend — API is the source of truth; only PASS sessions block entry
       console.log('[checkInterviewStatus] sessionStorage keys:', Object.keys(window.sessionStorage));
       console.log('[checkInterviewStatus] token in sessionStorage:', !!window.sessionStorage.getItem('candidate_session_token'), '| value:', window.sessionStorage.getItem('candidate_session_token')?.substring(0, 8));
       try {
@@ -265,9 +255,6 @@ export default function InterviewPage() {
           if (data.has_completed_interview) {
             setIsInterviewCompleted(true);
             setShowInstructions(false);
-            // Also set localStorage for future visits
-            localStorage.setItem('interviewCompleted', 'true');
-            sessionStorage.setItem('interviewCompleted', 'true');
           }
         }
       } catch (error) {

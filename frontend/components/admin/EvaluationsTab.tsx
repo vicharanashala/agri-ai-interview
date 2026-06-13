@@ -214,6 +214,7 @@ function ExpandedRow({
   onReevaluate: (id: string, newScore: number, newResult: string) => void;
 }) {
   const [reevaluating, setReevaluating] = useState(false);
+  const [resettingCooldown, setResettingCooldown] = useState(false);
 
   const handleReevaluate = async () => {
     if (!confirm(`Re-evaluate interview for ${evaluation.candidateName}? This will update their score and result.`)) return;
@@ -239,11 +240,52 @@ function ExpandedRow({
     }
   };
 
+  const handleResetCooldown = async () => {
+    if (!confirm(`Reset cooldown for ${evaluation.candidateName}? They will be able to start a new interview immediately.`)) return;
+    setResettingCooldown(true);
+    try {
+      const token = getAdminToken();
+      const res = await fetch(`${adminApiBase}/api/admin/candidates/${evaluation.candidateId}/reset-cooldown`, {
+        method: "POST",
+        headers: token ? { "X-Admin-Token": token } : {},
+        credentials: "include",
+      });
+      if (res.ok) {
+        alert(`Cooldown reset for ${evaluation.candidateName}. They can now start a new interview.`);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(`Failed to reset cooldown: ${err.detail || res.statusText}`);
+      }
+    } catch {
+      alert("Network error — could not reach server.");
+    } finally {
+      setResettingCooldown(false);
+    }
+  };
+
   return (
     <tr className={styles.expandedRow}>
       <td colSpan={7} className={styles.expandedCell}>
         {/* Action buttons bar */}
         <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginBottom: "12px" }}>
+          {evaluation.result === "FAIL" && (
+            <button
+              onClick={handleResetCooldown}
+              disabled={resettingCooldown}
+              style={{
+                padding: "6px 16px",
+                fontSize: "13px",
+                background: resettingCooldown ? "#9ca3af" : "#10b981",
+                color: "white",
+                border: "none",
+                borderRadius: "6px",
+                cursor: resettingCooldown ? "not-allowed" : "pointer",
+                fontWeight: 500,
+              }}
+            >
+              {resettingCooldown ? "Resetting…" : "🔄 Reset Cooldown"}
+            </button>
+          )}
           <button
             onClick={handleReevaluate}
             disabled={reevaluating}

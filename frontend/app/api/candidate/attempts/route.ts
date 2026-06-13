@@ -27,16 +27,16 @@ export async function GET(request: NextRequest) {
     const cooldownDays = setting?.value ? parseInt(String(setting.value), 10) : 3
 
     // Cooldown deadline is computed dynamically from the most recent FAILED
-    // InterviewSession.completedAt + current cooldown_days setting.
-    // This means any admin change to cooldown_days takes immediate effect
-    // for all candidates — no stale absolute timestamps stored in DB.
+    // InterviewSession.startedAt + current cooldown_days setting.
+    // Order by startedAt desc to always target the latest session, even if
+    // completedAt was previously cleared by a reset-cooldown operation.
     const latestFailedSession = await prisma.interviewSession.findFirst({
       where: {
         candidateId: user.candidate.id,
         status: 'completed',
         result: 'FAIL',
       },
-      orderBy: { completedAt: 'desc' },
+      orderBy: { startedAt: 'desc' },
     })
 
     let cooldownUntil: string | null = null
@@ -46,24 +46,25 @@ export async function GET(request: NextRequest) {
       if (deadlineMs > Date.now()) {
         cooldownUntil = new Date(deadlineMs).toISOString()
       }
-      // If deadline has passed, cooldownUntil is null → candidate can retry
+      // If deadline has passed or completedAt is null, cooldownUntil is null → candidate can retry
     }
 
     const attempts = user.candidate.interviewSessions
       .filter((s: { status: string }) => s.status === 'completed')
-      .map((s: { id: string; status: string; result: string | null; score: number | null; completedAt: Date | null }) => {
+      .map((s: { id: string; status: string; result: string | null; score: number | null; completedAt: Date | null; startedAt: Date | null }) => {
         return {
           id: s.id,
           status: s.status,
           overall_score: s.score,
           result: s.result,
           completedAt: s.completedAt?.toISOString() ?? null,
+          startedAt: s.startedAt?.toISOString() ?? null,
         }
       })
-      .sort((a: { completedAt: string | null }, b: { completedAt: string | null }): number => {
-        if (!a.completedAt) return 1
-        if (!b.completedAt) return -1
-        return new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime()
+      .sort((a: { startedAt: string | null }, b: { startedAt: string | null }): number => {
+        if (!a.startedAt) return 1
+        if (!b.startedAt) return -1
+        return new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
       })
 
     return NextResponse.json({ attempts, cooldownUntil, cooldownDays });

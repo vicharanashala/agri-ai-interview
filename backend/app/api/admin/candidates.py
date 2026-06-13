@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 
 from app.db.database import get_db
-from app.db.models.candidate import Candidate, User, InterviewSession, AntiCheatEvent
+from app.db.models.candidate import Candidate, User, InterviewSession, AntiCheatEvent, InterviewQueueEntry
 from app.api.admin.middleware import require_admin_auth
 
 router = APIRouter(prefix="/api/admin", tags=["admin-candidates"])
@@ -242,7 +242,66 @@ async def create_candidate(
     return {"id": cand.id, "name": cand.fullName, "email": email}
 
 
-# ============ Clear Cooldown ============
+# ============ Reset Cooldown ============
+
+
+@router.post("/candidates/{candidate_id}/reset-cooldown")
+async def reset_candidate_cooldown(
+    candidate_id: str,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin_auth),
+):
+    """
+    Reset cooldown for a candidate who failed and is currently in cooldown.
+
+    1. Finds the latest FAIL InterviewSession for this candidate (by startedAt) and clears its completedAt,
+       making the derived cooldown deadline effectively expired.
+    2. Clears InterviewQueueEntry.cooldownUntil if present.
+    3. Sets the candidate's currentPhase back to 'interview' so they can start again.
+
+    Only works on candidates with at least one FAIL result.
+    """
+    # 1. Find latest FAIL session — order by startedAt desc so the most recent session
+    # is always targeted, even if its completedAt was previously cleared by a reset.
+    latest_fail = (
+        db.query(InterviewSession)
+        .filter(
+            InterviewSession.candidateId == candidate_id,
+            InterviewSession.status == "completed",
+            InterviewSession.result == "FAIL",
+        )
+        .order_by(InterviewSession.startedAt.desc())
+        .first()
+    )
+
+    if not latest_fail:
+        raise HTTPException(status_code=400, detail="No failed interview session found for this candidate")
+
+    # 2. Clear completedAt — cooldown is derived from this field + cooldown_days
+    latest_fail.completedAt = None
+
+    # 3. Clear cooldownUntil on queue entry if it exists
+    queue_entry = (
+        db.query(InterviewQueueEntry)
+        .filter(InterviewQueueEntry.candidateId == candidate_id)
+        .first()
+    )
+    if queue_entry:
+        queue_entry.cooldownUntil = None
+
+    # 4. Move candidate back to interview phase and reset all phase flags
+    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if candidate:
+        candidate.currentPhase = "interview"
+        # Reset all phase-visited flags so dashboard reconstructs phase 2 correctly
+        candidate.passedAndVisitedSummary = False
+        candidate.offerLetterViewed = False
+        candidate.joiningDetailsVisited = False
+        candidate.documentsSubmitted = False
+
+    db.commit()
+
+    return {"success": True, "message": "Cooldown reset successfully. Candidate can now start a new interview."}
 
 
 # ============ Re-evaluate Interview ============
@@ -451,7 +510,7 @@ async def get_interview_evaluations(
     query = (
         db.query(InterviewSession)
         .filter(InterviewSession.status == "completed")
-        .order_by(InterviewSession.completedAt.desc())
+        .order_by(InterviewSession.startedAt.desc())
     )
     if candidateId:
         query = query.filter(InterviewSession.candidateId == candidateId)

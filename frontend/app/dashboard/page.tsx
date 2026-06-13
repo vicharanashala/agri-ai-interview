@@ -29,6 +29,7 @@ interface Attempt {
   overall_score: number | null;
   result: string | null;
   completedAt: string | null;
+  startedAt: string | null;
 }
 
 export default function DashboardPage() {
@@ -87,8 +88,12 @@ export default function DashboardPage() {
         setCurrentPhase(actualPhase);
         setHasCompletedInterview(actualPhase >= 3);
 
-        // Sync storage flags from DB
-        if (dbSummaryVisited) localStorage.setItem('passedAndVisitedSummary', 'true');
+        // Sync storage flags from DB — clear stale localStorage if DB says flag is not set
+        if (dbSummaryVisited) {
+          localStorage.setItem('passedAndVisitedSummary', 'true');
+        } else {
+          localStorage.removeItem('passedAndVisitedSummary');
+        }
 
         // Persist candidate info in sessionStorage for downstream pages (offer letter, etc.)
         if (candidate.fullName) sessionStorage.setItem('candidateName',  candidate.fullName);
@@ -426,13 +431,16 @@ export default function DashboardPage() {
           </h2>
           <div className={styles.attemptsList}>
             {attempts.map((attempt, index) => {
-              const date = attempt.completedAt
-                ? new Date(attempt.completedAt).toLocaleDateString('en-IN', {
-                    day: '2-digit',
-                    month: 'short',
-                    year: 'numeric',
-                  })
-                : '—';
+              const date = (attempt.completedAt
+                ? new Date(attempt.completedAt)
+                : attempt.startedAt
+                ? new Date(attempt.startedAt)
+                : null
+              )?.toLocaleDateString('en-IN', {
+                  day: '2-digit',
+                  month: 'short',
+                  year: 'numeric',
+                }) ?? '—';
 
               const badgeClass =
                 attempt.result === 'PASS'

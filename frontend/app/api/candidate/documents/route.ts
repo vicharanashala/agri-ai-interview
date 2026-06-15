@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth-options'
-import { prisma } from '@/lib/prisma'
-
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 export async function GET(request: NextRequest) {
+  console.log('[documents GET] handler invoked, url:', request.url)
   try {
     const session = await getServerSession(authOptions)
+    console.log('[documents GET] session:', session ? `email=${session.user?.email}` : 'NULL')
     if (!session?.user?.email) {
+      console.log('[documents GET] returning 401 - no session')
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -16,6 +17,8 @@ export async function GET(request: NextRequest) {
     // (set by the candidate login flow) and forward it as Bearer auth
     const redisToken = request.headers.get('x-redis-token')
       || request.cookies.get('candidate_session_token')?.value
+      || request.headers.get('authorization')?.replace(/^Bearer\s+/i, '')
+    console.log('[documents GET] redisToken available:', !!redisToken)
 
     const backendUrl = `${API_BASE}/api/candidate/documents`
     const response = await fetch(backendUrl, {
@@ -45,6 +48,7 @@ export async function POST(request: NextRequest) {
 
     const redisToken = request.headers.get('x-redis-token')
       || request.cookies.get('candidate_session_token')?.value
+      || request.headers.get('authorization')?.replace(/^Bearer\s+/i, '')
 
     // Forward the raw FormData to backend (including file uploads)
     const formData = await request.formData()

@@ -74,7 +74,8 @@ function LoginPageInner() {
           return;
         }
 
-        router.push('/onboarding');
+        // Always go through /post-login to create the backend session token
+        router.push('/post-login');
       } else {
         if (!email || !password) {
           setError('Please fill in all fields');
@@ -94,23 +95,8 @@ function LoginPageInner() {
           return;
         }
 
-        try {
-          const profileResponse = await fetch('/api/candidate', {
-            credentials: 'include',
-          });
-
-          if (profileResponse.ok) {
-            const candidate = await profileResponse.json();
-            if (candidate && candidate.id) {
-              router.push('/dashboard');
-              return;
-            }
-          }
-        } catch (_) {
-          // API call failed, continue to onboarding
-        }
-
-        router.push('/onboarding');
+        // Always go through /post-login — it handles session creation AND routing
+        router.push('/post-login');
       }
     } catch (err) {
       setError('An error occurred. Please try again.');

@@ -53,6 +53,17 @@ def _get_candidate_id_from_request(request: Request) -> str:
     redis = get_redis()
     token_hash = _hash_token(token)
 
+    # Fast path: look up directly by token_hash index
+    token_index_key = f"candidate:token_index:{token_hash}"
+    raw = redis.get(token_index_key)
+    if raw:
+        import json
+        data = json.loads(raw)
+        candidate_id = data.get("candidate_id")
+        if candidate_id:
+            return candidate_id
+
+    # Fallback: scan keys (legacy sessions created before token_index was added)
     cursor = 0
     while True:
         cursor, keys = redis.scan(cursor, match=f"{_SESSION_KEY_PREFIX}*", count=100)

@@ -115,7 +115,12 @@ async def create_session(request: Request, response: Response):
         "candidate_id": candidate_id,
     }
     redis.setex(old_key, _SESSION_TTL, json.dumps(session_data))
-    print(f"[SESSION DEBUG] Created session: key={old_key} | token_hash(first 8)={token_hash[:8]}... | candidate_id={candidate_id}")
+    print(f"[SESSION CREATE] key={old_key} | token(first 8)={token[:8]} | token_hash(first 8)={token_hash[:8]} | candidate_id={candidate_id}")
+
+    # Also store with the token_hash as key so we can find by token directly (key = hash, value = session_data)
+    token_index_key = f"candidate:token_index:{token_hash}"
+    redis.setex(token_index_key, _SESSION_TTL, json.dumps({"candidate_id": candidate_id, "user_id": user_id}))
+    print(f"[SESSION CREATE] token_index key={token_index_key} stored")
 
     # Fallback httpOnly cookie (same-origin)
     response.set_cookie(
@@ -145,8 +150,13 @@ async def candidate_logout(request: Request, response: Response):
 
     redis = get_redis()
     token_hash = _hash_token(token)
-    cursor = 0
 
+    # Fast path: delete token_index
+    token_index_key = f"candidate:token_index:{token_hash}"
+    redis.delete(token_index_key)
+
+    # Also delete by candidate key
+    cursor = 0
     while True:
         cursor, keys = redis.scan(cursor, match=f"{_SESSION_KEY_PREFIX}*", count=100)
         for key in keys:
@@ -172,8 +182,20 @@ async def verify_session(request: Request):
 
     redis = get_redis()
     token_hash = _hash_token(token)
-    cursor = 0
 
+    # Fast path
+    token_index_key = f"candidate:token_index:{token_hash}"
+    raw = redis.get(token_index_key)
+    if raw:
+        data = json.loads(raw)
+        return {
+            "valid": True,
+            "candidate_id": data["candidate_id"],
+            "user_id": data["user_id"],
+        }
+
+    # Fallback: scan
+    cursor = 0
     while True:
         cursor, keys = redis.scan(cursor, match=f"{_SESSION_KEY_PREFIX}*", count=100)
         for key in keys:

@@ -56,6 +56,46 @@ async def debug_headers(request: Request):
     return dict(request.headers)
 
 
+@app.get("/debug-session")
+async def debug_session(request: Request):
+    """Debug Redis session lookup — mirrors _get_candidate_id_from_request exactly."""
+    from app.api.candidate.session import _extract_bearer_token, _hash_token, _SESSION_KEY_PREFIX, get_redis
+    import json
+
+    token = _extract_bearer_token(request)
+    if not token:
+        return {"error": "No token found in auth header or candidate_session cookie", "auth_header": request.headers.get('authorization', '(none)'), "cookie": request.cookies.get('candidate_session', '(none)')}
+
+    redis = get_redis()
+    token_hash = _hash_token(token)
+
+    # List ALL candidate:session:* keys
+    all_keys = []
+    cursor = 0
+    while True:
+        cursor, keys = redis.scan(cursor, match=f"{_SESSION_KEY_PREFIX}*", count=100)
+        all_keys.extend(keys)
+        if cursor == 0:
+            break
+
+    candidates = []
+    for key in all_keys:
+        raw = redis.get(key)
+        if raw:
+            session = json.loads(raw)
+            candidates.append({"key": key, "stored_hash": session.get("token_hash", "")[:16], "match": session.get("token_hash", "") == token_hash, "candidate_id": session.get("candidate_id")})
+
+    return {
+        "token_first_8": token[:8],
+        "token_hash_first_8": token_hash[:8],
+        "candidate_session_cookie_first_8": request.cookies.get('candidate_session', 'NOT_FOUND')[:8] if request.cookies.get('candidate_session') else None,
+        "auth_header_first_8": request.headers.get('authorization', '')[7:15] if request.headers.get('authorization', '').startswith('Bearer ') else 'NOT_BEARER',
+        "redis_keys_found": all_keys,
+        "candidates": candidates,
+        "match_found": any(c.get("match") for c in candidates),
+    }
+
+
 # ── Admin routes ──────────────────────────────────────────────────────────────
 app.include_router(auth.router)
 app.include_router(candidates.router)

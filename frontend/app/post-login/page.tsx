@@ -10,6 +10,29 @@ function PostLoginContent() {
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get('callbackUrl');
 
+  // ── Helper: create a fresh backend session ───────────────────────────────────
+  async function _createBackendSession(candidateId: string, email: string) {
+    try {
+      const res = await fetch('/api/candidate/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ candidate_id: candidateId, email }),
+      });
+      const data = await res.json();
+      console.log('[post-login] session response:', res.status, 'token?', !!data.token);
+      if (data.token) {
+        sessionStorage.setItem('candidate_session_token', data.token);
+        sessionStorage.setItem('candidate_id', candidateId);
+        console.log('[post-login] Token stored, first 8:', data.token.substring(0, 8));
+      } else {
+        console.warn('[post-login] No token in session response:', JSON.stringify(data));
+      }
+    } catch (e) {
+      console.warn('[post-login] Failed to create backend session', e);
+    }
+  }
+
   useEffect(() => {
     console.log('[post-login] effect fired: status=', status, 'session=', session?.user?.email ?? 'null');
     if (status === 'loading') return;
@@ -33,33 +56,38 @@ function PostLoginContent() {
         console.log('[post-login] candidate found:', candidate?.id, 'phase:', candidate?.currentPhase);
         const phase = candidate?.currentPhase;
 
-        // Step 2: Establish Redis session with backend (single-session enforcement).
-        // This must happen before any interview/queue API calls are made.
-        // If candidate record doesn't exist yet, skip session creation (onboarding).
+        // Step 2: Establish Redis session with backend.
+        // First check if we already have a valid token before creating a new one.
+        // This prevents overwriting valid sessions on page reloads.
         if (candidate?.id && session?.user?.email) {
-          console.log('[post-login] Creating backend session for', session.user.email);
-          try {
-            const res = await fetch('/api/candidate/session', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              credentials: 'include',
-              body: JSON.stringify({
-                candidate_id: candidate.id,
-                email: session.user.email,
-              }),
-            });
-            const data = await res.json();
-            console.log('[post-login] session response:', res.status, 'token?', !!data.token);
-            if (data.token) {
-              // Store in sessionStorage — cleared on tab close
-              sessionStorage.setItem('candidate_session_token', data.token)
-              sessionStorage.setItem('candidate_id', candidate.id ?? '')
-              console.log('[post-login] Token stored, first 8:', data.token.substring(0, 8));
-            } else {
-              console.warn('[post-login] No token in session response:', JSON.stringify(data));
+          const existingToken = sessionStorage.getItem('candidate_session_token');
+
+          if (existingToken) {
+            // Verify existing token is still valid before reusing it
+            try {
+              console.log('[post-login] Verifying existing token, first 8:', existingToken.substring(0, 8));
+              const verifyRes = await fetch('/api/candidate/session/verify', {
+                headers: { Authorization: `Bearer ${existingToken}` },
+              });
+
+              if (verifyRes.ok) {
+                const verifyData = await verifyRes.json();
+                console.log('[post-login] Existing token valid, candidate_id:', verifyData.candidate_id);
+                // Token still good — ensure candidate_id is also stored
+                sessionStorage.setItem('candidate_id', candidate.id ?? '');
+              } else {
+                console.log('[post-login] Existing token invalid, creating new session');
+                throw new Error('Token expired');
+              }
+            } catch (verifyErr) {
+              // Token missing, invalid, or verify failed — create fresh session
+              console.log('[post-login] Will create new session:', verifyErr);
+              await _createBackendSession(candidate.id, session.user.email);
             }
-          } catch (e) {
-            console.warn('[post-login] Failed to create backend session', e);
+          } else {
+            // No existing token — create one
+            console.log('[post-login] No existing token — creating new session');
+            await _createBackendSession(candidate.id, session.user.email);
           }
         } else {
           console.log('[post-login] No candidate.id or no email — skipping session creation');

@@ -22,7 +22,7 @@ from app.services.settings_service import get_cooldown_days
 # -------------------------------------------------------------------
 # Config
 # -------------------------------------------------------------------
-MAX_CONCURRENT_INTERVIEWS = 5
+MAX_CONCURRENT_INTERVIEWS = 20
 
 
 # -------------------------------------------------------------------

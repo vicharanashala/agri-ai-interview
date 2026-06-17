@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     JWT_EXPIRATION_MINUTES: int = 60
 
     # LLM settings
-    LLM_BASE_URL: str = "http://100.100.108.41:8001/v1/"
+    LLM_BASE_URL: str = "https://api.minimax.io/v1/"
     LLM_API_KEY: str = ""
 
 

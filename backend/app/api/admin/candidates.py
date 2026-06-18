@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 
 from app.db.database import get_db
-from app.db.models.candidate import Candidate, User, InterviewSession, AntiCheatEvent, InterviewQueueEntry
+from app.db.models.candidate import Candidate, User, InterviewSession, AntiCheatEvent, InterviewQueueEntry, SignedOfferLetter
 from app.api.admin.middleware import require_admin_auth
 
 router = APIRouter(prefix="/api/admin", tags=["admin-candidates"])

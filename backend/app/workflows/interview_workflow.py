@@ -28,6 +28,7 @@ class InterviewState:
         self.start_time = datetime.now()
         self.qa_pairs: List[Dict[str, Any]] = []  # [{question, answer, topic}] populated per turn
         self._pending_question: Dict[str, str] = {}  # {question, topic} awaiting the next answer
+        self._recent_questions: List[str] = []  # sliding window of last N question texts for dedup
 
     def _get_max_duration_minutes(self) -> int:
         """Load max interview duration in minutes from DB settings, falling back to default."""
@@ -56,7 +57,28 @@ class InterviewState:
         if topic:
             entry["topic"] = topic
         self.messages.append(entry)
-    
+
+    def _is_duplicate(self, question: str) -> bool:
+        """Return True if question is the same as or >70% overlapping with a recently-asked question."""
+        q = question.lower().strip()
+        for recent in self._recent_questions:
+            r = recent.lower().strip()
+            if q == r:
+                return True
+            q_words = set(q.split())
+            r_words = set(r.split())
+            if q_words and r_words:
+                overlap = len(q_words & r_words) / max(len(q_words), len(r_words))
+                if overlap > 0.7:
+                    return True
+        return False
+
+    def add_question(self, question: str):
+        """Record a question in the recent-questions sliding window."""
+        self._recent_questions.append(question)
+        if len(self._recent_questions) > 5:
+            self._recent_questions.pop(0)
+
     def get_conversation_context(self) -> str:
         """Build conversation context for generating next question."""
         context = []
@@ -301,11 +323,17 @@ class InterviewWorkflow:
                     messages=[{"role": "user", "content": prompt}],
                     system_prompt=system_prompt,
                     temperature=0.7,
-                    max_tokens=250,
+                    max_tokens=600,
+                    require_ending_punctuation=True,
                 )
                 if raw:
                     question_text = raw.strip()
                 if question_text and self._is_valid_question(question_text):
+                    # Reject if this exact/near-duplicate question was asked recently
+                    if state._is_duplicate(question_text):
+                        question_text = None
+                        continue  # retry
+                    state.add_question(question_text)
                     break  # good question, exit retry loop
             except Exception:
                 import traceback
@@ -401,19 +429,76 @@ class InterviewWorkflow:
         return False
 
     def get_completed_interview(self, interview_id: str) -> Optional[Any]:
-        """Retrieve a completed interview's state for evaluation."""
-        return _completed_interviews.get(interview_id)
+        """Retrieve a completed interview's state for evaluation.
+        
+        Tries in-memory first, then reconstructs from DB InterviewSession if needed.
+        """
+        state = _completed_interviews.get(interview_id)
+        if state:
+            return state
+        
+        # DB fallback: reconstruct a lightweight state-like object from DB
+        from app.db.database import SessionLocal
+        from app.db.models.candidate import InterviewSession
+        import json
+        db = SessionLocal()
+        try:
+            session = db.query(InterviewSession).filter(
+                InterviewSession.id == interview_id
+            ).first()
+            if session and session.interviewData:
+                try:
+                    data = json.loads(session.interviewData)
+                    # Use a SimpleNamespace so callers can access .candidate_data / .qa_pairs
+                    # via attribute access (same as the real InterviewState object)
+                    from types import SimpleNamespace
+                    ns = SimpleNamespace(
+                        candidate_data=data.get("candidate_data", {}),
+                        qa_pairs=data.get("qa_pairs", []),
+                    )
+                    return ns
+                except Exception:
+                    pass
+        finally:
+            db.close()
+        
+        return None
 
     def get_conversation_history(self, interview_id: str) -> Optional[List[Dict[str, Any]]]:
-        """Get the full conversation history from either active or completed store."""
-        # Check active first
+        """Get the full conversation history from in-memory or DB.
+        
+        Tries in-memory first (current worker), then falls back to PostgreSQL
+        (any worker — handles multi-worker deployments where the end-interview
+        request may land on a different worker than the one that ran the interview).
+        """
+        # 1. In-memory: active interviews
         state = _interviews.get(interview_id)
         if state:
             return state.messages
-        # Fall back to completed (post-end)
+        
+        # 2. In-memory: completed interviews (post-end)
         state = _completed_interviews.get(interview_id)
         if state:
             return state.messages
+        
+        # 3. DB fallback: different worker or after restart — InterviewSession.interviewData
+        from app.db.database import SessionLocal
+        from app.db.models.candidate import InterviewSession
+        import json
+        db = SessionLocal()
+        try:
+            session = db.query(InterviewSession).filter(
+                InterviewSession.id == interview_id
+            ).first()
+            if session and session.interviewData:
+                try:
+                    data = json.loads(session.interviewData)
+                    return data.get("messages", [])
+                except Exception:
+                    pass
+        finally:
+            db.close()
+        
         return None
 
 

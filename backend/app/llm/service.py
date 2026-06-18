@@ -34,7 +34,8 @@ class LLMService:
         messages: List[Dict[str, str]],
         temperature: float = 0.7,
         max_tokens: int = 2000,
-        system_prompt: Optional[str] = None
+        system_prompt: Optional[str] = None,
+        require_ending_punctuation: bool = False,
     ) -> str:
         """
         Make a chat completion request to MiniMax API.
@@ -44,6 +45,9 @@ class LLMService:
             temperature: Sampling temperature (0.0 to 1.0)
             max_tokens: Maximum tokens in response
             system_prompt: Optional system prompt to prepend
+            require_ending_punctuation: If True, discard response if it doesn't end with . ! ?
+                                        Use for question generation (must be complete sentences).
+                                        Use False for evaluation (returns raw JSON ending in }).
 
         Returns:
             The LLM's response text
@@ -66,7 +70,6 @@ class LLMService:
         content = message.content or ""
 
         # Fall back to reasoning_details if content is empty
-        # Safely handle missing/None reasoning_details
         try:
             reasoning_details = getattr(message, "reasoning_details", None)
             if not content and reasoning_details:
@@ -74,6 +77,11 @@ class LLMService:
                     content = reasoning_details[0].get("text", "") if isinstance(reasoning_details[0], dict) else str(reasoning_details[0])
         except Exception:
             pass  # Ignore reasoning extraction errors
+
+        # Only apply truncation guard when explicitly required (question generation).
+        # Evaluation responses are raw JSON ending in } — this check would discard them.
+        if require_ending_punctuation and content and content[-1] not in '.!?':
+            content = ""
 
         return content or "(No response)"
 
@@ -152,7 +160,7 @@ Questions MUST relate to agriculture, crops, soil, irrigation, or farming practi
             messages=messages,
             system_prompt=system_prompt,
             temperature=0.7,
-            max_tokens=200
+            max_tokens=400
         )
 
         is_complete = self._check_interview_complete(response, conversation_history)
@@ -295,6 +303,15 @@ Return your evaluation as valid JSON only, no other text. Ensure all fields are 
 
         messages = [{"role": "user", "content": evaluation_prompt}]
 
+        required_topics = [
+            "agricultural_concepts",
+            "crop_management_practices",
+            "pest_and_disease_management",
+            "nutrient_deficiencies",
+            "weather_related_advisories",
+            "field_level_technical_issues",
+        ]
+
         try:
             response = await self.chat_completion(
                 messages=messages,
@@ -315,14 +332,6 @@ Return your evaluation as valid JSON only, no other text. Ensure all fields are 
                 else:
                     raise ValueError("Could not parse JSON from response")
 
-            required_topics = [
-                "agricultural_concepts",
-                "crop_management_practices",
-                "pest_and_disease_management",
-                "nutrient_deficiencies",
-                "weather_related_advisories",
-                "field_level_technical_issues",
-            ]
             evaluation["topic_scores"] = evaluation.get("topic_scores", {})
             for topic in required_topics:
                 if topic not in evaluation["topic_scores"]:

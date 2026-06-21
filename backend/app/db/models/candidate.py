@@ -59,6 +59,10 @@ class Candidate(Base):
     joiningDetailsVisited = Column(Boolean, default=False)
     documentsSubmitted = Column(Boolean, default=False)
 
+    # Onboarding identity photo (file path set by backend after upload)
+    onboardingPhoto           = Column(String, nullable=True)
+    onboardingPhotoUploadedAt = Column(DateTime, nullable=True)
+
     createdAt = Column(DateTime, default=_utcnow)
     updatedAt = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 

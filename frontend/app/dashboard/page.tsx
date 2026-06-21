@@ -235,9 +235,8 @@ export default function DashboardPage() {
               setShowNoAttemptsLeftDialog(true);
               return;
             }
-            // Always go through /post-login to ensure candidate_session_token
-            // is created and stored in sessionStorage before entering /interview.
-            router.push('/post-login?callbackUrl=/interview');
+            // Always go through /post-login → /verify (identity check) before interview.
+            router.push('/post-login?callbackUrl=/verify');
           } else {
             router.push('/interview/queue');
           }

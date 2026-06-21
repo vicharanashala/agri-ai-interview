@@ -550,3 +550,88 @@
   .card { padding: 32px 24px; }
   .formBox { padding: 28px 20px; }
 }
+/* ─── Identity Photo Step ──────────────────────────────────────── */
+.photoStep {
+  background: #f9fafb;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-top: 8px;
+}
+
+.photoStepHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.photoStepLabel {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.photoRequired {
+  font-size: 12px;
+  color: #ef4444;
+  background: #fef2f2;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid #fecaca;
+}
+
+.photoDone {
+  font-size: 12px;
+  color: #16a34a;
+  background: #f0fdf4;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid #bbf7d0;
+}
+
+.photoThumbWrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.photoThumb {
+  width: 80px;
+  height: 100px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  transform: scaleX(-1);
+}
+
+.retakePhotoButton {
+  background: #fff;
+  border: 1.5px solid #d1d5db;
+  color: #374151;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.capturePhotoButton {
+  width: 100%;
+  padding: 12px 20px;
+  background: #fff;
+  border: 1.5px dashed #08CB00;
+  color: #08CB00;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: background 0.2s;
+}
+
+.capturePhotoButton:hover {
+  background: rgba(8, 203, 0, 0.05);
+}

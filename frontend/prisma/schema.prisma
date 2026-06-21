@@ -92,6 +92,10 @@ model Candidate {
   // Flag: candidate visited joining details
   joiningDetailsVisited Boolean  @default(false)
   
+  // Onboarding identity photo (stored as file path on disk, set by backend after upload)
+  onboardingPhoto           String?
+  onboardingPhotoUploadedAt DateTime?
+  
   // Flag: candidate submitted documents (Phase 4)
   documentsSubmitted Boolean @default(false)
   

@@ -8,7 +8,6 @@ import { syncPhaseToDb } from '@/lib/phaseSync';
 import { useAntiCheat, type ViolationType } from '@/hooks/useAntiCheat';
 import { interceptAuthFetch, authFetch } from '@/lib/auth-fetch';
 import AntiCheatOverlay from '@/components/AntiCheatOverlay';
-import CameraCorner from '@/components/CameraCorner';
 
 interface Message {
   role: 'ai' | 'user';
@@ -42,16 +41,6 @@ interface CumulativeEvaluation {
 export default function InterviewPage() {
   const router = useRouter();
   const { data: session } = useSession();
-
-  // ── Identity guard: only allow entry after passing /verify ────────────
-  useEffect(() => {
-    const verified = sessionStorage.getItem('identityVerified') === 'true';
-    if (!verified) {
-      // Clear the flag so re-verification is required on retry
-      sessionStorage.removeItem('identityVerified');
-      router.replace('/post-login?callbackUrl=/verify');
-    }
-  }, [router]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -71,8 +60,6 @@ export default function InterviewPage() {
   const [showEndConfirmDialog, setShowEndConfirmDialog] = useState(false);
   const [showBackConfirmDialog, setShowBackConfirmDialog] = useState(false);
   const [isInterviewCompleted, setIsInterviewCompleted] = useState(false);
-  const [referencePhoto, setReferencePhoto] = useState<string>('');  // stored onboarding photo for presence checks
-  const [cameraWarning, setCameraWarning] = useState<string | null>(null);
   const [cheatWarning, setCheatWarning] = useState<{
     visible: boolean
     type: ViolationType | null
@@ -124,8 +111,6 @@ export default function InterviewPage() {
     localStorage.setItem('interviewJustCompleted', 'true')
     sessionStorage.setItem('interviewPhase', '3')
     localStorage.setItem('interviewPhase', '3')
-    // Clear identityVerified so next interview attempt requires fresh verification
-    sessionStorage.removeItem('identityVerified')
     await syncPhaseToDb(3)
 
     router.push('/summary')
@@ -369,17 +354,6 @@ export default function InterviewPage() {
       return;
     }
 
-    // Load reference photo for presence checks (non-blocking, best-effort)
-    let refPhoto = '';
-    try {
-      const photoRes = await authFetch('/api/candidate/photo');
-      if (photoRes.ok) {
-        const photoJson = await photoRes.json();
-        refPhoto = photoJson.photoData ?? '';
-        setReferencePhoto(refPhoto);
-      }
-    } catch { /* non-fatal — camera will still work */ }
-
     try {
       // ── Step 1: Request an interview slot ─────────────────────────────────
       const queueRes = await authFetch('/api/interview/queue/request', {
@@ -559,7 +533,6 @@ export default function InterviewPage() {
         localStorage.setItem('interviewJustCompleted', 'true');
         sessionStorage.setItem('interviewPhase', '3');
         localStorage.setItem('interviewPhase', '3');
-        sessionStorage.removeItem('identityVerified');
         await syncPhaseToDb(3);
 
         // Save conversation history for summary page
@@ -657,7 +630,6 @@ export default function InterviewPage() {
       localStorage.setItem('interviewJustCompleted', 'true');
       sessionStorage.setItem('interviewPhase', '3');
       localStorage.setItem('interviewPhase', '3');
-      sessionStorage.removeItem('identityVerified');
       await syncPhaseToDb(3);  // ← this is the key line that was missing
 
       // Cache result, score, end_reason, and evaluation for the summary page
@@ -1079,44 +1051,6 @@ export default function InterviewPage() {
             <h2>Closing the interview...</h2>
             <p>Please wait.</p>
           </div>
-        </div>
-      )}
-
-      {/* Persistent camera corner — shown during active interview only */}
-      {!showInstructions && referencePhoto && (
-        <CameraCorner
-          referencePhoto={referencePhoto}
-          presenceCheckIntervalMs={45_000}
-          onPresenceViolation={(msg) => setCameraWarning(msg)}
-          onCameraError={(msg) => setCameraWarning(msg)}
-        />
-      )}
-
-      {/* Camera warning banner */}
-      {cameraWarning && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          background: '#b91c1c',
-          color: '#fff',
-          textAlign: 'center',
-          padding: '8px 16px',
-          fontSize: '13px',
-          zIndex: 999,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '12px',
-        }}>
-          <span>⚠️ {cameraWarning}</span>
-          <button
-            onClick={() => setCameraWarning(null)}
-            style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: '16px' }}
-          >
-            ×
-          </button>
         </div>
       )}
     </>

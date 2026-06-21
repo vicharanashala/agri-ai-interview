@@ -34,7 +34,6 @@ class CandidatePatchRequest(BaseModel):
     passedAndVisitedSummary: Optional[bool] = None
     joiningDetailsVisited: Optional[bool] = None
     documentsSubmitted: Optional[bool] = None
-    onboardingPhoto: Optional[str] = None   # file path — set by POST /api/candidate/photo
 
 
 class CandidatePatchResponse(BaseModel):
@@ -114,9 +113,6 @@ async def patch_candidate(request: Request, body: CandidatePatchRequest):
 
     if body.documentsSubmitted is not None:
         updates["documentsSubmitted"] = body.documentsSubmitted
-
-    if body.onboardingPhoto is not None:
-        updates["onboardingPhoto"] = body.onboardingPhoto
 
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")

@@ -6,8 +6,6 @@ import styles from './page.module.css';
 import { syncPhaseToDb } from '@/lib/phaseSync';
 import { INDIA_STATES_DISTRICTS, INDIAN_STATES } from '@/data/india-states-districts';
 import SearchableSelect from '@/components/SearchableSelect';
-import PhotoCaptureModal from '@/components/PhotoCaptureModal';
-import { authFetch } from '@/lib/auth-fetch';
 
 interface ResumeData {
   name: string;
@@ -55,11 +53,6 @@ export default function OnboardingPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [resume, setResume] = useState<ResumeData | null>(null);
   const [isFrozen, setIsFrozen] = useState(false);
-
-  // ── Identity Photo ───────────────────────────────────────────────────────
-  const [showPhotoCapture, setShowPhotoCapture] = useState(false);
-  const [onboardingPhoto, setOnboardingPhoto] = useState<string | null>(null);
-  const [photoError, setPhotoError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
@@ -84,16 +77,6 @@ export default function OnboardingPage() {
           );
           if (hasProfileData) {
             setIsFrozen(true);
-            // Load stored onboarding photo if available
-            if (candidate.onboardingPhoto) {
-              try {
-                const photoRes = await authFetch('/api/candidate/photo');
-                if (photoRes.ok) {
-                  const photoData = await photoRes.json();
-                  if (photoData.photoData) setOnboardingPhoto(photoData.photoData);
-                }
-              } catch { /* non-fatal */ }
-            }
             setFormData({
               fullName: candidate.fullName || '',
               phone: candidate.phone || '',
@@ -226,38 +209,96 @@ export default function OnboardingPage() {
     }
   };
 
-  // ── Phase 1: validate form fields ─────────────────────────────────────────
-  const _validateForm = (): boolean => {
-    if (!formData.fullName.trim()) { setError('Please enter your full name'); return false; }
-    if (!formData.state.trim()) { setError('Please select your state'); return false; }
-    if (!formData.district.trim()) { setError('Please select your district'); return false; }
-    if (formData.district === 'Others' && !formData.districtCustom?.trim()) {
-      setError('Please specify your district name'); return false;
-    }
-    if (!validatePhone(formData.phone)) return false;
-    if (!validatePincode(formData.pincode)) return false;
-    if (!formData.address.trim()) { setError('Please enter your address'); return false; }
-    if (!formData.currentRole.trim()) { setError('Please enter your current role'); return false; }
-    if (!formData.yearsOfExperience.trim()) { setError('Please enter your years of experience'); return false; }
-    if (!formData.highestEducation.trim()) { setError('Please select your highest education'); return false; }
-    if (!formData.institution.trim()) { setError('Please enter your institution/university'); return false; }
-    if (!formData.farmingBackground.trim()) { setError('Please describe your farming experience'); return false; }
-    if (!formData.cropsGrown.trim()) { setError('Please enter the crops you have grown/handled'); return false; }
-    if (!formData.primaryExpertise.trim()) { setError('Please select your primary area of expertise'); return false; }
-    if (!resume) { setError('Please upload your resume'); return false; }
-    return true;
-  };
-
-  // ── Phase 2: save profile + resume (called after photo capture) ───────────
-  const _saveProfile = async (capturedPhoto: string) => {
-    setIsLoading(true);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setError('');
 
+    // Check all required fields are filled
+    if (!formData.fullName.trim()) {
+      setError('Please enter your full name');
+      return;
+    }
+
+    if (!formData.state.trim()) {
+      setError('Please select your state');
+      return;
+    }
+
+    if (!formData.district.trim()) {
+      setError('Please select your district');
+      return;
+    }
+
+    if (formData.district === 'Others' && !formData.districtCustom?.trim()) {
+      setError('Please specify your district name');
+      return;
+    }
+
+    // Validate phone
+    if (!validatePhone(formData.phone)) {
+      return;
+    }
+
+    // Validate pincode
+    if (!validatePincode(formData.pincode)) {
+      return;
+    }
+
+    if (!formData.address.trim()) {
+      setError('Please enter your address');
+      return;
+    }
+
+    if (!formData.currentRole.trim()) {
+      setError('Please enter your current role');
+      return;
+    }
+
+    if (!formData.yearsOfExperience.trim()) {
+      setError('Please enter your years of experience');
+      return;
+    }
+
+    if (!formData.highestEducation.trim()) {
+      setError('Please select your highest education');
+      return;
+    }
+
+    if (!formData.institution.trim()) {
+      setError('Please enter your institution/university');
+      return;
+    }
+
+    if (!formData.farmingBackground.trim()) {
+      setError('Please describe your farming experience');
+      return;
+    }
+
+    if (!formData.cropsGrown.trim()) {
+      setError('Please enter the crops you have grown/handled');
+      return;
+    }
+
+    if (!formData.primaryExpertise.trim()) {
+      setError('Please select your primary area of expertise');
+      return;
+    }
+
+    // Validate resume is uploaded
+    if (!resume) {
+      setError('Please upload your resume');
+      return;
+    }
+
+    setIsLoading(true);
+
     try {
+      // When "Others" is selected, use the custom district name instead
       const districtToSubmit =
         formData.district === 'Others' ? formData.districtCustom?.trim() : formData.district;
       const payload = { ...formData, district: districtToSubmit || formData.district };
 
+      // Save candidate profile to database via API
       const response = await fetch('/api/candidate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -272,21 +313,10 @@ export default function OnboardingPage() {
 
       const candidate = await response.json();
 
-      // Upload onboarding photo first (needed before moving to phase 2)
-      try {
-        await authFetch('/api/candidate/photo', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ photoData: capturedPhoto }),
-        });
-      } catch (photoErr) {
-        console.error('Photo upload failed (non-blocking):', photoErr);
-        // Non-fatal — continue even if photo upload fails
-      }
-
-      // Upload resume (server-side async: file on disk + raw text in DB)
+      // Upload resume to backend (server-side async: file on disk + raw text in DB)
       if (resume?.data && candidate?.id) {
         try {
+          // Convert base64 to a File object
           const res = await fetch(resume.data);
           const blob = await res.blob();
           const fileName = resume.name || 'resume.pdf';
@@ -294,41 +324,38 @@ export default function OnboardingPage() {
             ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
             : 'application/pdf';
           const file = new File([blob], fileName, { type: fileType });
-          const fd = new FormData();
-          fd.append('file', file);
-          fd.append('candidateId', candidate.id);
-          await fetch('/api/resume', { method: 'POST', body: fd, credentials: 'include' });
+
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('candidateId', candidate.id);
+
+          await fetch('/api/resume', { method: 'POST', body: formData, credentials: 'include' });
         } catch (uploadErr) {
           console.error('Resume upload failed (non-blocking):', uploadErr);
+          // Non-fatal — continue even if resume upload fails
         }
       }
 
-      if (candidate?.id) sessionStorage.setItem('candidateId', candidate.id);
-      if (formData.fullName) sessionStorage.setItem('candidateFullName', formData.fullName);
+      // Save candidate ID and fullName to sessionStorage (used by interview page)
+      if (candidate?.id) {
+        sessionStorage.setItem('candidateId', candidate.id);
+      }
+      if (formData.fullName) {
+        sessionStorage.setItem('candidateFullName', formData.fullName);
+      }
 
+      // Save phase as completed to sessionStorage and redirect
       sessionStorage.setItem('interviewPhase', '2');
+
+      // Sync to DB so admin dashboard sees the correct phase
       await syncPhaseToDb(2);
 
+      // Redirect to dashboard
       window.location.href = '/dashboard';
     } catch (err) {
       setError('Failed to save profile. Please try again.');
       setIsLoading(false);
     }
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    if (!_validateForm()) return;
-    // Show photo capture BEFORE saving — candidate must provide identity photo
-    setShowPhotoCapture(true);
-  };
-
-  const handlePhotoCapture = (photoData: string) => {
-    setOnboardingPhoto(photoData);
-    setShowPhotoCapture(false);
-    // Proceed to save profile with the captured photo
-    _saveProfile(photoData);
   };
 
   // Helper function to display field value or placeholder
@@ -787,60 +814,11 @@ export default function OnboardingPage() {
 
           {error && <p className={styles.error}>{error}</p>}
 
-          {/* Identity Photo step — shown as a visual indicator */}
-          <div className={styles.photoStep}>
-            <div className={styles.photoStepHeader}>
-              <span className={styles.photoStepLabel}>📷 Identity Verification Photo</span>
-              {!onboardingPhoto && (
-                <span className={styles.photoRequired}>Required</span>
-              )}
-              {onboardingPhoto && (
-                <span className={styles.photoDone}>✓ Captured</span>
-              )}
-            </div>
-            {photoError && <p className={styles.error}>{photoError}</p>}
-            {onboardingPhoto ? (
-              <div className={styles.photoThumbWrapper}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={onboardingPhoto} alt="Identity" className={styles.photoThumb} />
-                <button
-                  type="button"
-                  className={styles.retakePhotoButton}
-                  onClick={() => setShowPhotoCapture(true)}
-                >
-                  Retake
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                className={styles.capturePhotoButton}
-                onClick={() => setShowPhotoCapture(true)}
-              >
-                📷 Take Identity Photo
-              </button>
-            )}
-          </div>
-
           <button type="submit" className={styles.button} disabled={isLoading}>
             {isLoading ? 'Saving...' : 'Complete Profile'}
           </button>
         </form>
       </div>
-
-      {/* Identity Photo Capture Modal */}
-      {showPhotoCapture && (
-        <PhotoCaptureModal
-          title="Identity Verification Photo"
-          subtitle="A clear photo is required to verify your identity before the interview"
-          instruction="Position your face in the center of the frame and ensure good lighting"
-          confirmLabel="Use This Photo"
-          onCapture={handlePhotoCapture}
-          onClose={() => setShowPhotoCapture(false)}
-          showRetake={false}
-          required
-        />
-      )}
     </main>
   );
 }

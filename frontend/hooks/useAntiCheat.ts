@@ -9,6 +9,7 @@ export type ViolationType =
   | 'right_click'
   | 'text_selection'
   | 'multi_monitor'
+  | 'split_screen'
   | 'idle'
 
 interface AntiCheatConfig {
@@ -28,6 +29,11 @@ const DEFAULT_IDLE_THRESHOLD_MS = 15_000  // 15 seconds
 export function useAntiCheat({ onViolation, onTerminate, onLogEvent, enabled = true, idleThresholdMs = DEFAULT_IDLE_THRESHOLD_MS }: AntiCheatConfig) {
   const offenseCount = useRef<OffenseCount>({})
   const prevScreen = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
+  // Tracks the maximum total display width seen — persists across effect re-runs.
+  // screen.width is the total monitor width and never changes due to window tiling,
+  // dock, or menu bar. It stays at the true display width (e.g. 1440) even when
+  // the browser is in split-screen, unlike screen.availWidth which halves on split.
+  const maxScreenWidth = useRef<number>(0)
   const lastActivityTime = useRef<number>(Date.now())
   const lastContextMenuTime = useRef<number>(0)
   // Per-type cooldown to prevent double-fire from browser chaining events
@@ -37,8 +43,10 @@ export function useAntiCheat({ onViolation, onTerminate, onLogEvent, enabled = t
   const COOLDOWN_MS = 500
 
   // Only access window/screen after mount (browser-only)
+  // Initializes maxScreenWidth on mount so it's available before the interview effect runs.
   useEffect(() => {
     prevScreen.current = { x: window.screenX, y: window.screenY }
+    maxScreenWidth.current = screen.width
     lastActivityTime.current = Date.now()
   }, [])
 
@@ -96,6 +104,23 @@ export function useAntiCheat({ onViolation, onTerminate, onLogEvent, enabled = t
       ) {
         prevScreen.current = { x: window.screenX, y: window.screenY }
         checkAndRecord('multi_monitor')
+      }
+    }, 2_000)
+
+    // Split-screen detection — poll every 2 seconds.
+    // Detects split-screen by comparing viewport width to the total display width (screen.width).
+    // screen.width is the physical monitor width and stays at full value regardless of window tiling,
+    // dock, or menu bar — making it the correct reference for detecting when the browser has been
+    // squeezed into a narrower portion of the screen.
+    // Also track maxScreenWidth across polls so we pick up any wider display baselines.
+    const splitScreenTimer = setInterval(() => {
+      // Update baseline if this poll saw a wider screen
+      if (screen.width > maxScreenWidth.current) {
+        maxScreenWidth.current = screen.width
+      }
+      // Trigger if the viewport occupies less than 60% of the total screen width
+      if (maxScreenWidth.current > 0 && window.innerWidth < maxScreenWidth.current * 0.6) {
+        checkAndRecord('split_screen')
       }
     }, 2_000)
 
@@ -164,6 +189,7 @@ export function useAntiCheat({ onViolation, onTerminate, onLogEvent, enabled = t
       })
       document.removeEventListener('mouseup', handleSelection)
       clearInterval(pollScreen)
+      clearInterval(splitScreenTimer)
       if (idleTimerRef.current) clearInterval(idleTimerRef.current)
     }
   }, [enabled, checkAndRecord, recordActivity])
@@ -185,6 +211,7 @@ export const VIOLATION_LABELS: Record<ViolationType, string> = {
   right_click: 'Right-click is disabled during the interview.',
   text_selection: 'Selecting text is not permitted during the interview.',
   multi_monitor: 'Moving to another display is not permitted during the interview.',
+  split_screen: 'Split-screen or small window detected. Please use a full-size window.',
   idle: 'No activity detected for 10 seconds. Please stay active.',
 }
 
@@ -197,5 +224,6 @@ export const VIOLATION_TITLES: Record<ViolationType, string> = {
   right_click: 'Right-Click Blocked',
   text_selection: 'Text Selection Blocked',
   multi_monitor: 'Multi-Monitor Detected',
+  split_screen: 'Split-Screen Detected',
   idle: 'Idle Warning',
 }

@@ -211,7 +211,7 @@ function ExpandedRow({
   evaluation: InterviewEvaluation;
   adminApiBase: string;
   getAdminToken: () => string | null;
-  onReevaluate: (id: string, newScore: number, newResult: string) => void;
+  onReevaluate: (id: string, newScore: number, newResult: string, evaluation?: Evaluation) => void;
 }) {
   const [reevaluating, setReevaluating] = useState(false);
   const [resettingCooldown, setResettingCooldown] = useState(false);
@@ -228,7 +228,7 @@ function ExpandedRow({
       });
       if (res.ok) {
         const data = await res.json();
-        onReevaluate(evaluation.id, data.overall_score, data.result);
+        onReevaluate(evaluation.id, data.overall_score, data.result, data.evaluation);
       } else {
         const err = await res.json().catch(() => ({}));
         alert(`Re-evaluation failed: ${err.detail || res.statusText}`);
@@ -379,10 +379,10 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
     setExpandedId(prev => prev === id ? null : id);
   };
 
-  const handleReevaluate = (id: string, newScore: number, newResult: string) => {
+  const handleReevaluate = (id: string, newScore: number, newResult: string, evaluation?: Evaluation) => {
     setEvaluations(prev =>
       prev.map(e =>
-        e.id === id ? { ...e, score: newScore, result: newResult } : e
+        e.id === id ? { ...e, score: newScore, result: newResult, evaluation: evaluation ?? e.evaluation } : e
       )
     );
   };

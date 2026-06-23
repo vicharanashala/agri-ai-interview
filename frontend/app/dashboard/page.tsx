@@ -34,6 +34,7 @@ interface Attempt {
 
 export default function DashboardPage() {
   const [currentPhase, setCurrentPhase] = useState<Phase>(1);
+  const [documentsSubmitted, setDocumentsSubmitted] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [interviewResult, setInterviewResult] = useState<EvaluationResult | null>(null);
   const [hasCompletedInterview, setHasCompletedInterview] = useState(false);
@@ -80,10 +81,15 @@ export default function DashboardPage() {
 
         const summaryVisited = dbSummaryVisited || lsSummaryVisited;
 
-        // 3. Reconstruct actual phase from DB phase + flags
+        // 3. Pull documentsSubmitted flag from DB
+        const docsSubmitted = !!candidate.documentsSubmitted;
+        setDocumentsSubmitted(docsSubmitted);
+
+        // 4. Reconstruct actual phase from DB phase + flags
         let actualPhase: Phase = dbPhaseNum;
 
         if (summaryVisited && actualPhase < 3) actualPhase = 3;
+        if (docsSubmitted && actualPhase < 4) actualPhase = 4;
 
         setCurrentPhase(actualPhase);
         setHasCompletedInterview(actualPhase >= 3);
@@ -202,7 +208,7 @@ export default function DashboardPage() {
       id: 4,
       name: 'Upload Documents',
       description: 'Submit required documents to complete the process',
-      status: currentPhase > 4 ? 'completed' : currentPhase >= 4 ? 'current' : 'locked',
+      status: documentsSubmitted ? 'completed' : currentPhase >= 4 ? 'current' : 'locked',
     },
   ];
 
@@ -350,11 +356,11 @@ export default function DashboardPage() {
         <div className={styles.progressBar}>
           <div 
             className={styles.progressFill} 
-            style={{ width: `${(currentPhase - 1) * 25}%` }}
+            style={{ width: `${documentsSubmitted ? 100 : (currentPhase - 1) * 25}%` }}
           />
         </div>
         <span className={styles.progressPercent}>
-          {(currentPhase - 1) * 25}% Complete
+          {documentsSubmitted ? 100 : (currentPhase - 1) * 25}% Complete
         </span>
       </div>
 

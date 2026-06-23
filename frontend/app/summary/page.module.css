@@ -165,3 +165,26 @@
   .actions { width: 100%; }
   .dashboardBtn { width: 100%; }
 }
+/* ── Evaluating state (while polling) ── */
+.evaluatingTitle {
+  font-size: 22px;
+  color: #1e293b;
+  font-weight: 600;
+  margin: 24px 0 8px;
+}
+
+.evaluatingSubtitle {
+  font-size: 15px;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.6;
+  max-width: 400px;
+  text-align: center;
+}
+
+.evalError {
+  font-size: 16px;
+  color: #dc2626;
+  text-align: center;
+  margin: 0 0 24px;
+}

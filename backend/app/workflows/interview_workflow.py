@@ -25,7 +25,7 @@ class InterviewState:
         self.max_questions = get_interview_settings()["max_questions"]
         self.max_duration_minutes = self._get_max_duration_minutes()
         self.status = "active"
-        self.start_time = datetime.now()
+        self.start_time = datetime.utcnow()
         self.qa_pairs: List[Dict[str, Any]] = []  # [{question, answer, topic}] populated per turn
         self._pending_question: Dict[str, str] = {}  # {question, topic} awaiting the next answer
         self._recent_questions: List[str] = []  # sliding window of last N question texts for dedup
@@ -52,7 +52,7 @@ class InterviewState:
         entry: Dict[str, Any] = {
             "role": role,
             "content": content,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.utcnow().isoformat()
         }
         if topic:
             entry["topic"] = topic
@@ -93,14 +93,14 @@ class InterviewState:
         """Check if interview should end (question limit OR time limit reached)."""
         if self.question_count >= self.max_questions:
             return True
-        elapsed = datetime.now() - self.start_time
+        elapsed = datetime.utcnow() - self.start_time
         if elapsed >= timedelta(minutes=self.max_duration_minutes):
             return True
         return False
 
     def time_remaining_seconds(self) -> int:
         """Seconds left before time limit is reached. Returns 0 if already expired."""
-        elapsed = datetime.now() - self.start_time
+        elapsed = datetime.utcnow() - self.start_time
         remaining = int(self.max_duration_minutes * 60 - elapsed.total_seconds())
         return max(0, remaining)
 

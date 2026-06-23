@@ -819,3 +819,106 @@
 @keyframes closingSpin {
   to { transform: rotate(360deg); }
 }
+
+/* ── Closing Page (shown immediately after interview ends) ── */
+.closingPageWrapper {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 50%, #f0fdf4 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 20px;
+}
+
+.closingPageCard {
+  background: white;
+  border-radius: 24px;
+  padding: 60px 48px;
+  max-width: 560px;
+  width: 100%;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.12);
+  text-align: center;
+  animation: fadeIn 0.5s ease-out;
+}
+
+.closingPageIcon {
+  width: 100px;
+  height: 100px;
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 32px;
+  font-size: 48px;
+  color: white;
+  box-shadow: 0 8px 24px rgba(34, 197, 94, 0.4);
+}
+
+.closingPageTitle {
+  font-size: 36px;
+  color: #1e293b;
+  margin: 0 0 16px 0;
+  font-weight: 700;
+}
+
+.closingPageSubtitle {
+  font-size: 20px;
+  color: #64748b;
+  margin: 0 0 16px 0;
+  font-weight: 500;
+}
+
+.closingPageDesc {
+  font-size: 16px;
+  color: #94a3b8;
+  margin: 0 0 40px 0;
+  line-height: 1.6;
+}
+
+.closingPageButtons {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.closingPageSummaryBtn {
+  padding: 18px 48px;
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  color: white;
+  border: none;
+  border-radius: 14px;
+  font-size: 18px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 14px rgba(34, 197, 94, 0.4);
+}
+
+.closingPageSummaryBtn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(34, 197, 94, 0.5);
+}
+
+.closingPageDashboardBtn {
+  padding: 14px 48px;
+  background: transparent;
+  color: #64748b;
+  border: 2px solid #e2e8f0;
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.closingPageDashboardBtn:hover {
+  border-color: #cbd5e1;
+  color: #475569;
+  background: #f8fafc;
+}

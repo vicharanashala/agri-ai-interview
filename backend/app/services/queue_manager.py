@@ -10,7 +10,7 @@ When a candidate requests an interview:
 
 import json
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Optional, Tuple
 
 from sqlalchemy.orm import Session
@@ -39,7 +39,7 @@ def _get_db() -> Session:
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.utcnow()
 
 
 def _compute_active_count(db: Session) -> int:

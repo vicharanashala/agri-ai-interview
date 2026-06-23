@@ -4,7 +4,7 @@ Settings Service — reads LLM guidelines from the DB, with fallback to defaults
 Allows the admin dashboard to update guidelines that are actually used by the
 interview workflow and LLM evaluation.
 """
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional
 from sqlalchemy.orm import Session
 from app.db.database import SessionLocal
@@ -512,7 +512,7 @@ def save_offer_letter_config(config: dict) -> None:
     Persist offer-letter configuration to the DB.
     """
     import json
-    now = datetime.now(timezone.utc)
+    now = datetime.utcnow()
     db = _get_db()
     try:
         setting: Optional[Settings] = db.query(Settings).filter(

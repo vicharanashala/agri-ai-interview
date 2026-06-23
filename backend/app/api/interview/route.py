@@ -230,73 +230,52 @@ async def get_history(interview_id: str):
 @router.post("/end/{interview_id}")
 async def end_interview(interview_id: str, request: Optional[EndInterviewRequest] = None):
     """
-    End an interview session and get evaluation.
-
-    Regardless of how the interview ends, evaluation always runs.
-    Result (PASS/FAIL) is determined purely by score vs threshold.
-    The end_reason is stored separately and does not affect the result.
+    End interview: persist chat + state to DB immediately, then kick off
+    background LLM evaluation. Returns instantly. Candidate lands on summary
+    page which polls GET /evaluation/{id} until results are ready.
     """
-    success = interview_graph_manager.end_interview(interview_id)
+    import logging
+    logger = logging.getLogger(__name__)
 
-    if not success:
-        raise HTTPException(status_code=404, detail="Interview not found")
-
-    # Always evaluate — result is based solely on score vs threshold
-    evaluation = await interview_graph_manager.get_evaluation(interview_id)
-    threshold = get_evaluation_settings()["pass_threshold"]
-    overall_score = evaluation.get("overall_score") if evaluation else None
-    # If evaluation failed (returned None or no score), fail-safe to 0 so candidate is not auto-passed
-    if overall_score is None:
-        overall_score = 0
-    result = "PASS" if overall_score >= threshold else "FAIL"
-
-    # Capture end reason from caller (anti_cheat, withdrawn, question_limit, time_limit)
-    # or default to time_limit if not provided
     end_reason = (request.end_reason or "time_limit") if request else "time_limit"
 
-    # Look up candidate_id directly from InterviewSession — candidate_data in workflow
-    # state does NOT contain candidate_id (only onboarding form fields)
+    # 1. Mark interview ended in workflow (moves to _completed_interviews)
+    interview_graph_manager.end_interview(interview_id)
+
+    # 2. Persist chat to DB NOW — before returning.
+    #    This ensures evaluation can read from DB even if worker restarts.
     from app.db.database import SessionLocal
     db = SessionLocal()
+    candidate_id: str = ""
     try:
         from app.db.models.candidate import InterviewSession as DBInterviewSession
         session = db.query(DBInterviewSession).filter(DBInterviewSession.id == interview_id).first()
-        candidate_id = session.candidateId if session else ""
+        if session:
+            candidate_id = session.candidateId
+            session.status = "completed"
+            session.endReason = end_reason
+
+            # Save chat + end_reason to interviewData — survives worker restarts
+            messages = interview_graph_manager.get_conversation_history(interview_id) or []
+            existing: dict = {}
+            if session.interviewData:
+                try:
+                    import json
+                    existing = json.loads(session.interviewData)
+                except Exception:
+                    pass
+            existing["messages"] = messages
+            existing["end_reason"] = end_reason
+            session.interviewData = json.dumps(existing)
+            db.commit()
     finally:
         db.close()
 
-    cooldown_until: str | None = None
-    if candidate_id:
-        slot_manager.complete_interview(
-            candidate_id,
-            interview_id,
-            result=result,
-            end_reason=end_reason,
-            overall_score=overall_score,
-            evaluation=evaluation,
-        )
-        # Read back cooldownUntil so we can return it to the frontend
-        from app.db.database import SessionLocal as DBSessionLocal
-        db2 = DBSessionLocal()
-        try:
-            from app.db.models.candidate import InterviewQueueEntry
-            qe = db2.query(InterviewQueueEntry).filter(
-                InterviewQueueEntry.candidateId == candidate_id
-            ).first()
-            if qe and qe.cooldownUntil:
-                cooldown_until = qe.cooldownUntil.isoformat()
-        finally:
-            db2.close()
+    # 3. Trigger background LLM evaluation — runs async, writes result to DB
+    interview_graph_manager.trigger_evaluation(interview_id)
 
-    return {
-        "message": "Interview ended successfully",
-        "interview_id": interview_id,
-        "result": result,
-        "end_reason": end_reason,
-        "overall_score": overall_score,
-        "cooldownUntil": cooldown_until,
-        "evaluation": evaluation,
-    }
+    logger.info(f"[end] {interview_id}: chat saved to DB, background evaluation started")
+    return {"message": "Interview ended", "interview_id": interview_id}
 
 
 class PauseRequest(BaseModel):
@@ -536,3 +515,46 @@ async def get_evaluation(interview_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+
+
+@router.get("/evaluation/{interview_id}")
+async def get_interview_evaluation(interview_id: str):
+    """
+    Poll for evaluation results. Reads directly from DB — no in-memory cache.
+    Returns:
+      - pending: evaluation not yet written to DB
+      - ready: evaluation available — includes result, score, end_reason
+      - error: evaluation failed (LLM returned nothing)
+    """
+    import logging
+    import json
+    logger = logging.getLogger(__name__)
+
+    from app.db.database import SessionLocal
+    db = SessionLocal()
+    try:
+        from app.db.models.candidate import InterviewSession as DBInterviewSession
+        session = db.query(DBInterviewSession).filter(DBInterviewSession.id == interview_id).first()
+        if not session:
+            return {"status": "error", "result": None, "overall_score": None, "evaluation": None}
+
+        data = json.loads(session.interviewData) if session.interviewData else {}
+        evaluation = data.get("evaluation")
+        end_reason_db = data.get("end_reason")
+
+        if evaluation and session.score is not None:
+            # Evaluation written to DB by background task — return it
+            result = session.result or ("PASS" if session.score >= get_evaluation_settings()["pass_threshold"] else "FAIL")
+            logger.info(f"[evaluation/{interview_id}] status=ready, score={session.score}, result={result}")
+            return {
+                "status": "ready",
+                "result": result,
+                "overall_score": session.score,
+                "end_reason": end_reason_db,
+                "evaluation": evaluation,
+            }
+
+        # Not ready yet
+        return {"status": "pending", "result": None, "overall_score": None, "evaluation": None}
+    finally:
+        db.close()

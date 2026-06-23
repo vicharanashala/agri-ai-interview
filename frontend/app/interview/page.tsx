@@ -66,6 +66,8 @@ export default function InterviewPage() {
     count: number
   }>({ visible: false, type: null, count: 0 });
   const [isClosing, setIsClosing] = useState(false);
+  const [showClosingPage, setShowClosingPage] = useState(false);
+  const [closingInterviewId, setClosingInterviewId] = useState<string | null>(null);
   const [candidateId, setCandidateId] = useState<string>('');
   const [idleThresholdMs, setIdleThresholdMs] = useState<number>(15_000);
   const [timeRemainingSeconds, setTimeRemainingSeconds] = useState<number>(-1);
@@ -83,37 +85,13 @@ export default function InterviewPage() {
   // Anti-cheat: termination callback
   const handleCheatTerminate = useCallback(async (type: ViolationType) => {
     setCheatWarning(v => ({ ...v, visible: false }))
-    setIsClosing(true)
-    await new Promise(resolve => setTimeout(resolve, 2000))
 
     if (interviewId) {
-      const endRes = await authFetch(`/api/interview/end/${interviewId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ end_reason: 'anti_cheat' }),
-      })
-      const endData = await endRes.json()
-      if (endData.result) localStorage.setItem('interviewResult', endData.result)
-      if (endData.overall_score != null) {
-        localStorage.setItem('interviewScore', String(endData.overall_score))
-      }
-      if (endData.end_reason) localStorage.setItem('interviewEndReason', endData.end_reason)
-      if (endData.cooldownUntil) localStorage.setItem('cooldownUntil', endData.cooldownUntil)
-      if (endData.evaluation) {
-        localStorage.setItem('interviewEvaluation', JSON.stringify(endData.evaluation))
-      }
+      await endInterviewAndClose(interviewId, 'anti_cheat')
+    } else {
+      // No interview ID yet — just redirect to dashboard
+      router.push('/dashboard')
     }
-
-    // Sync phase to DB BEFORE navigation — same as all other end paths
-    sessionStorage.setItem('interviewCompleted', 'true')
-    localStorage.setItem('interviewCompleted', 'true')
-    sessionStorage.setItem('interviewJustCompleted', 'true')
-    localStorage.setItem('interviewJustCompleted', 'true')
-    sessionStorage.setItem('interviewPhase', '3')
-    localStorage.setItem('interviewPhase', '3')
-    await syncPhaseToDb(3)
-
-    router.push('/summary')
   }, [interviewId, router])
 
   // Anti-cheat: log violation to backend (fire-and-forget)
@@ -436,6 +414,35 @@ export default function InterviewPage() {
     router.push('/summary');
   };
 
+  // ── End interview helper (instant, no waiting) ────────────────────────
+  // Calls /end and immediately shows the closing page.
+  const endInterviewAndClose = async (effectiveInterviewId: string, endReason: string) => {
+    // Fire-and-forget — /end now returns instantly and triggers background eval
+    fetch(`/api/interview/end/${effectiveInterviewId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ end_reason: endReason }),
+    }).catch(() => { /* non-fatal — backend will still process */ });
+
+    // Mark completion flags so summary page knows to poll
+    sessionStorage.setItem('interviewCompleted', 'true');
+    localStorage.setItem('interviewCompleted', 'true');
+    sessionStorage.setItem('interviewJustCompleted', 'true');
+    localStorage.setItem('interviewJustCompleted', 'true');
+    sessionStorage.setItem('interviewPhase', '3');
+    localStorage.setItem('interviewPhase', '3');
+    sessionStorage.setItem('closingInterviewId', effectiveInterviewId);
+    localStorage.setItem('closingInterviewId', effectiveInterviewId);
+
+    // Sync phase=3 to DB immediately (fire-and-forget)
+    syncPhaseToDb(3);
+
+    // Show the closing page immediately
+    setClosingInterviewId(effectiveInterviewId);
+    setShowClosingPage(true);
+  };
+
   const handleSubmit = async (e?: React.FormEvent) => {
     // Prevent double submission
     if (isSubmittingRef.current || isLoading) {
@@ -506,34 +513,11 @@ export default function InterviewPage() {
       if (data.is_complete) {
         setIsComplete(true);
 
-        // End interview — backend derives result from score, uses end_reason from body
+        // End interview — fire-and-forget, /end returns instantly now
         const endReason = data.end_reason || 'time_limit';
         if (interviewId) {
-          const endRes = await authFetch(`/api/interview/end/${interviewId}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ end_reason: endReason }),
-          });
-          const endData = await endRes.json();
-          if (endData.result) localStorage.setItem('interviewResult', endData.result);
-          if (endData.overall_score != null) {
-            localStorage.setItem('interviewScore', String(endData.overall_score));
-          }
-          if (endData.end_reason) localStorage.setItem('interviewEndReason', endData.end_reason);
-          if (endData.cooldownUntil) localStorage.setItem('cooldownUntil', endData.cooldownUntil);
-          if (endData.evaluation) {
-            localStorage.setItem('interviewEvaluation', JSON.stringify(endData.evaluation));
-          }
+          await endInterviewAndClose(interviewId, endReason);
         }
-
-        // Mark interview as completed and sync phase to DB — same pattern as all other end paths
-        sessionStorage.setItem('interviewCompleted', 'true');
-        localStorage.setItem('interviewCompleted', 'true');
-        sessionStorage.setItem('interviewJustCompleted', 'true');
-        localStorage.setItem('interviewJustCompleted', 'true');
-        sessionStorage.setItem('interviewPhase', '3');
-        localStorage.setItem('interviewPhase', '3');
-        await syncPhaseToDb(3);
 
         // Save conversation history for summary page
         localStorage.setItem('interviewConversationHistory', JSON.stringify([
@@ -581,81 +565,21 @@ export default function InterviewPage() {
   };
 
   const handleEndInterview = async () => {
-    console.log('[EndInterview] handleEndInterview called, interviewId=', interviewId);
-
-    // Fall back to localStorage if interviewId state is null
+    // Resolve effective interview ID from state or localStorage
     let effectiveInterviewId = interviewId;
     if (!effectiveInterviewId) {
       try {
         const stored = localStorage.getItem('currentInterview');
         if (stored) {
           effectiveInterviewId = JSON.parse(stored).interviewId;
-          console.log('[EndInterview] Recovered interviewId from localStorage:', effectiveInterviewId);
         }
-      } catch (e) {
-        console.error('[EndInterview] Failed to parse stored interviewId:', e);
-      }
+      } catch { /* ignore */ }
     }
-
     if (!effectiveInterviewId) {
-      console.error('[EndInterview] Interview not started — interviewId is null');
       setError('Interview not started. Please refresh the page.');
       return;
     }
-
-    setIsEnding(true);
-    setError(null);
-
-    try {
-      const endRes = await authFetch(`/api/interview/end/${effectiveInterviewId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ end_reason: 'withdrawn' }),
-      });
-      const endData = await endRes.json();
-
-      if (!endRes.ok) {
-        const errorMessage = endData.detail || 'Failed to end interview. Please try again.';
-        console.error('End interview error:', errorMessage);
-        setError(errorMessage);
-        setIsEnding(false);
-        return;
-      }
-
-      // Mark interview as completed — phase 3 (summary) must sync to DB
-      // so the offer letter phase unlocks for PASS candidates across all devices/sessions.
-      sessionStorage.setItem('interviewCompleted', 'true');
-      localStorage.setItem('interviewCompleted', 'true');
-      sessionStorage.setItem('interviewJustCompleted', 'true');
-      localStorage.setItem('interviewJustCompleted', 'true');
-      sessionStorage.setItem('interviewPhase', '3');
-      localStorage.setItem('interviewPhase', '3');
-      await syncPhaseToDb(3);  // ← this is the key line that was missing
-
-      // Cache result, score, end_reason, and evaluation for the summary page
-      if (endData.result) {
-        localStorage.setItem('interviewResult', endData.result);
-      }
-      if (endData.overall_score != null) {
-        localStorage.setItem('interviewScore', String(endData.overall_score));
-      }
-      if (endData.end_reason) {
-        localStorage.setItem('interviewEndReason', endData.end_reason);
-      }
-      if (endData.cooldownUntil) {
-        localStorage.setItem('cooldownUntil', endData.cooldownUntil);
-      }
-      if (endData.evaluation) {
-        localStorage.setItem('interviewEvaluation', JSON.stringify(endData.evaluation));
-      }
-
-      router.push('/summary');
-    } catch (error) {
-      console.error('Failed to end interview:', error);
-      setError('Network error. Please check your connection and try again.');
-    } finally {
-      setIsEnding(false);
-    }
+    await endInterviewAndClose(effectiveInterviewId, 'withdrawn');
   };
 
   const handleConfirmBack = async () => {
@@ -668,8 +592,19 @@ export default function InterviewPage() {
       body: JSON.stringify({ candidate_id: candidateId }),
     }).catch(() => {});
 
-    // handleEndInterview() will: call end API → evaluate → set phase → redirect to /summary
-    await handleEndInterview();
+    // Resolve effective interview ID
+    let effectiveInterviewId = interviewId;
+    if (!effectiveInterviewId) {
+      try {
+        const stored = localStorage.getItem('currentInterview');
+        if (stored) {
+          effectiveInterviewId = JSON.parse(stored).interviewId;
+        }
+      } catch { /* ignore */ }
+    }
+    if (effectiveInterviewId) {
+      await endInterviewAndClose(effectiveInterviewId, 'withdrawn');
+    }
   };
 
   const handleConfirmEnd = async () => {
@@ -682,8 +617,19 @@ export default function InterviewPage() {
       body: JSON.stringify({ candidate_id: candidateId }),
     }).catch(() => {});
 
-    // handleEndInterview() will: call end API → evaluate → set phase → redirect to /summary
-    await handleEndInterview();
+    // Resolve effective interview ID
+    let effectiveInterviewId = interviewId;
+    if (!effectiveInterviewId) {
+      try {
+        const stored = localStorage.getItem('currentInterview');
+        if (stored) {
+          effectiveInterviewId = JSON.parse(stored).interviewId;
+        }
+      } catch { /* ignore */ }
+    }
+    if (effectiveInterviewId) {
+      await endInterviewAndClose(effectiveInterviewId, 'withdrawn');
+    }
   };
 
   const handleCancelEnd = () => {
@@ -1035,6 +981,36 @@ export default function InterviewPage() {
         offenseCount={cheatWarning.count}
         onDismiss={() => setCheatWarning(v => ({ ...v, visible: false }))}
       />
+      {/* Closing page — shown immediately after interview ends */}
+      {showClosingPage && (
+        <div className={styles.closingPageWrapper}>
+          <div className={styles.closingPageCard}>
+            <div className={styles.closingPageIcon}>✓</div>
+            <h1 className={styles.closingPageTitle}>Interview is Done!</h1>
+            <p className={styles.closingPageSubtitle}>
+              Your interview has been submitted successfully.
+            </p>
+            <p className={styles.closingPageDesc}>
+              Please visit the summary page to see your results.<br/>
+              Results will be available once the evaluation is complete.
+            </p>
+            <div className={styles.closingPageButtons}>
+              <button
+                className={styles.closingPageSummaryBtn}
+                onClick={() => router.push('/summary')}
+              >
+                View Summary
+              </button>
+              <button
+                className={styles.closingPageDashboardBtn}
+                onClick={() => router.push('/dashboard')}
+              >
+                Go to Dashboard
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {isReconnecting && (
         <div className={styles.closingOverlay}>
           <div className={styles.closingContent}>

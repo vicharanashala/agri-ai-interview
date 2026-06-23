@@ -2,17 +2,12 @@
 Candidate database model — mirrors the Prisma schema (same PostgreSQL database).
 """
 from sqlalchemy import Column, String, Integer, DateTime, JSON, Boolean, Text, Float
-from datetime import datetime, timezone
+from datetime import datetime
 from app.db.database import Base
 
 
 def _utcnow() -> datetime:
-    """Return timezone-aware UTC datetime.
-
-    On macOS with TZ=Asia/Kolkata, datetime.utcnow() incorrectly returns
-    local IST labeled as UTC. Always use this helper instead.
-    """
-    return datetime.now(timezone.utc)
+    return datetime.utcnow()
 
 
 class User(Base):

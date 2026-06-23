@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
       .sort((a: { startedAt: string | null }, b: { startedAt: string | null }): number => {
         if (!a.startedAt) return 1
         if (!b.startedAt) return -1
-        return new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
+        return new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime()
       })
 
     return NextResponse.json({ attempts, cooldownUntil, cooldownDays });

@@ -6,7 +6,7 @@ No queue logic — just free slots when sessions are abandoned.
 """
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from app.db.database import SessionLocal
 from app.db.models.candidate import InterviewStateSnapshot, InterviewSession
@@ -26,7 +26,7 @@ def run_slot_monitor() -> dict:
     stats = {"checked": 0, "expired": 0, "snapshots_cleared": 0, "errors": 0}
 
     try:
-        now = datetime.now(timezone.utc)
+        now = datetime.utcnow()
         stale_threshold = now - timedelta(hours=STALE_PAUSED_HOURS)
 
         stale_sessions = (

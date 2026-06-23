@@ -339,6 +339,7 @@ async def reevaluate_interview(
 
     messages = data.get("messages", [])
     candidate_data = data.get("candidate_data", {})
+    qa_pairs = data.get("qa_pairs", [])
 
     if not messages:
         raise HTTPException(status_code=400, detail="No chat history found for this interview")
@@ -355,6 +356,7 @@ async def reevaluate_interview(
         evaluation = await llm_service.generate_interview_evaluation(
             candidate_data=candidate_data,
             conversation_history=conversation_history,
+            qa_pairs=qa_pairs,
         )
     except Exception as e:
         import logging

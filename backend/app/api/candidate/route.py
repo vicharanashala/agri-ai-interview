@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 import uuid
 
 from app.core.session import get_session_store, _hash_token
+from app.db.mongodb import get_sync_db
 import bcrypt
 import uuid
 

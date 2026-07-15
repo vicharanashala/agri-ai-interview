@@ -1,57 +1,50 @@
 """
-Interview Queue API — Simplified slot manager.
+Interview Queue API — Simplified slot manager — MongoDB.
 
 No queue, no positions, no wait times.
 Candidates either get a slot immediately or are told to try later.
 """
-
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from typing import Optional
 
-from sqlalchemy.orm import Session
-from app.db.database import get_db
-from app.db.models.candidate import Candidate
+from app.db.mongodb import get_sync_db
 from app.services.queue_manager import slot_manager, MAX_CONCURRENT_INTERVIEWS
-
-
-def _fetch_candidate_data(candidate_id: str, db: Session) -> dict:
-    """
-    Fetch candidate profile data from PostgreSQL to pass to the interview.
-    This ensures the LLM has candidate context (name, farming background, etc.).
-    """
-    cand = db.query(Candidate).filter(Candidate.id == candidate_id).first()
-    if not cand:
-        return {}
-
-    return {
-        "name": cand.fullName or "Candidate",
-        "phone": cand.phone,
-        "state": cand.state,
-        "district": cand.district,
-        "current_role": cand.currentRole,
-        "experience_years": cand.yearsOfExperience,
-        "education": cand.highestEducation,
-        "institution": cand.institution,
-        "farming_background": cand.farmingBackground,
-        "crops_grown": cand.cropsGrown,
-        "primary_expertise": cand.primaryExpertise,
-        "candidate_id": candidate_id,
-    }
 
 router = APIRouter(prefix="/api/interview/queue", tags=["interview-queue"])
 
 
-# ---------------------------------------------------------------------------
-# Request / response models
-# ---------------------------------------------------------------------------
+def _fetch_candidate_data(candidate_id: str) -> dict:
+    """Fetch candidate profile data from MongoDB to pass to the interview."""
+    db = get_sync_db()
+    cand = db.candidates.find_one({"_id": candidate_id})
+    if not cand:
+        return {}
+
+    return {
+        "name": cand.get("full_name") or "Candidate",
+        "phone": cand.get("phone"),
+        "state": cand.get("state"),
+        "district": cand.get("district"),
+        "current_role": cand.get("current_role"),
+        "experience_years": cand.get("years_of_experience"),
+        "education": cand.get("highest_education"),
+        "institution": cand.get("institution"),
+        "farming_background": cand.get("farming_background"),
+        "crops_grown": cand.get("crops_grown"),
+        "primary_expertise": cand.get("primary_expertise"),
+        "candidate_id": candidate_id,
+    }
+
+
+# ── Request / response models ─────────────────────────────────────────────────
 
 class SlotRequest(BaseModel):
     candidate_id: str
 
 
 class StartResponse(BaseModel):
-    result: str           # started | no_slot | already_active | attempts_exhausted | cooldown
+    result: str
     interview_id: Optional[str] = None
     first_question: Optional[str] = None
     message: Optional[str] = None
@@ -68,19 +61,17 @@ class StatsResponse(BaseModel):
     slots_available: int
 
 
-# ---------------------------------------------------------------------------
-# POST /api/interview/queue/request  — request a slot and start interview
-# ---------------------------------------------------------------------------
+# ── Endpoints ──────────────────────────────────────────────────────────────────
 
 @router.post("/request", response_model=StartResponse)
-async def queue_request(request: SlotRequest, db: Session = Depends(get_db)):
+async def queue_request(request: SlotRequest):
     """
     Candidate requests an interview slot.
 
     If a slot is available (active < MAX_CONCURRENT), the interview starts
     immediately. Otherwise returns "All slots are full, please try after sometime".
     """
-    candidate_data = _fetch_candidate_data(request.candidate_id, db)
+    candidate_data = _fetch_candidate_data(request.candidate_id)
     result = await slot_manager.start_interview(
         candidate_id=request.candidate_id,
         candidate_data=candidate_data,
@@ -88,31 +79,16 @@ async def queue_request(request: SlotRequest, db: Session = Depends(get_db)):
     return StartResponse(**result)
 
 
-# ---------------------------------------------------------------------------
-# GET /api/interview/queue/stats — current slot usage
-# ---------------------------------------------------------------------------
-
 @router.get("/stats", response_model=StatsResponse)
 async def queue_stats():
-    """
-    Current interview slot usage.
-    """
     stats = slot_manager.get_stats()
     return StatsResponse(**stats)
 
 
-# ---------------------------------------------------------------------------
-# DEPRECATED — kept as stubs that return "not supported" for backwards compat
-# ---------------------------------------------------------------------------
-
-class NotSupportedResponse(BaseModel):
-    result: str
-    message: str
-
+# ── Deprecated stubs ──────────────────────────────────────────────────────────
 
 @router.post("/join")
 async def deprecated_join(request: SlotRequest):
-    """Queue system removed — interviews start directly via /request."""
     return {"result": "not_supported", "message": "No queue. Use POST /api/interview/queue/request to start an interview."}
 
 

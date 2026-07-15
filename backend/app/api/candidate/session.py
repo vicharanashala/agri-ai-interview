@@ -1,43 +1,24 @@
 """
-Candidate Redis Session Management — single-session-per-account.
+Candidate Session Management — MongoDB-backed.
 
-POST /api/candidate/session  — create Redis session (called by frontend after NextAuth login)
-POST /api/candidate/session/logout — destroy Redis session
+POST /api/candidate/session       — create session (called by frontend after NextAuth login)
+POST /api/candidate/session/logout — destroy session
 GET  /api/candidate/session/verify — validate token
 """
 from fastapi import APIRouter, HTTPException, Response, Request
 from pydantic import BaseModel
 from typing import Optional
-from sqlalchemy import text
 import secrets
 import json
 import hashlib
 
-# ── Redis ─────────────────────────────────────────────────────────────────────
-
-def get_redis():
-    from app.core.redis import get_redis_client
-    return get_redis_client()
-
-# ── Constants ─────────────────────────────────────────────────────────────────
+from app.core.session import get_session_store, _SESSION_KEY_PREFIX, _hash_token, _make_token, _session_key
 
 router = APIRouter(prefix="/api/candidate", tags=["candidate-session"])
-_SESSION_TTL = 30 * 24 * 60 * 60  # 30 days
-_SESSION_KEY_PREFIX = "candidate:session:"
+_SESSION_TTL = 30 * 24 * 60 * 60  # 30 days in seconds
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _make_token() -> str:
-    return secrets.token_urlsafe(48)
-
-
-def _hash_token(token: str) -> str:
-    return hashlib.sha256(token.encode()).hexdigest()
-
-
-def _session_key(candidate_id: str) -> str:
-    return f"{_SESSION_KEY_PREFIX}{candidate_id}"
-
 
 def _extract_bearer_token(request: Request) -> str | None:
     auth = request.headers.get("authorization", "")
@@ -66,7 +47,7 @@ class SessionResponse(BaseModel):
 async def create_session(request: Request, response: Response):
     """
     Called by frontend immediately after NextAuth login succeeds.
-    Verifies candidate_id + email match in DB, then creates Redis session.
+    Verifies candidate_id + email match in DB, then creates MongoDB session.
 
     Single-session enforcement: any previous session for this candidate
     is deleted before the new one is stored.
@@ -78,33 +59,21 @@ async def create_session(request: Request, response: Response):
     if not candidate_id or not email:
         raise HTTPException(status_code=400, detail="candidate_id and email required")
 
-    # Verify candidate exists and email matches in DB
-    from app.db.database import get_db
-    db = next(get_db())
-    try:
-        row = db.execute(
-            text("""
-                SELECT c.id, u.id as user_id, u.email
-                FROM "Candidate" c
-                JOIN "User" u ON u.id = c."userId"
-                WHERE c.id = :candidate_id AND u.email = :email
-            """),
-            {"candidate_id": candidate_id, "email": email}
-        ).fetchone()
+    # Verify candidate exists and email matches in MongoDB
+    from app.db.mongodb import get_sync_db
+    db = get_sync_db()
 
-        if not row:
-            raise HTTPException(status_code=401, detail="Invalid session establishment")
+    user = db.users.find_one({"email": email})
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid session establishment")
 
-        # Row is a plain tuple; access by index: (id=0, user_id=1, email=2)
-        user_id = row[1]
-    finally:
-        db.close()
+    candidate = db.candidates.find_one({"_id": candidate_id, "user_id": user["_id"]})
+    if not candidate:
+        raise HTTPException(status_code=401, detail="Invalid session establishment")
 
-    redis = get_redis()
+    user_id = str(user["_id"])
 
-    # Single-session: delete old session if exists
-    old_key = _session_key(candidate_id)
-    redis.delete(old_key)
+    store = get_session_store()
 
     # Create new session
     token = _make_token()
@@ -114,15 +83,12 @@ async def create_session(request: Request, response: Response):
         "user_id": user_id,
         "candidate_id": candidate_id,
     }
-    redis.setex(old_key, _SESSION_TTL, json.dumps(session_data))
-    print(f"[SESSION CREATE] key={old_key} | token(first 8)={token[:8]} | token_hash(first 8)={token_hash[:8]} | candidate_id={candidate_id}")
 
-    # Also store with the token_hash as key so we can find by token directly (key = hash, value = session_data)
-    token_index_key = f"candidate:token_index:{token_hash}"
-    redis.setex(token_index_key, _SESSION_TTL, json.dumps({"candidate_id": candidate_id, "user_id": user_id}))
-    print(f"[SESSION CREATE] token_index key={token_index_key} stored")
+    store.setex(_session_key(candidate_id), _SESSION_TTL, json.dumps(session_data))
 
-    # Fallback httpOnly cookie (same-origin)
+    print(f"[SESSION CREATE] candidate_id={candidate_id} | token(first 8)={token[:8]} | token_hash(first 8)={token_hash[:8]}")
+
+    # Set httpOnly cookie
     response.set_cookie(
         key="candidate_session",
         value=token,
@@ -143,31 +109,14 @@ async def create_session(request: Request, response: Response):
 
 @router.post("/session/logout")
 async def candidate_logout(request: Request, response: Response):
-    """Delete the current candidate's session from Redis."""
+    """Delete the current candidate's session from MongoDB."""
     token = _extract_bearer_token(request)
     if not token:
         return {"success": True, "message": "No session to clear"}
 
-    redis = get_redis()
     token_hash = _hash_token(token)
-
-    # Fast path: delete token_index
-    token_index_key = f"candidate:token_index:{token_hash}"
-    redis.delete(token_index_key)
-
-    # Also delete by candidate key
-    cursor = 0
-    while True:
-        cursor, keys = redis.scan(cursor, match=f"{_SESSION_KEY_PREFIX}*", count=100)
-        for key in keys:
-            raw = redis.get(key)
-            if raw:
-                session = json.loads(raw)
-                if session.get("token_hash") == token_hash:
-                    redis.delete(key)
-                    break
-        if cursor == 0:
-            break
+    store = get_session_store()
+    store.delete_by_token_hash(token_hash)
 
     response.set_cookie(key="candidate_session", value="", path="/", max_age=0)
     return {"success": True, "message": "Logged out"}
@@ -180,35 +129,20 @@ async def verify_session(request: Request):
     if not token:
         raise HTTPException(status_code=401, detail="No session token")
 
-    redis = get_redis()
-    token_hash = _hash_token(token)
+    store = get_session_store()
+    session = await store.get_session(token)
 
-    # Fast path
-    token_index_key = f"candidate:token_index:{token_hash}"
-    raw = redis.get(token_index_key)
-    if raw:
-        data = json.loads(raw)
-        return {
-            "valid": True,
-            "candidate_id": data["candidate_id"],
-            "user_id": data["user_id"],
-        }
+    if not session:
+        raise HTTPException(status_code=401, detail="Session expired or invalid")
 
-    # Fallback: scan
-    cursor = 0
-    while True:
-        cursor, keys = redis.scan(cursor, match=f"{_SESSION_KEY_PREFIX}*", count=100)
-        for key in keys:
-            raw = redis.get(key)
-            if raw:
-                session = json.loads(raw)
-                if session.get("token_hash") == token_hash:
-                    return {
-                        "valid": True,
-                        "candidate_id": session["candidate_id"],
-                        "user_id": session["user_id"],
-                    }
-        if cursor == 0:
-            break
+    return {
+        "valid": True,
+        "candidate_id": session.get("candidate_id"),
+        "user_id": session.get("user_id"),
+    }
 
-    raise HTTPException(status_code=401, detail="Session expired or invalid")
+
+# Re-export for convenience
+get_session_store = get_session_store
+_hash_token = _hash_token
+_SESSION_KEY_PREFIX = _SESSION_KEY_PREFIX

@@ -1,35 +1,84 @@
 """
-Candidate Phase & Milestone Sync — PATCH /api/candidate
+Candidate Onboarding & Phase Sync — MongoDB.
 
-Called by the frontend's phaseSync.ts after major milestones:
-- Phase transitions (interview → summary → offer → signing → joining)
-- Milestone flags (offerLetterViewed, passedAndVisitedSummary, joiningDetailsVisited)
-
-Auth: bearer token from the candidate's Redis session.
+POST /api/candidate        — create/update onboarding data
+GET  /api/candidate        — get candidate profile (by email query param, for NextAuth)
+PATCH /api/candidate       — update phase and milestones (session auth)
 """
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Query
 from pydantic import BaseModel
 from typing import Optional
+from datetime import datetime, timezone
+import uuid
 
-from app.api.candidate.session import _extract_bearer_token, _hash_token, _SESSION_KEY_PREFIX, get_redis
+from app.core.session import get_session_store, _hash_token
+import bcrypt
+import uuid
 
 router = APIRouter(prefix="/api/candidate", tags=["candidate"])
 
-
-# ── Phase number → DB string ──────────────────────────────────────────────────
-
-_PHASE_MAP = {
-    1: "onboarding",
-    2: "interview",
-    3: "summary",
-    4: "documents",
-}
+_PHASE_MAP = {1: "onboarding", 2: "interview", 3: "summary", 4: "documents"}
 
 
-# ── Request / Response models ─────────────────────────────────────────────────
+# ── Auth helper ───────────────────────────────────────────────────────────────
+
+def _get_candidate_id_from_request(request: Request) -> str:
+    auth = request.headers.get("authorization", "")
+    token = auth[7:] if auth.startswith("Bearer ") else request.cookies.get("candidate_session")
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    store = get_session_store()
+    session = store.find_by_token_hash(_hash_token(token))
+    if not session:
+        raise HTTPException(status_code=401, detail="Session expired or invalid")
+    candidate_id = session.get("candidate_id")
+    if not candidate_id:
+        raise HTTPException(status_code=401, detail="Invalid session")
+    return candidate_id
+
+
+# ── Request/Response models ───────────────────────────────────────────────────
+
+class OnboardingRequest(BaseModel):
+    fullName: str
+    phone: str
+    state: str
+    district: str
+    pincode: str
+    address: str
+    currentRole: str
+    yearsOfExperience: Optional[int] = None
+    highestEducation: str
+    institution: str
+    farmingBackground: bool
+    cropsGrown: str
+    farmSize: str
+    primaryExpertise: str
+
+
+class CandidateProfileResponse(BaseModel):
+    id: str
+    email: str
+    fullName: Optional[str] = None
+    phone: Optional[str] = None
+    state: Optional[str] = None
+    district: Optional[str] = None
+    pincode: Optional[str] = None
+    address: Optional[str] = None
+    currentRole: Optional[str] = None
+    yearsOfExperience: Optional[int] = None
+    highestEducation: Optional[str] = None
+    institution: Optional[str] = None
+    farmingBackground: Optional[bool] = None
+    cropsGrown: Optional[str] = None
+    farmSize: Optional[str] = None
+    primaryExpertise: Optional[str] = None
+    currentPhase: str = "onboarding"
+    userId: Optional[str] = None
+
 
 class CandidatePatchRequest(BaseModel):
-    phase: Optional[int] = None          # 1-4
+    phase: Optional[int] = None
     offerLetterViewed: Optional[bool] = None
     passedAndVisitedSummary: Optional[bool] = None
     joiningDetailsVisited: Optional[bool] = None
@@ -42,100 +91,163 @@ class CandidatePatchResponse(BaseModel):
     message: str
 
 
-# ── Auth helper ───────────────────────────────────────────────────────────────
+# ── Endpoints ─────────────────────────────────────────────────────────────────
 
-def _get_candidate_id_from_request(request: Request) -> str:
-    """Extract candidate_id from the Redis session token."""
-    token = _extract_bearer_token(request)
-    if not token:
-        raise HTTPException(status_code=401, detail="Authentication required")
+@router.post("/verify-password")
+async def verify_password(request: Request, body: dict):
+    """
+    Used by NextAuth credentials provider to verify email+password.
+    Returns user dict (id, email, name) on success, 401 on failure.
+    """
+    email = body.get("email")
+    password = body.get("password")
+    if not email or not password:
+        raise HTTPException(status_code=400, detail="email and password required")
 
-    redis = get_redis()
-    token_hash = _hash_token(token)
+    db = get_sync_db()
+    user = db.users.find_one({"email": email})
+    if not user or not user.get("password"):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    # Fast path: look up directly by token_hash index
-    token_index_key = f"candidate:token_index:{token_hash}"
-    raw = redis.get(token_index_key)
-    if raw:
-        import json
-        data = json.loads(raw)
-        candidate_id = data.get("candidate_id")
-        if candidate_id:
-            return candidate_id
+    if not bcrypt.checkpw(password.encode("utf-8"), user["password"].encode("utf-8")):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    # Fallback: scan keys (legacy sessions created before token_index was added)
-    cursor = 0
-    while True:
-        cursor, keys = redis.scan(cursor, match=f"{_SESSION_KEY_PREFIX}*", count=100)
-        for key in keys:
-            raw = redis.get(key)
-            if raw:
-                import json
-                session = json.loads(raw)
-                if session.get("token_hash") == token_hash:
-                    candidate_id = session.get("candidate_id")
-                    if not candidate_id:
-                        raise HTTPException(status_code=401, detail="Invalid session")
-                    return candidate_id
-        if cursor == 0:
-            break
-
-    raise HTTPException(status_code=401, detail="Session expired or invalid")
+    return {"id": str(user["_id"]), "email": user["email"], "name": user.get("name", "")}
 
 
-# ── Endpoint ──────────────────────────────────────────────────────────────────
+@router.post("", response_model=dict)
+async def upsert_candidate(request: Request, body: OnboardingRequest):
+    """
+    Create or update candidate onboarding data.
+    Authenticated via candidate_session cookie or Bearer token.
+    """
+    candidate_id = _get_candidate_id_from_request(request)
+
+    from app.db.mongodb import get_sync_db
+    db = get_sync_db()
+
+    updates = {
+        "full_name": body.fullName,
+        "phone": body.phone,
+        "state": body.state,
+        "district": body.district,
+        "pincode": body.pincode,
+        "address": body.address,
+        "current_role": body.currentRole,
+        "years_of_experience": body.yearsOfExperience,
+        "highest_education": body.highestEducation,
+        "institution": body.institution,
+        "farming_background": body.farmingBackground,
+        "crops_grown": body.cropsGrown,
+        "farm_size": body.farmSize,
+        "primary_expertise": body.primaryExpertise,
+        "updated_at": datetime.now(timezone.utc),
+    }
+
+    db.candidates.update_one(
+        {"_id": candidate_id},
+        {"$set": updates},
+    )
+
+    cand = db.candidates.find_one({"_id": candidate_id})
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    return {"success": True, "message": "Candidate data saved"}
+
+
+@router.get("", response_model=CandidateProfileResponse)
+async def get_candidate_profile(email: Optional[str] = Query(None)):
+    """
+    Get candidate profile by email (used by NextAuth to look up candidateId on login).
+    No session required — called during auth flow before session exists.
+    """
+    if not email:
+        raise HTTPException(status_code=400, detail="email query param required")
+
+    from app.db.mongodb import get_sync_db
+    db = get_sync_db()
+
+    user = db.users.find_one({"email": email})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    cand = db.candidates.find_one({"user_id": str(user["_id"])})
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    return CandidateProfileResponse(
+        id=str(cand["_id"]),
+        email=email,
+        fullName=cand.get("full_name"),
+        phone=cand.get("phone"),
+        state=cand.get("state"),
+        district=cand.get("district"),
+        pincode=cand.get("pincode"),
+        address=cand.get("address"),
+        currentRole=cand.get("current_role"),
+        yearsOfExperience=cand.get("years_of_experience"),
+        highestEducation=cand.get("highest_education"),
+        institution=cand.get("institution"),
+        farmingBackground=cand.get("farming_background"),
+        cropsGrown=cand.get("crops_grown"),
+        farmSize=cand.get("farm_size"),
+        primaryExpertise=cand.get("primary_expertise"),
+        currentPhase=cand.get("current_phase", "onboarding"),
+        userId=str(user["_id"]),
+    )
+
+
+@router.delete("")
+async def delete_candidate(request: Request):
+    """Delete the current candidate's profile (used during onboarding reset)."""
+    candidate_id = _get_candidate_id_from_request(request)
+    db = get_sync_db()
+    # Also delete the user and all related data
+    user_id = db.candidates.find_one({"_id": candidate_id}, {"user_id": 1})
+    if user_id:
+        db.candidates.delete_one({"_id": candidate_id})
+        db.users.delete_one({"_id": user_id["user_id"]})
+    return {"success": True, "message": "Candidate deleted"}
+
 
 @router.patch("", response_model=CandidatePatchResponse)
 async def patch_candidate(request: Request, body: CandidatePatchRequest):
     """
-    Update the candidate's currentPhase and/or milestone flags in PostgreSQL.
-
+    Update the candidate's currentPhase and/or milestone flags.
     phase values: 1=onboarding, 2=interview, 3=summary, 4=documents
     """
     candidate_id = _get_candidate_id_from_request(request)
 
-    # Build update dict
-    updates: dict = {}
+    updates = {}
     if body.phase is not None:
         phase_str = _PHASE_MAP.get(body.phase)
         if not phase_str:
             raise HTTPException(status_code=400, detail=f"Invalid phase: {body.phase}")
-        updates["currentPhase"] = phase_str
+        updates["current_phase"] = phase_str
 
     if body.offerLetterViewed is not None:
-        updates["offerLetterViewed"] = body.offerLetterViewed
-
+        updates["offer_letter_viewed"] = body.offerLetterViewed
     if body.passedAndVisitedSummary is not None:
-        updates["passedAndVisitedSummary"] = body.passedAndVisitedSummary
-
+        updates["passed_and_visited_summary"] = body.passedAndVisitedSummary
     if body.joiningDetailsVisited is not None:
-        updates["joiningDetailsVisited"] = body.joiningDetailsVisited
-
+        updates["joining_details_visited"] = body.joiningDetailsVisited
     if body.documentsSubmitted is not None:
-        updates["documentsSubmitted"] = body.documentsSubmitted
+        updates["documents_submitted"] = body.documentsSubmitted
 
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")
 
-    # Write to PostgreSQL
-    from app.db.database import get_db
-    from app.db.models.candidate import Candidate
+    updates["updated_at"] = datetime.now(timezone.utc)
 
-    db = next(get_db())
-    try:
-        cand = db.query(Candidate).filter(Candidate.id == candidate_id).first()
-        if not cand:
-            raise HTTPException(status_code=404, detail="Candidate not found")
+    from app.db.mongodb import get_sync_db
+    db = get_sync_db()
+    result = db.candidates.update_one({"_id": candidate_id}, {"$set": updates})
 
-        for key, value in updates.items():
-            setattr(cand, key, value)
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Candidate not found")
 
-        db.commit()
+    updated_cand = db.candidates.find_one({"_id": candidate_id})
+    current_phase = updated_cand.get("current_phase", "onboarding") if updated_cand else None
 
-        return CandidatePatchResponse(
-            success=True,
-            currentPhase=cand.currentPhase,
-            message="Candidate updated",
-        )
-    finally:
-        db.close()
+    return CandidatePatchResponse(success=True, currentPhase=current_phase, message="Candidate updated")

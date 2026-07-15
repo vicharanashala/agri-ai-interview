@@ -262,7 +262,7 @@ export default function AdminDashboard() {
 
   const loadStats = async () => {
     try {
-      const res = await withAuth("/api/admin/stats");
+      const res = await withAuth("/api/admin/stats/overview");
       if (res.ok) {
         const data = await res.json();
         setStats(data);
@@ -483,8 +483,8 @@ export default function AdminDashboard() {
   const loadStateFunnel = async () => {
     try {
       const path = stateFunnelFilter
-        ? `/api/admin/stats/by-state?state=${encodeURIComponent(stateFunnelFilter)}`
-        : "/api/admin/stats/by-state";
+        ? `/api/admin/stats/states?state=${encodeURIComponent(stateFunnelFilter)}`
+        : "/api/admin/stats/states";
       const res = await withAuth(path);
       if (res.ok) {
         const data = await res.json();
@@ -548,7 +548,7 @@ export default function AdminDashboard() {
 
   const loadCriteria = async () => {
     try {
-      const res = await withAuth("/api/admin/settings/evaluation-criteria");
+      const res = await withAuth("/api/admin/settings/evaluation");
       if (res.ok) {
         const data = await res.json();
         setCriteria(data.criteria || []);
@@ -560,7 +560,7 @@ export default function AdminDashboard() {
 
   const loadInterviewConfig = async () => {
     try {
-      const res = await withAuth("/api/admin/settings/interview-config");
+      const res = await withAuth("/api/admin/settings/interview");
       if (res.ok) {
         const data = await res.json();
         setInterviewConfig({
@@ -581,7 +581,7 @@ export default function AdminDashboard() {
 
   const loadAntiCheatConfig = async () => {
     try {
-      const res = await withAuth("/api/admin/anti-cheat");
+      const res = await withAuth("/api/admin/settings/anti-cheat");
       if (res.ok) {
         const data = await res.json();
         setAntiCheatConfig(data);
@@ -596,7 +596,7 @@ export default function AdminDashboard() {
   const handleSaveAntiCheatConfig = async () => {
     setSavingAntiCheat(true);
     try {
-      const res = await withAuth("/api/admin/anti-cheat", {
+      const res = await withAuth("/api/admin/settings/anti-cheat", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -620,7 +620,7 @@ export default function AdminDashboard() {
   const handleSaveInterviewConfig = async () => {
     setSavingConfig(true);
     try {
-      const res = await withAuth("/api/admin/settings/interview-config", {
+      const res = await withAuth("/api/admin/settings/interview", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -677,7 +677,7 @@ export default function AdminDashboard() {
 
   const handleSaveCriteria = async (id: string) => {
     try {
-      const res = await withAuth(`/api/admin/settings/evaluation-criteria/${id}`, {
+      const res = await withAuth(`/api/admin/settings/evaluation/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(criteriaForm),
@@ -694,7 +694,7 @@ export default function AdminDashboard() {
   const handleDeleteCriteria = async (id: string) => {
     if (!confirm("Are you sure you want to delete this criteria?")) return;
     try {
-      const res = await withAuth(`/api/admin/settings/evaluation-criteria/${id}`, {
+      const res = await withAuth(`/api/admin/settings/evaluation/${id}`, {
         method: "DELETE",
       });
       if (res.ok) {

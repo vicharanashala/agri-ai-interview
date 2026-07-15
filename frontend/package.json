@@ -10,13 +10,10 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@auth/prisma-adapter": "^2.11.2",
-    "@prisma/client": "^5.22.0",
     "@types/bcryptjs": "^2.4.6",
     "bcryptjs": "^3.0.3",
     "next": "15.3.3",
     "next-auth": "^4.24.14",
-    "prisma": "^5.22.0",
     "prop-types": "^15.8.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -28,8 +25,5 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "typescript": "^5"
-  },
-  "prisma": {
-    "seed": "node prisma/seed.js"
   }
 }

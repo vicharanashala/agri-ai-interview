@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
+
+const BACKEND_URL = process.env.BACKEND_URL || (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000')
 
 export async function POST(request: NextRequest) {
   try {
@@ -21,50 +22,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if user already exists
-    const existing = await prisma.user.findUnique({ where: { email } })
-    if (existing) {
-      return NextResponse.json(
-        { error: 'An account with this email already exists' },
-        { status: 409 }
-      )
+    const res = await fetch(`${BACKEND_URL}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, password }),
+    })
+
+    const data = await res.json()
+
+    if (!res.ok) {
+      return NextResponse.json({ error: data.detail ?? data.error ?? 'Registration failed' }, { status: res.status })
     }
 
-    // Hash password and create user
-    const passwordHash = await bcrypt.hash(password, 12)
-
-    const user = await prisma.user.create({
-      data: {
-        name,
-        email,
-        password: passwordHash,
-      },
-    })
-
-    // Immediately create Candidate record so they appear in admin dashboard
-    // before even filling out the onboarding form
-    await prisma.candidate.upsert({
-      where: { userId: user.id },
-      update: {},
-      create: { userId: user.id, currentPhase: 'onboarding' },
-    })
-
-    return NextResponse.json(
-      {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        message: 'Account created successfully',
-      },
-      { status: 201 }
-    )
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error)
-    const stack = error instanceof Error ? error.stack : ''
-    console.error('Registration error:', message, stack)
-    return NextResponse.json(
-      { error: 'Internal server error', detail: message },
-      { status: 500 }
-    )
+    return NextResponse.json(data, { status: 201 })
+  } catch (error) {
+    console.error('[auth/register]', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

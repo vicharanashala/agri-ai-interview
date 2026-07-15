@@ -1,48 +1,41 @@
 """
-Admin Candidates & Interviews API Endpoints.
-
-Queries PostgreSQL via SQLAlchemy (the same database the backend already uses
-for all other operations). No SQLite dependency.
+Admin Candidates & Interviews API Endpoints — MongoDB.
 """
+import json
+from bson import ObjectId
 from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
-from datetime import datetime
-from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func
+from datetime import datetime, timezone
+import uuid
 
-from app.db.database import get_db
-from app.db.models.candidate import Candidate, User, InterviewSession, AntiCheatEvent, InterviewQueueEntry, SignedOfferLetter
+from app.db.mongodb import get_sync_db
 from app.api.admin.middleware import require_admin_auth
 
 router = APIRouter(prefix="/api/admin", tags=["admin-candidates"])
 
-# Phase definitions in order
 PHASES = ["onboarding", "interview", "summary", "documents"]
-PHASE_ORDER = {p: i for i, p in enumerate(PHASES)}  # {"onboarding": 0, "interview": 1, ...}
+PHASE_ORDER = {p: i for i, p in enumerate(PHASES)}
 
 
 class PhaseStatus(BaseModel):
     phase: str
-    status: str  # pending, in_progress, completed
+    status: str
     timestamp: Optional[str] = None
     completedAt: Optional[str] = None
 
 
 class CandidateResponse(BaseModel):
     id: str
-    fullName: Optional[str] = None   # may be null before onboarding is completed
-    email: Optional[str] = None      # from User table
+    fullName: Optional[str] = None
+    email: Optional[str] = None
     phone: Optional[str] = None
-    # Geographic location
     state: Optional[str] = None
     district: Optional[str] = None
-    # Professional / ag background
     currentRole: Optional[str] = None
     yearsOfExperience: Optional[int] = None
     farmingBackground: Optional[str] = None
     primaryExpertise: Optional[str] = None
-    # Status and phase
     currentPhase: str
     status: str
     phases: List[PhaseStatus]
@@ -53,153 +46,122 @@ class CandidateResponse(BaseModel):
 
 
 def _build_phases(current_phase: str) -> List[PhaseStatus]:
-    """Derive phase statuses from currentPhase."""
     current_idx = PHASE_ORDER.get(current_phase, 0)
-    phases = []
-    for i, p in enumerate(PHASES):
-        if i < current_idx:
-            status = "completed"
-        elif i == current_idx:
-            status = "in_progress"
-        else:
-            status = "pending"
-        phases.append(PhaseStatus(
+    return [
+        PhaseStatus(
             phase=p,
-            status=status,
-            timestamp=None,
-            completedAt=None,
-        ))
-    return phases
-
-
-def _candidate_to_response(cand: Candidate, user_email: Optional[str], db: Session) -> CandidateResponse:
-    """
-    Convert a SQLAlchemy Candidate model (optionally joined with User)
-    to a CandidateResponse.
-    """
-    # fullName may be null (pre-onboarding) — fall back to user email
-    raw_full_name = cand.fullName or user_email or "Unknown"
-    current_phase = cand.currentPhase or "onboarding"
-
-    # Count completed interview attempts (same logic as queue_manager.py)
-    attempts_done = (
-        db.query(InterviewSession)
-        .filter(
-            InterviewSession.candidateId == cand.id,
-            InterviewSession.status == "completed",
-            InterviewSession.result.in_(["PASS", "FAIL", "WITHDRAWN"]),
+            status="completed" if i < current_idx else ("in_progress" if i == current_idx else "pending"),
         )
-        .count()
-    )
+        for i, p in enumerate(PHASES)
+    ]
+
+
+def _candidate_to_response(cand: dict, user_email: Optional[str]) -> CandidateResponse:
+    raw_full_name = cand.get("full_name") or user_email or "Unknown"
+    current_phase = cand.get("current_phase", "onboarding")
+
+    db = get_sync_db()
+    attempts_done = db.interview_sessions.count_documents({
+        "candidate_id": cand["_id"],
+        "status": "completed",
+        "result": {"$in": ["PASS", "FAIL", "WITHDRAWN"]},
+    })
 
     return CandidateResponse(
-        id=cand.id,
+        id=str(cand["_id"]),
         fullName=raw_full_name,
         email=user_email,
-        phone=cand.phone,
-        state=cand.state,
-        district=cand.district,
-        currentRole=cand.currentRole,
-        yearsOfExperience=cand.yearsOfExperience,
-        farmingBackground=cand.farmingBackground,
-        primaryExpertise=cand.primaryExpertise,
+        phone=cand.get("phone"),
+        state=cand.get("state"),
+        district=cand.get("district"),
+        currentRole=cand.get("current_role"),
+        yearsOfExperience=cand.get("years_of_experience"),
+        farmingBackground=cand.get("farming_background"),
+        primaryExpertise=cand.get("primary_expertise"),
         currentPhase=current_phase,
         status="active",
         phases=_build_phases(current_phase),
-        createdAt=cand.createdAt.isoformat() if cand.createdAt else datetime.now().isoformat(),
-        documentsSubmitted=cand.documentsSubmitted,
+        createdAt=cand.get("created_at", "").isoformat() if cand.get("created_at") else datetime.now(timezone.utc).isoformat(),
+        documentsSubmitted=cand.get("documents_submitted", False),
         attemptsDone=attempts_done,
         maxAttempts=3,
     )
 
 
-# ============ Candidate Management ============
+# ── Candidates ─────────────────────────────────────────────────────────────────
 
 @router.get("/candidates")
 async def get_candidates(
-    phase: Optional[str] = Query(None, description="Filter by current phase"),
-    status: Optional[str] = Query(None, description="Filter by status (active/completed)"),
-    search: Optional[str] = Query(None, description="Search by name or email"),
-    state: Optional[str] = Query(None, description="Filter by state"),
-    district: Optional[str] = Query(None, description="Filter by district"),
-    db: Session = Depends(get_db),
+    phase: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    state: Optional[str] = Query(None),
+    district: Optional[str] = Query(None),
     _admin=Depends(require_admin_auth),
 ):
-    """
-    Get all candidates from PostgreSQL via SQLAlchemy.
-    LEFT JOINs with User to surface email even before onboarding is filled.
-    """
-    # Query with join to User table to get email
-    query = (
-        db.query(Candidate, User.email.label("user_email"))
-        .outerjoin(User, Candidate.userId == User.id)
-        .order_by(Candidate.createdAt.desc())
-    )
+    db = get_sync_db()
 
-    rows = query.all()
+    query: Dict[str, Any] = {}
+    if phase:
+        query["current_phase"] = phase
+    if state:
+        query["state"] = {"$regex": state, "$options": "i"}
+    if district:
+        query["district"] = {"$regex": district, "$options": "i"}
 
-    candidates = []
-    for cand, user_email in rows:
-        response = _candidate_to_response(cand, user_email, db)
+    cursor = db.candidates.find(query).sort("created_at", -1)
+    all_candidates = list(cursor)
 
-        # Apply filters
-        if phase and response.currentPhase != phase:
-            continue
-        search_lower = search.lower() if search else None
-        if search_lower and (
-            search_lower not in (response.fullName or "").lower()
-            and search_lower not in (response.email or "").lower()
-        ):
-            continue
-        if state:
-            if not response.state or state.lower() not in response.state.lower():
-                continue
-        if district:
-            if not response.district or district.lower() not in response.district.lower():
+    results = []
+    for cand in all_candidates:
+        user_email = None
+        user_id = cand.get("user_id")
+        if user_id:
+            user = db.users.find_one({"_id": user_id})
+            if user:
+                user_email = user.get("email")
+
+        response = _candidate_to_response(cand, user_email)
+
+        if search:
+            sl = search.lower()
+            if sl not in (response.fullName or "").lower() and sl not in (response.email or "").lower():
                 continue
 
-        candidates.append(response)
+        results.append(response)
 
-    return {"candidates": candidates, "total": len(candidates)}
+    return {"candidates": results, "total": len(results)}
 
 
 @router.get("/candidates/{candidate_id}")
-async def get_candidate(candidate_id: str, db: Session = Depends(get_db), _admin=Depends(require_admin_auth)):
-    """
-    Get a specific candidate by ID.
-    """
-    row = (
-        db.query(Candidate, User.email.label("user_email"))
-        .outerjoin(User, Candidate.userId == User.id)
-        .filter(Candidate.id == candidate_id)
-        .first()
-    )
-    if not row:
-        raise HTTPException(status_code=404, detail="Candidate not found")
-    cand, user_email = row
-    return _candidate_to_response(cand, user_email, db)
-
-
-@router.put("/candidates/{candidate_id}/phase/{phase}")
-async def update_candidate_phase(
-    candidate_id: str,
-    phase: str,
-    db: Session = Depends(get_db),
-    _admin=Depends(require_admin_auth),
-):
-    """
-    Update a candidate's phase status (admin override).
-    """
-    if phase not in PHASES:
-        raise HTTPException(status_code=400, detail=f"Invalid phase. Must be one of: {PHASES}")
-
-    cand = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+async def get_candidate(candidate_id: str, _admin=Depends(require_admin_auth)):
+    db = get_sync_db()
+    cand = db.candidates.find_one({"_id": candidate_id})
     if not cand:
         raise HTTPException(status_code=404, detail="Candidate not found")
 
-    cand.currentPhase = phase
-    cand.updatedAt = datetime.utcnow()
-    db.commit()
+    user_email = None
+    user_id = cand.get("user_id")
+    if user_id:
+        user = db.users.find_one({"_id": user_id})
+        if user:
+            user_email = user.get("email")
+
+    return _candidate_to_response(cand, user_email)
+
+
+@router.put("/candidates/{candidate_id}/phase/{phase}")
+async def update_candidate_phase(candidate_id: str, phase: str, _admin=Depends(require_admin_auth)):
+    if phase not in PHASES:
+        raise HTTPException(status_code=400, detail=f"Invalid phase. Must be one of: {PHASES}")
+
+    db = get_sync_db()
+    result = db.candidates.update_one(
+        {"_id": candidate_id},
+        {"$set": {"current_phase": phase, "updated_at": datetime.now(timezone.utc)}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Candidate not found")
 
     return {"success": True, "message": f"Phase updated to {phase}"}
 
@@ -210,148 +172,156 @@ async def create_candidate(
     email: str,
     phone: Optional[str] = None,
     position: Optional[str] = None,
-    db: Session = Depends(get_db),
     _admin=Depends(require_admin_auth),
 ):
-    """
-    Create a new candidate.
-    """
-    # Check if email already exists via User
-    existing_user = db.query(User).filter(User.email == email).first()
+    db = get_sync_db()
+
+    existing_user = db.users.find_one({"email": email})
     if existing_user:
-        existing_cand = db.query(Candidate).filter(Candidate.userId == existing_user.id).first()
+        existing_cand = db.candidates.find_one({"user_id": existing_user["_id"]})
         if existing_cand:
             raise HTTPException(status_code=400, detail="Candidate with this email already exists")
+        user_id = existing_user["_id"]
+    else:
+        user_id = str(uuid.uuid4())
+        db.users.insert_one({
+            "_id": user_id,
+            "name": name,
+            "email": email,
+            "created_at": datetime.now(timezone.utc),
+        })
 
-    # Create user
-    user = User(name=name, email=email)
-    db.add(user)
-    db.flush()
+    candidate_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+    db.candidates.insert_one({
+        "_id": candidate_id,
+        "user_id": user_id,
+        "full_name": name,
+        "phone": phone,
+        "current_phase": "onboarding",
+        "offer_letter_viewed": False,
+        "passed_and_visited_summary": False,
+        "joining_details_visited": False,
+        "documents_submitted": False,
+        "created_at": now,
+        "updated_at": now,
+    })
 
-    # Create candidate
-    cand = Candidate(
-        userId=user.id,
-        fullName=name,
-        phone=phone,
-        currentPhase="onboarding",
-    )
-    db.add(cand)
-    db.commit()
-    db.refresh(cand)
-
-    return {"id": cand.id, "name": cand.fullName, "email": email}
+    return {"id": candidate_id, "name": name, "email": email}
 
 
-# ============ Reset Cooldown ============
-
+# ── Reset Cooldown ─────────────────────────────────────────────────────────────
 
 @router.post("/candidates/{candidate_id}/reset-cooldown")
-async def reset_candidate_cooldown(
-    candidate_id: str,
-    db: Session = Depends(get_db),
-    _admin=Depends(require_admin_auth),
-):
-    """
-    Reset cooldown for a candidate who failed and is currently in cooldown.
+async def reset_candidate_cooldown(candidate_id: str, _admin=Depends(require_admin_auth)):
+    db = get_sync_db()
+    now = datetime.now(timezone.utc)
 
-    1. Finds the latest FAIL InterviewSession for this candidate (by startedAt) and clears its completedAt,
-       making the derived cooldown deadline effectively expired.
-    2. Clears InterviewQueueEntry.cooldownUntil if present.
-    3. Sets the candidate's currentPhase back to 'interview' so they can start again.
-
-    Only works on candidates with at least one FAIL result.
-    """
-    # 1. Find latest FAIL session — order by startedAt desc so the most recent session
-    # is always targeted, even if its completedAt was previously cleared by a reset.
-    latest_fail = (
-        db.query(InterviewSession)
-        .filter(
-            InterviewSession.candidateId == candidate_id,
-            InterviewSession.status == "completed",
-            InterviewSession.result == "FAIL",
-        )
-        .order_by(InterviewSession.startedAt.desc())
-        .first()
+    # Clear completedAt on latest FAIL session
+    db.interview_sessions.update_one(
+        {"candidate_id": candidate_id, "status": "completed", "result": "FAIL"},
+        {"$set": {"completed_at": None}},
+        sort=[("started_at", -1)],
     )
 
-    if not latest_fail:
-        raise HTTPException(status_code=400, detail="No failed interview session found for this candidate")
-
-    # 2. Clear completedAt — cooldown is derived from this field + cooldown_days
-    latest_fail.completedAt = None
-
-    # 3. Clear cooldownUntil on queue entry if it exists
-    queue_entry = (
-        db.query(InterviewQueueEntry)
-        .filter(InterviewQueueEntry.candidateId == candidate_id)
-        .first()
+    # Clear cooldownUntil on queue entry
+    db.queue_entries.update_one(
+        {"candidate_id": candidate_id},
+        {"$set": {"cooldown_until": None, "updated_at": now}},
     )
-    if queue_entry:
-        queue_entry.cooldownUntil = None
 
-    # 4. Move candidate back to interview phase and reset all phase flags
-    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
-    if candidate:
-        candidate.currentPhase = "interview"
-        # Reset all phase-visited flags so dashboard reconstructs phase 2 correctly
-        candidate.passedAndVisitedSummary = False
-        candidate.offerLetterViewed = False
-        candidate.joiningDetailsVisited = False
-        candidate.documentsSubmitted = False
-
-    db.commit()
+    # Move candidate back to interview phase, reset flags
+    db.candidates.update_one(
+        {"_id": candidate_id},
+        {"$set": {
+            "current_phase": "interview",
+            "passed_and_visited_summary": False,
+            "offer_letter_viewed": False,
+            "joining_details_visited": False,
+            "documents_submitted": False,
+            "updated_at": now,
+        }},
+    )
 
     return {"success": True, "message": "Cooldown reset successfully. Candidate can now start a new interview."}
 
 
-# ============ Re-evaluate Interview ============
+# ── Active Interviews ─────────────────────────────────────────────────────────
 
+@router.get("/interviews/active")
+async def get_active_interviews(_admin=Depends(require_admin_auth)):
+    db = get_sync_db()
+    sessions = list(db.interview_sessions.find(
+        {"status": {"$in": ["active", "interviewing", "paused"]}}
+    ).sort("started_at", -1).limit(100))
+
+    interviews = []
+    for s in sessions:
+        interview_data = s.get("interview_data") or {}
+        if isinstance(interview_data, str):
+            try:
+                interview_data = json.loads(interview_data)
+            except Exception:
+                interview_data = {}
+
+        messages = interview_data.get("messages", [])
+        if not isinstance(messages, list):
+            messages = []
+
+        candidate = db.candidates.find_one({"_id": s.get("candidate_id")})
+        candidate_name = ""
+        if candidate:
+            candidate_name = f"{candidate.get('name', '')}".strip()
+            if not candidate_name:
+                candidate_name = candidate.get("email", "")
+
+        interviews.append({
+            "id": s["_id"],
+            "candidateId": s.get("candidate_id", ""),
+            "candidateName": candidate_name,
+            "startedAt": s.get("started_at", ""),
+            "messagesCount": len(messages),
+            "messages": messages[-50:] if len(messages) > 50 else messages,
+            "currentPhase": s.get("current_phase", "interview"),
+        })
+
+    return {"interviews": interviews}
+
+
+# ── Re-evaluate Interview ──────────────────────────────────────────────────────
 
 @router.post("/interviews/{interview_id}/reevaluate")
-async def reevaluate_interview(
-    interview_id: str,
-    db: Session = Depends(get_db),
-    _admin=Depends(require_admin_auth),
-):
-    """
-    Re-run LLM evaluation on a completed interview.
-
-    Reads the stored chat history from InterviewSession.interviewData,
-    calls the LLM evaluator, then updates the session with the new score,
-    result, and evaluation data. Clears cooldown if the new result is PASS.
-    """
+async def reevaluate_interview(interview_id: str, _admin=Depends(require_admin_auth)):
     import json
     from app.llm import llm_service
     from app.services.settings_service import get_evaluation_settings
 
-    session = db.query(InterviewSession).filter(InterviewSession.id == interview_id).first()
+    db = get_sync_db()
+    session = db.interview_sessions.find_one({"_id": interview_id})
     if not session:
         raise HTTPException(status_code=404, detail="Interview session not found")
 
-    if session.status != "completed":
+    if session.get("status") != "completed":
         raise HTTPException(status_code=400, detail="Only completed interviews can be re-evaluated")
 
-    # Pull stored data
     try:
-        data = json.loads(session.interviewData) if session.interviewData else {}
+        interview_data = session.get("interview_data", {}) if isinstance(session.get("interview_data"), dict) else {}
     except Exception:
         raise HTTPException(status_code=500, detail="Corrupted interview data")
 
-    messages = data.get("messages", [])
-    candidate_data = data.get("candidate_data", {})
-    qa_pairs = data.get("qa_pairs", [])
+    messages = interview_data.get("messages", [])
+    candidate_data = interview_data.get("candidate_data", {})
+    qa_pairs = interview_data.get("qa_pairs", [])
 
     if not messages:
         raise HTTPException(status_code=400, detail="No chat history found for this interview")
 
-    # Build conversation_history in the format the LLM expects
     conversation_history = [
         {"role": m.get("role"), "content": m.get("content")}
         for m in messages
         if m.get("role") and m.get("content")
     ]
 
-    # Run LLM evaluation
     try:
         evaluation = await llm_service.generate_interview_evaluation(
             candidate_data=candidate_data,
@@ -363,588 +333,408 @@ async def reevaluate_interview(
         logging.error(f"[Re-evaluate] LLM evaluation failed for {interview_id}: {e}")
         raise HTTPException(status_code=502, detail="Evaluation service failed. Please try again.")
 
-    # Compute new result
     threshold = get_evaluation_settings().get("pass_threshold", 60)
-    overall_score = evaluation.get("overall_score")
-    if overall_score is None:
-        overall_score = 0
+    overall_score = evaluation.get("overall_score") or 0
     new_result = "PASS" if overall_score >= threshold else "FAIL"
 
-    # Update session
-    session.score = overall_score
-    session.result = new_result
+    interview_data["evaluation"] = evaluation
+    now = datetime.now(timezone.utc)
 
-    # Persist updated evaluation in interviewData
-    data["evaluation"] = evaluation
-    session.interviewData = json.dumps(data)
+    db.interview_sessions.update_one(
+        {"_id": interview_id},
+        {"$set": {
+            "score": overall_score,
+            "result": new_result,
+            "interview_data": interview_data,
+            "updated_at": now,
+        }},
+    )
 
-    # Clear cooldown if candidate now PASSes (they may have previously failed)
     if new_result == "PASS":
-        from app.db.models.candidate import InterviewQueueEntry
-        queue_entry = (
-            db.query(InterviewQueueEntry)
-            .filter(InterviewQueueEntry.candidateId == session.candidateId)
-            .first()
+        db.queue_entries.update_one(
+            {"candidate_id": session["candidate_id"]},
+            {"$set": {"cooldown_until": None, "updated_at": now}},
         )
-        if queue_entry:
-            queue_entry.cooldownUntil = None
-
-        # Move candidate to documents phase so their dashboard unlocks upload-documents
-        from app.db.models.candidate import Candidate
-        candidate = db.query(Candidate).filter(Candidate.id == session.candidateId).first()
-        if candidate:
-            candidate.currentPhase = "documents"
-            candidate.passedAndVisitedSummary = True  # prevents phase reconstruct from dropping back to 3
-            candidate.documentsSubmitted = False       # they haven't uploaded yet — fresh for this PASS path
-
-    elif new_result == "FAIL":
-        # Revert candidate from PASS path back to interview phase with cooldown.
-        # Set session.completedAt to now so cooldown deadline is derived from here
-        # (InterviewSession.completedAt + current cooldown_days setting).
-        from app.services.queue_manager import _now
-        session.completedAt = _now()
-
-        from app.db.models.candidate import Candidate
-        candidate = db.query(Candidate).filter(Candidate.id == session.candidateId).first()
-        if candidate:
-            candidate.currentPhase = "interview"
-            candidate.passedAndVisitedSummary = False
-            candidate.offerLetterViewed = False
-
-        # Delete signed offer letter record so they cannot re-sign
-        db.query(SignedOfferLetter).filter(SignedOfferLetter.candidateId == session.candidateId).delete(synchronize_session=False)
-
-    db.commit()
+        db.candidates.update_one(
+            {"_id": session["candidate_id"]},
+            {"$set": {
+                "current_phase": "documents",
+                "passed_and_visited_summary": True,
+                "documents_submitted": False,
+                "updated_at": now,
+            }},
+        )
+    else:
+        db.interview_sessions.update_one(
+            {"_id": interview_id},
+            {"$set": {"completed_at": now}},
+        )
+        db.candidates.update_one(
+            {"_id": session["candidate_id"]},
+            {"$set": {
+                "current_phase": "interview",
+                "passed_and_visited_summary": False,
+                "updated_at": now,
+            }},
+        )
 
     return {
         "success": True,
-        "interview_id": interview_id,
-        "result": new_result,
-        "overall_score": overall_score,
+        "new_score": overall_score,
+        "new_result": new_result,
         "evaluation": evaluation,
-        "message": f"Re-evaluation complete. New result: {new_result} ({overall_score}/100)",
     }
 
 
-# ============ Active Interviews (in-memory for real-time monitoring) ============
+# ── Dashboard Stats ────────────────────────────────────────────────────────────
 
+@router.get("/stats/overview")
+async def get_overview_stats(_admin=Depends(require_admin_auth)):
+    db = get_sync_db()
 
-def _build_active_response(interview_id: str, state) -> Dict[str, Any]:
-    """Build a dict from an InterviewState for the active interviews endpoint."""
-    msgs = state.messages[-20:]
-    candidate_name = (
-        state.candidate_data.get("name") if state.candidate_data else "Unknown"
-    )
-    started_at = state.created_at.isoformat() if hasattr(state, "created_at") else datetime.now().isoformat()
-    current_phase = getattr(state, "current_phase", "interview")
-    return {
-        "id": interview_id,
-        "candidateId": state.candidate_data.get("candidate_id", "") if state.candidate_data else "",
-        "candidateName": candidate_name,
-        "startedAt": started_at,
-        "messagesCount": len(msgs),
-        "messages": msgs,
-        "currentPhase": current_phase,
-    }
+    total = db.candidates.count_documents({})
+    by_phase = {}
+    for phase in PHASES:
+        by_phase[phase] = db.candidates.count_documents({"current_phase": phase})
 
+    active_interviews = db.interview_sessions.count_documents({
+        "status": {"$in": ["active", "interviewing", "paused"]}
+    })
 
-@router.get("/interviews/active")
-async def get_active_interviews(db: Session = Depends(get_db), _admin=Depends(require_admin_auth)):
-    """
-    Get all currently active interview sessions.
-
-    Always checks the DB to avoid stale in-memory entries.
-    An interview is truly live only if:
-      1. It exists in the workflow's _interviews dict with status='active', AND
-      2. It has a matching InterviewSession row in the DB with status='active'
-    """
-    from app.workflows.interview_workflow import _interviews
-
-    # Get all interview_ids that have an active DB record
-    active_db_ids = {
-        row.id
-        for row in db.query(InterviewSession.id).filter(InterviewSession.status == "active").all()
-    }
-
-    active = [
-        _build_active_response(interview_id, state)
-        for interview_id, state in _interviews.items()
-        if state.status == "active" and interview_id in active_db_ids
-    ]
-    return {"interviews": active, "total": len(active)}
-
-
-# ============ Interview Evaluations ============
-
-
-class EvaluationMetrics(BaseModel):
-    score: int
-    details: str
-
-
-class InterviewEvaluationRow(BaseModel):
-    id: str
-    candidateId: str
-    candidateName: str
-    email: Optional[str]
-    result: Optional[str]
-    endReason: Optional[str]
-    score: Optional[float]
-    startedAt: Optional[str]
-    completedAt: Optional[str]
-    messages: List[Dict[str, str]]
-    evaluation: Optional[Dict[str, Any]]
-    attempt: int
-
-
-@router.get("/interviews/evaluations")
-async def get_interview_evaluations(
-    candidateId: Optional[str] = Query(None),
-    result: Optional[str] = Query(None),
-    search: Optional[str] = Query(None),
-    limit: int = Query(100, ge=1, le=1000),
-    offset: int = Query(0, ge=0),
-    db: Session = Depends(get_db),
-    _admin=Depends(require_admin_auth),
-):
-    import json
-
-    query = (
-        db.query(InterviewSession)
-        .filter(InterviewSession.status == "completed")
-        .order_by(InterviewSession.startedAt.desc())
-    )
-    if candidateId:
-        query = query.filter(InterviewSession.candidateId == candidateId)
-    if result:
-        query = query.filter(InterviewSession.result == result)
-
-    total = query.count()
-    rows = query.offset(offset).limit(limit).all()
-
-    if not rows:
-        return {"evaluations": [], "total": 0, "limit": limit, "offset": offset}
-
-    cand_ids = list({r.candidateId for r in rows if r.candidateId})
-
-    cand_map: Dict[str, Dict[str, Any]] = {}
-    if cand_ids:
-        rows2 = (
-            db.query(Candidate, User)
-            .outerjoin(User, Candidate.userId == User.id)
-            .filter(Candidate.id.in_(cand_ids))
-            .all()
-        )
-        for cand, user in rows2:
-            cand_map[cand.id] = {
-                "candidateName": cand.fullName or (user.name if user else None) or "Unknown",
-                "email": user.email if user else None,
-            }
-
-    attempt_counts: Dict[str, int] = {}
-    for r in rows:
-        if r.candidateId:
-            attempt_counts[r.candidateId] = attempt_counts.get(r.candidateId, 0) + 1
-
-    evaluations: List[Dict[str, Any]] = []
-    for row in rows:
-        messages: List[Dict[str, str]] = []
-        evaluation_data: Optional[Dict[str, Any]] = None
-        if row.interviewData:
-            try:
-                data = json.loads(row.interviewData)
-                messages = data.get("messages", [])
-                evaluation_data = data.get("evaluation") or data.get("llm_evaluation")
-            except Exception:
-                pass
-
-        cand_total = attempt_counts.get(row.candidateId, 1)
-        evaluations.append(
-            InterviewEvaluationRow(
-                id=row.id,
-                candidateId=row.candidateId or "",
-                candidateName=cand_map.get(row.candidateId, {}).get("candidateName", "Unknown"),
-                email=cand_map.get(row.candidateId, {}).get("email"),
-                result=row.result,
-                endReason=row.endReason,
-                score=row.score,
-                startedAt=row.startedAt.isoformat() if row.startedAt else None,
-                completedAt=row.completedAt.isoformat() if row.completedAt else None,
-                messages=messages,
-                evaluation=evaluation_data,
-                attempt=cand_total,
-            ).model_dump()
-        )
-        if row.candidateId:
-            attempt_counts[row.candidateId] -= 1
-
-    return {"evaluations": evaluations, "total": total, "limit": limit, "offset": offset}
-
-
-@router.get("/interviews/evaluations/{interview_id}")
-async def get_interview_evaluation(
-    interview_id: str,
-    db: Session = Depends(get_db),
-    _admin=Depends(require_admin_auth),
-):
-    import json
-
-    row = db.query(InterviewSession).filter(InterviewSession.id == interview_id).first()
-    if not row:
-        raise HTTPException(status_code=404, detail="Interview session not found")
-
-    cand_name = "Unknown"
-    email: Optional[str] = None
-    if row.candidateId:
-        res = (
-            db.query(Candidate, User)
-            .outerjoin(User, Candidate.userId == User.id)
-            .filter(Candidate.id == row.candidateId)
-            .first()
-        )
-        if res:
-            cand, user = res
-            cand_name = cand.fullName or (user.name if user else None) or "Unknown"
-            email = user.email if user else None
-
-    messages: List[Dict[str, str]] = []
-    evaluation_data: Optional[Dict[str, Any]] = None
-    if row.interviewData:
-        try:
-            data = json.loads(row.interviewData)
-            messages = data.get("messages", [])
-            evaluation_data = data.get("evaluation") or data.get("llm_evaluation")
-        except Exception:
-            pass
-
-    return InterviewEvaluationRow(
-        id=row.id,
-        candidateId=row.candidateId or "",
-        candidateName=cand_name,
-        email=email,
-        result=row.result,
-        endReason=row.endReason,
-        score=row.score,
-        startedAt=row.startedAt.isoformat() if row.startedAt else None,
-        completedAt=row.completedAt.isoformat() if row.completedAt else None,
-        messages=messages,
-        evaluation=evaluation_data,
-        attempt=1,
-    ).model_dump()
-
-
-@router.get("/interviews/{interview_id}")
-async def get_interview(interview_id: str, db: Session = Depends(get_db), _admin=Depends(require_admin_auth)):
-    """
-    Get a specific interview session with full chat history.
-    Validates the session exists in DB with an active status before returning.
-    """
-    from app.workflows.interview_workflow import _interviews
-
-    session = db.query(InterviewSession).filter(
-        InterviewSession.id == interview_id,
-        InterviewSession.status == "active"
-    ).first()
-
-    if not session:
-        raise HTTPException(status_code=404, detail="Interview not found or not active")
-
-    # Fetch live state from in-memory dict if available
-    if interview_id in _interviews:
-        state = _interviews[interview_id]
-        return _build_active_response(interview_id, state)
-
-    # Fall back to DB record
-    return {
-        "id": session.id,
-        "candidateId": session.candidateId or "",
-        "candidateName": "Unknown",
-        "startedAt": session.startedAt.isoformat() if session.startedAt else "",
-        "messagesCount": 0,
-        "messages": [],
-        "currentPhase": session.currentPhase,
-    }
-
-
-# ============ Stats ============
-
-@router.get("/stats")
-async def get_stats(db: Session = Depends(get_db), _admin=Depends(require_admin_auth)):
-    """
-    Return aggregate stats about candidates and interview activity.
-    """
-    total = db.query(func.count(Candidate.id)).scalar() or 0
-
-    # Phase distribution
-    phase_counts = (
-        db.query(Candidate.currentPhase, func.count(Candidate.id))
-        .group_by(Candidate.currentPhase)
-        .all()
-    )
-    phase_distribution = {phase: count for phase, count in phase_counts}
-
-    # Status distribution (active = not completed)
-    active_count = db.query(func.count(Candidate.id)).filter(
-        Candidate.currentPhase.notin_(["documents", "completed"])
-    ).scalar() or 0
-    completed_count = total - active_count
-
-    # Interview stats
-    active_interviews = db.query(func.count(InterviewSession.id)).filter(
-        InterviewSession.status == "active"
-    ).scalar() or 0
+    total_completed = db.interview_sessions.count_documents({
+        "status": "completed",
+        "result": {"$in": ["PASS", "FAIL"]},
+    })
+    total_pass = db.interview_sessions.count_documents({"status": "completed", "result": "PASS"})
+    total_fail = db.interview_sessions.count_documents({"status": "completed", "result": "FAIL"})
 
     return {
         "totalCandidates": total,
+        "byPhase": by_phase,
         "activeInterviews": active_interviews,
-        "completedInterviews": completed_count,
-        "phaseDistribution": phase_distribution,
-        "statusDistribution": {
-            "active": active_count,
-            "completed": completed_count,
-        },
+        "totalCompleted": total_completed,
+        "totalPass": total_pass,
+        "totalFail": total_fail,
     }
 
 
-# ============ Geo Stats ============
+@router.get("/stats/states")
+async def get_state_stats(state: str = Query(None), _admin=Depends(require_admin_auth)):
+    db = get_sync_db()
 
-@router.get("/geo/stats")
-async def get_geo_stats(db: Session = Depends(get_db), _admin=Depends(require_admin_auth)):
-    """
-    Return geographic distribution of candidates: states, districts, top states, top districts.
-    """
-    # State-level aggregation
-    state_rows = (
-        db.query(
-            Candidate.state,
-            func.count(Candidate.id).label("total"),
-        )
-        .filter(Candidate.state.isnot(None))
-        .group_by(Candidate.state)
-        .all()
-    )
-
-    states = [
-        {"state": row.state, "total": row.total}
-        for row in state_rows
-    ]
-
-    # District-level aggregation
-    district_rows = (
-        db.query(
-            Candidate.state,
-            Candidate.district,
-            func.count(Candidate.id).label("total"),
-        )
-        .filter(Candidate.district.isnot(None))
-        .group_by(Candidate.state, Candidate.district)
-        .all()
-    )
-
-    districts = [
-        {
-            "state": row.state,
-            "district": row.district,
-            "total": row.total,
-            "pending": 0,      # TODO: wire up if needed
-            "selected": 0,
-            "rejected": 0,
-            "passRate": 0,
+    # Aggregate candidates by state and phase
+    pipeline = []
+    if state:
+        pipeline.append({"$match": {"state": state}})
+    pipeline.append({
+        "$group": {
+            "_id": {"state": "$state", "phase": "$current_phase"},
+            "count": {"$sum": 1},
         }
-        for row in district_rows
-    ]
+    })
 
-    # Sort states by total descending
-    states.sort(key=lambda x: x["total"], reverse=True)
+    rows = list(db.candidates.aggregate(pipeline))
 
-    return {
-        "states": states,
-        "districts": districts,
-        "topStates": states[:10],
-        "topDistricts": districts[:10],
-    }
+    # Get pass/fail per state via Python-side join
+    sessions = db.interview_sessions.find(
+        {"status": "completed", "result": {"$in": ["PASS", "FAIL"]}},
+        {"candidate_id": 1, "result": 1},
+    )
+    pf_map: dict = {}
+    for sess in sessions:
+        cid = sess.get("candidate_id")
+        if not cid:
+            continue
+        try:
+            cand = db.candidates.find_one({"_id": ObjectId(cid)}, {"state": 1})
+        except Exception:
+            continue
+        if not cand:
+            continue
+        s = cand.get("state") or "Unknown"
+        if s not in pf_map:
+            pf_map[s] = {"PASS": 0, "FAIL": 0}
+        pf_map[s][sess["result"]] += 1
 
-
-@router.get("/geo/funnel")
-async def get_state_funnel(
-    state: Optional[str] = Query(None, description="Filter by state name"),
-    db: Session = Depends(get_db),
-    _admin=Depends(require_admin_auth),
-):
-    """
-    Phase funnel broken down by state (or all states if no filter).
-    Returns candidates per phase for the given state(s).
-    """
-    query = db.query(
-        Candidate.state,
-        Candidate.currentPhase,
-        func.count(Candidate.id).label("count"),
-    ).filter(Candidate.state.isnot(None))
-
-    if state:
-        query = query.filter(Candidate.state.ilike(f"%{state}%"))
-
-    rows = query.group_by(Candidate.state, Candidate.currentPhase).all()
-
-    # Build funnel data
-    state_data: Dict[str, Dict[str, int]] = {}
-    total_states = set()
-
+    state_data: dict = {}
     for row in rows:
-        s = row.state
-        phase = row.currentPhase or "onboarding"
-        total_states.add(s)
+        s = row["_id"].get("state") or "Unknown"
         if s not in state_data:
-            state_data[s] = {p: 0 for p in PHASES}
-        state_data[s][phase] = row.count
+            state_data[s] = {"state": s, "onboarding": 0, "interviewed": 0, "passed": 0, "failed": 0, "passRate": 0, "offerExtended": 0, "offerAccepted": 0}
+        phase = row["_id"]["phase"] or "onboarding"
+        if phase == "onboarding":
+            state_data[s]["onboarding"] += row["count"]
+        elif phase in ("interview", "summary", "documents"):
+            state_data[s]["interviewed"] += row["count"]
 
-    # Flatten for response
-    result = []
-    for s, phases in state_data.items():
-        row_data = {"state": s}
-        row_data.update(phases)
-        result.append(row_data)
-
-    result.sort(key=lambda x: sum(PHASE_ORDER.get(p, 0) * x.get(p, 0) for p in PHASES), reverse=True)
-
-    return {"states": result, "totalStates": len(total_states)}
-
-
-# ============ Stats By State ============
-
-@router.get("/stats/by-state")
-async def get_stats_by_state(
-    state: Optional[str] = Query(None, description="Filter to a specific state"),
-    db: Session = Depends(get_db),
-    _admin=Depends(require_admin_auth),
-):
-    """
-    Per-state candidate counts broken down by phase.
-    Used by the admin analytics tab funnel chart.
-    """
-    query = db.query(
-        Candidate.state,
-        Candidate.currentPhase,
-        func.count(Candidate.id).label("count"),
-    ).filter(Candidate.state.isnot(None))
-
-    if state:
-        query = query.filter(Candidate.state.ilike(f"%{state}%"))
-
-    rows = query.group_by(Candidate.state, Candidate.currentPhase).all()
-
-    # Aggregate into state buckets
-    state_data: Dict[str, Dict[str, int]] = {}
-    for row in rows:
-        s = row.state
-        phase = row.currentPhase or "onboarding"
-        if s not in state_data:
-            state_data[s] = {"state": s, **{p: 0 for p in PHASES}}
-        if phase in state_data[s]:
-            state_data[s][phase] += row.count
+    for s, data in state_data.items():
+        pf = pf_map.get(s, {"PASS": 0, "FAIL": 0})
+        data["passed"] = pf["PASS"]
+        data["failed"] = pf["FAIL"]
+        total = pf["PASS"] + pf["FAIL"]
+        data["passRate"] = round(pf["PASS"] / total * 100) if total > 0 else 0
 
     result = list(state_data.values())
-    result.sort(key=lambda x: sum(x[p] for p in PHASES), reverse=True)
+    result.sort(key=lambda x: x["onboarding"] + x["interviewed"], reverse=True)
     return {"states": result, "totalStates": len(result)}
 
 
-# ============ Anti-Cheat Settings ============
-
-from app.db.models.settings import Settings as DbSettings
-from app.services.settings_service import get_anti_cheat_settings
-
-
-class AntiCheatSettingsResponse(BaseModel):
-    idle_threshold_ms: int
-    platform_idle_ms: int
-
-
-@router.get("/anti-cheat", response_model=AntiCheatSettingsResponse)
-async def get_anti_cheat_settings_endpoint(_admin=Depends(require_admin_auth)):
-    """
-    Get current anti-cheat thresholds.
-    """
-    config = get_anti_cheat_settings()
-    return AntiCheatSettingsResponse(
-        idle_threshold_ms=config["idle_threshold_ms"],
-        platform_idle_ms=config["platform_idle_ms"],
-    )
-
-
-class UpdateAntiCheatSettingsRequest(BaseModel):
-    idle_threshold_ms: Optional[int] = None
-    platform_idle_ms: Optional[int] = None
-
-
-@router.put("/anti-cheat")
-async def update_anti_cheat_settings(
-    request: UpdateAntiCheatSettingsRequest,
-    db: Session = Depends(get_db),
-    _admin=Depends(require_admin_auth),
-):
-    """
-    Update anti-cheat thresholds (idle timeout and platform inactivity timeout).
-    """
-    if request.idle_threshold_ms is not None:
-        if request.idle_threshold_ms < 5000:
-            raise HTTPException(status_code=400, detail="idle_threshold_ms must be at least 5000")
-        _upsert_setting(db, "anti_cheat_idle_threshold_ms", str(request.idle_threshold_ms), "anti-cheat")
-
-    if request.platform_idle_ms is not None:
-        if request.platform_idle_ms < 60000:
-            raise HTTPException(status_code=400, detail="platform_idle_ms must be at least 60000")
-        _upsert_setting(db, "anti_cheat_platform_idle_ms", str(request.platform_idle_ms), "anti-cheat")
-
-    return {"success": True, "message": "Anti-cheat settings updated"}
-
-
-def _upsert_setting(db: Session, key: str, value: str, category: str) -> None:
-    """Insert or update a Settings row."""
-    now = datetime.utcnow()
-    row = db.query(DbSettings).filter(DbSettings.key == key).first()
-    if row:
-        row.value = value
-        row.updated_at = now
-    else:
-        row = DbSettings(key=key, value=value, category=category, description=key)
-        db.add(row)
-    db.commit()
-
-
-# ============ Anti-Cheat Violations ============
+# ── Anti-Cheat ─────────────────────────────────────────────────────────────────
 
 @router.get("/anti-cheat/violations")
 async def get_anti_cheat_violations(
     limit: int = Query(100, ge=1, le=500),
-    db: Session = Depends(get_db),
     _admin=Depends(require_admin_auth),
 ):
-    """
-    Return all anti-cheat violations, enriched with candidate name and email.
-    """
-    rows = (
-        db.query(AntiCheatEvent, Candidate, User)
-        .outerjoin(Candidate, AntiCheatEvent.candidateId == Candidate.id)
-        .outerjoin(User, Candidate.userId == User.id)
-        .order_by(AntiCheatEvent.createdAt.desc())
-        .limit(limit)
-        .all()
-    )
-
+    db = get_sync_db()
+    cursor = db.anti_cheat_events.find().sort("created_at", -1).limit(limit)
     violations = []
-    for event, cand, user in rows:
-        name = (cand.fullName if cand else None) or (user.name if user else None) or "Unknown"
-        email = (user.email if user else None) or "—"
+    for event in cursor:
+        cand = db.candidates.find_one({"_id": event.get("candidate_id")}) if event.get("candidate_id") else None
+        user = db.users.find_one({"_id": cand.get("user_id")}) if cand and cand.get("user_id") else None
+        name = (cand.get("full_name") if cand else None) or (user.get("name") if user else None) or "Unknown"
+        email = (user.get("email") if user else None) or "—"
         violations.append({
-            "id": event.id,
-            "candidateId": event.candidateId,
+            "id": event.get("_id"),
+            "candidateId": event.get("candidate_id"),
             "candidateName": name,
             "email": email,
-            "eventType": event.eventType,
-            "severity": event.severity,
-            "message": event.message,
-            "createdAt": event.createdAt.isoformat() if event.createdAt else datetime.utcnow().isoformat(),
-            "autoClosed": event.severity == "critical",
+            "eventType": event.get("event_type"),
+            "severity": event.get("severity"),
+            "message": event.get("message"),
+            "createdAt": event.get("created_at", "").isoformat() if event.get("created_at") else "",
+            "autoClosed": event.get("severity") == "critical",
+        })
+    return {"violations": violations, "total": len(violations)}
+
+
+# ── Update a single candidate field ───────────────────────────────────────────
+
+@router.patch("/candidates/{candidate_id}")
+async def update_candidate(
+    candidate_id: str,
+    updates: Dict[str, Any],
+    _admin=Depends(require_admin_auth),
+):
+    """Partial update — only provided fields are changed."""
+    db = get_sync_db()
+    updates["updated_at"] = datetime.now(timezone.utc)
+
+    # Map snake_case keys to MongoDB snake_case (already snake_case from body)
+    result = db.candidates.update_one({"_id": candidate_id}, {"$set": updates})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    return {"success": True}
+
+
+# ── Get all evaluations (admin view) ──────────────────────────────────────────
+
+@router.get("/evaluations")
+async def get_all_evaluations(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0),
+    result: str = Query(None),
+    search: str = Query(None),
+    _admin=Depends(require_admin_auth),
+):
+    db = get_sync_db()
+
+    query: dict = {"status": "completed", "result": {"$in": ["PASS", "FAIL"]}}
+    if result:
+        query["result"] = result
+
+    total = db.interview_sessions.count_documents(query)
+
+    cursor = db.interview_sessions.find(query).sort("completed_at", -1).skip(offset).limit(limit)
+
+    evals = []
+    for s in cursor:
+        interview_data = s.get("interview_data") or {}
+        if isinstance(interview_data, str):
+            try:
+                interview_data = json.loads(interview_data)
+            except Exception:
+                interview_data = {}
+
+        candidate_id = s.get("candidate_id")
+        # candidate_id is a UUID string, not ObjectId — query directly
+        candidate = db.candidates.find_one({"_id": candidate_id}) if candidate_id else None
+
+        if candidate:
+            name = f"{candidate.get('name', '')}".strip()
+            candidate_name = name if name else candidate.get("email", "")
+            candidate_email = candidate.get("email")
+        else:
+            candidate_name = ""
+            candidate_email = None
+
+        messages = interview_data.get("messages", [])
+        if not isinstance(messages, list):
+            messages = []
+
+        attempt_num = db.interview_sessions.count_documents({
+            "candidate_id": candidate_id,
+            "status": "completed",
+            "result": {"$in": ["PASS", "FAIL"]},
+        }) if candidate_id else 1
+
+        evals.append({
+            "id": s.get("_id"),
+            "candidateId": candidate_id,
+            "candidateName": candidate_name,
+            "email": candidate_email,
+            "result": s.get("result"),
+            "endReason": s.get("end_reason"),
+            "score": s.get("score"),
+            "startedAt": s.get("started_at", "").isoformat() if s.get("started_at") else None,
+            "completedAt": s.get("completed_at", "").isoformat() if s.get("completed_at") else None,
+            "messages": messages,
+            "evaluation": interview_data.get("evaluation"),
+            "attempt": attempt_num,
         })
 
-    return {"violations": violations, "total": len(violations)}
+    return {"evaluations": evals, "total": total}
+
+
+# ── Geo Stats ─────────────────────────────────────────────────────────────────
+
+@router.get("/geo/stats")
+async def get_geo_stats(_admin=Depends(require_admin_auth)):
+    db = get_sync_db()
+
+    # States summary — group by state and phase
+    state_pipeline = [
+        {
+            "$group": {
+                "_id": {
+                    "state": "$state",
+                    "phase": "$current_phase",
+                },
+                "count": {"$sum": 1},
+            }
+        }
+    ]
+    state_rows = list(db.candidates.aggregate(state_pipeline))
+
+    states_map: dict = {}
+    for row in state_rows:
+        s = row["_id"].get("state") or "Unknown"
+        if s not in states_map:
+            states_map[s] = {"state": s, "total": 0, "pending": 0, "interviewed": 0, "selected": 0, "rejected": 0}
+        states_map[s]["total"] += row["count"]
+        phase = row["_id"]["phase"] or "onboarding"
+        if phase == "onboarding":
+            states_map[s]["pending"] += row["count"]
+        elif phase in ("interview", "summary", "documents"):
+            states_map[s]["interviewed"] += row["count"]
+
+    # Get pass/fail per state — Python-side join
+    sessions = list(db.interview_sessions.find(
+        {"status": "completed", "result": {"$in": ["PASS", "FAIL"]}},
+        {"candidate_id": 1, "result": 1},
+    ))
+    pf_map: dict = {}
+    for sess in sessions:
+        cid = sess.get("candidate_id")
+        if not cid:
+            continue
+        try:
+            cand = db.candidates.find_one({"_id": ObjectId(cid)}, {"state": 1})
+        except Exception:
+            continue
+        if not cand:
+            continue
+        s = cand.get("state") or "Unknown"
+        if s not in pf_map:
+            pf_map[s] = {"PASS": 0, "FAIL": 0}
+        pf_map[s][sess["result"]] += 1
+
+    for s_data in states_map.values():
+        pf = pf_map.get(s_data["state"], {"PASS": 0, "FAIL": 0})
+        s_data["selected"] = pf["PASS"]
+        s_data["rejected"] = pf["FAIL"]
+        total = pf["PASS"] + pf["FAIL"]
+        s_data["passRate"] = round(pf["PASS"] / total * 100) if total > 0 else 0
+
+    states_list = list(states_map.values())
+    states_list.sort(key=lambda x: x["total"], reverse=True)
+
+    # Districts summary (top 100)
+    district_pipeline = [
+        {
+            "$group": {
+                "_id": {"state": "$state", "district": "$district"},
+                "total": {"$sum": 1},
+            }
+        },
+        {"$sort": {"total": -1}},
+        {"$limit": 100},
+    ]
+    district_rows = list(db.candidates.aggregate(district_pipeline))
+
+    # Get pass/fail per district — Python-side join
+    d_pf_map: dict = {}
+    for sess in sessions:
+        cid = sess.get("candidate_id")
+        if not cid:
+            continue
+        try:
+            cand = db.candidates.find_one({"_id": ObjectId(cid)}, {"state": 1, "district": 1})
+        except Exception:
+            continue
+        if not cand:
+            continue
+        key = (cand.get("state") or "Unknown", cand.get("district") or "Unknown")
+        if key not in d_pf_map:
+            d_pf_map[key] = {"PASS": 0, "FAIL": 0}
+        d_pf_map[key][sess["result"]] += 1
+
+    districts_list = []
+    for row in district_rows:
+        d_state = row["_id"].get("state") or "Unknown"
+        d_district = row["_id"].get("district") or "Unknown"
+        key = (d_state, d_district)
+        pf = d_pf_map.get(key, {"PASS": 0, "FAIL": 0})
+        selected = pf["PASS"]
+        rejected = pf["FAIL"]
+        total = selected + rejected
+        pass_rate = round(selected / total * 100) if total > 0 else 0
+        districts_list.append({
+            "state": d_state,
+            "district": d_district,
+            "total": row["total"],
+            "pending": row["total"],
+            "selected": selected,
+            "rejected": rejected,
+            "passRate": pass_rate,
+        })
+
+    return {
+        "states": states_list,
+        "districts": districts_list,
+        "uniqueStates": [s["state"] for s in states_list],
+        "stateDistribution": {s["state"]: s["total"] for s in states_list[:10]},
+        "topStates": states_list[:8],
+        "topDistricts": districts_list[:8],
+    }
+
+
+# ── Stats / Locations ─────────────────────────────────────────────────────────
+
+@router.get("/stats/locations")
+async def get_locations(state: str = Query(...), _admin=Depends(require_admin_auth)):
+    db = get_sync_db()
+    cursor = db.candidates.find(
+        {"state": state},
+        {"district": 1},
+    )
+    districts_map: dict = {}
+    for doc in cursor:
+        d = doc.get("district") or "Unknown"
+        if d not in districts_map:
+            districts_map[d] = 0
+        districts_map[d] += 1
+
+    districts = [{"district": k, "count": v} for k, v in sorted(districts_map.items(), key=lambda x: x[1], reverse=True)]
+    return {"districts": districts}

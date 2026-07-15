@@ -5,16 +5,17 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     model_config = ConfigDict(
-        extra='ignore',  # Allow extra environment variables
+        extra='ignore',
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=True,
     )
-    
+
     APP_NAME: str = "AI Interview Platform"
 
-    DATABASE_URL: str
-    REDIS_URL: str
+    # MongoDB
+    MONGO_URI: str = "mongodb://localhost:27017"
+    MONGO_DB_NAME: str = "agri_interview"
 
     LLM_PROVIDER: str = "openai"
     LLM_MODEL: str = "gpt-4.1"

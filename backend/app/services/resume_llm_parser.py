@@ -206,24 +206,18 @@ def _error_result(reason: str) -> Dict[str, Any]:
 # ── DB helpers ────────────────────────────────────────────────────────────────
 
 def save_parsed_data(resume_id: str, parsed_data: Dict[str, Any]) -> bool:
-    """Write parsed JSON to the Resume record in PostgreSQL."""
-    from app.db.database import SessionLocal
-    from app.db.models.candidate import Resume
-
-    db = SessionLocal()
+    """Write parsed JSON to the Resume record in MongoDB."""
+    from app.db.mongodb import get_sync_db
+    db = get_sync_db()
     try:
-        resume = db.query(Resume).filter(Resume.id == resume_id).first()
-        if resume:
-            resume.parsedData = json.dumps(parsed_data)
-            resume.status = "parsed"
-            db.commit()
-            return True
-        else:
+        result = db.resumes.update_one(
+            {"_id": resume_id},
+            {"$set": {"parsed_data": parsed_data, "status": "parsed"}},
+        )
+        if result.matched_count == 0:
             print(f"[resume_parser] Resume {resume_id} not found")
             return False
+        return True
     except Exception as e:
         print(f"[resume_parser] Failed to save parsed data: {e}")
-        db.rollback()
         return False
-    finally:
-        db.close()

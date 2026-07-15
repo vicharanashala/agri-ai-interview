@@ -2,20 +2,9 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Install libssl1.1 for Prisma query engine (Alpine 3.17+ dropped it)
-RUN apk add --no-cache \
-    libssl1.1 \
-    || apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/v3.16/main libssl1.1
-
 # Copy package files and install deps
 COPY package.json package-lock.json* ./
 RUN npm ci
-
-# Copy prisma schema
-COPY prisma/schema.prisma ./prisma/
-
-# Generate Prisma client (bake it into image so volume mount can't override)
-RUN npx prisma generate
 
 # Copy all source
 COPY . .

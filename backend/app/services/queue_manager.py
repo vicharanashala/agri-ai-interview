@@ -1,80 +1,48 @@
 """
-Slot Manager — simplified interview slot management.
+Slot Manager — MongoDB-backed interview slot management.
 
 No queue, no positions, no wait times. Just a max-concurrent threshold.
-
-When a candidate requests an interview:
-  - If active_interviews < MAX_CONCURRENT → start immediately
-  - Otherwise → reject with "All slots are full, please try after sometime"
 """
-
 import json
 import uuid
-from datetime import datetime, timedelta
-from typing import Optional, Tuple
+from datetime import datetime, timedelta, timezone
+from typing import Optional
 
-from sqlalchemy.orm import Session
-
-from app.db.database import SessionLocal
-from app.db.models.candidate import ActiveInterviewCount, InterviewSession, Candidate, InterviewQueueEntry
+from app.db.mongodb import get_sync_db
 from app.services.settings_service import get_cooldown_days
 
-# -------------------------------------------------------------------
-# Config
-# -------------------------------------------------------------------
+# ── Config ────────────────────────────────────────────────────────────────────
 MAX_CONCURRENT_INTERVIEWS = 20
 
 
-# -------------------------------------------------------------------
-# Helpers
-# -------------------------------------------------------------------
-
-def _get_db() -> Session:
-    db = SessionLocal()
-    try:
-        return db
-    except Exception:
-        db.close()
-        raise
-
-
 def _now() -> datetime:
-    return datetime.utcnow()
+    return datetime.now(timezone.utc)
 
 
-def _compute_active_count(db: Session) -> int:
-    return int(
-        db.query(InterviewSession)
-        .filter(InterviewSession.status.in_(["active", "interviewing", "paused"]))
-        .count()
-    )
+def _compute_active_count(db) -> int:
+    return db.interview_sessions.count_documents({
+        "status": {"$in": ["active", "interviewing", "paused"]}
+    })
 
+
+# ── SlotManager ───────────────────────────────────────────────────────────────
 
 class SlotManager:
     """
     Simple slot-based interview starter.
-
-    No queue — candidates either get a slot immediately or are told to try later.
     """
 
     def __init__(self):
-        db = _get_db()
-        try:
-            stats = db.query(ActiveInterviewCount).filter_by(id="singleton").first()
-            if not stats:
-                stats = ActiveInterviewCount(id="singleton", count=0)
-                db.add(stats)
-                db.commit()
+        db = get_sync_db()
 
-            self._active_count = _compute_active_count(db)
-            stats.count = self._active_count
-            db.commit()
-        finally:
-            db.close()
+        # Ensure singleton counter doc exists
+        if db.counters.find_one({"_id": "active_interview_count"}) is None:
+            db.counters.insert_one({"_id": "active_interview_count", "count": 0})
 
-    # -------------------------------------------------------------------
-    # Accessors
-    # -------------------------------------------------------------------
+        self._active_count = _compute_active_count(db)
+        db.counters.update_one({"_id": "active_interview_count"}, {"$set": {"count": self._active_count}})
+
+    # ── Accessors ─────────────────────────────────────────────────────────────
 
     @property
     def active_interview_count(self) -> int:
@@ -88,125 +56,23 @@ class SlotManager:
     def slots_available(self) -> int:
         return max(0, MAX_CONCURRENT_INTERVIEWS - self._active_count)
 
-    # -------------------------------------------------------------------
-    # Persistence helpers
-    # -------------------------------------------------------------------
-
-    def _sync_active_count(self, db: Session) -> None:
+    def _sync_active_count(self) -> None:
+        db = get_sync_db()
         self._active_count = _compute_active_count(db)
+        db.counters.update_one({"_id": "active_interview_count"}, {"$set": {"count": self._active_count}})
 
-    def _resume_workflow_from_session(
-        self, session: "InterviewSession", candidate_data: dict
-    ) -> None:
-        """
-        Reconstruct in-memory workflow state from a DB InterviewSession record
-        and load it into _interviews so the /message endpoint can route to it.
-
-        Called when a candidate tries to start but already has an active session
-        in the DB (e.g. after a backend container restart).
-        """
-        from app.workflows.interview_workflow import (
-            interview_workflow,
-            _interviews,
-            InterviewState,
-        )
-        import json
-
-        interview_id = session.id
-
-        # Skip if already loaded in memory
-        if interview_id in _interviews:
-            return
-
-        # Parse stored messages from interviewData or InterviewStateSnapshot
-        messages = []
-        interview_data_raw = session.interviewData
-        if interview_data_raw:
-            try:
-                data = json.loads(interview_data_raw)
-                messages = data.get("messages", [])
-            except Exception:
-                pass
-
-        # Also try InterviewStateSnapshot if available
-        if not messages:
-            try:
-                db = _get_db()
-                try:
-                    from app.db.models.interview_session import InterviewStateSnapshot
-                    snap = (
-                        db.query(InterviewStateSnapshot)
-                        .filter(InterviewStateSnapshot.interviewId == interview_id)
-                        .first()
-                    )
-                    if snap:
-                        try:
-                            snap_data = json.loads(snap.stateJson)
-                            messages = snap_data.get("messages", [])
-                        except Exception:
-                            pass
-                finally:
-                    db.close()
-            except Exception:
-                pass
-
-        # Build the InterviewState and add to _interviews
-        # Load resume parsedData for the rehydrated session
-        resume_parsed = None
-        try:
-            from app.db.models.candidate import Resume
-            resume = db.query(Resume).filter(Resume.candidateId == session.candidateId).first()
-            if resume and resume.parsedData:
-                resume_parsed = json.loads(resume.parsedData)
-        except Exception:
-            pass
-
-        state = InterviewState(interview_id, candidate_data, resume_parsed=resume_parsed)
-        for msg in messages:
-            role = msg.get("role")
-            content = msg.get("content")
-            if role and content:
-                state.messages.append({"role": role, "content": content, "timestamp": msg.get("timestamp", "")})
-        state.status = session.status or "active"
-        _interviews[interview_id] = state
-
-        # Also push through interview_graph_manager for consistency
-        from app.workflows.interview_graph import interview_graph_manager
-        try:
-            interview_graph_manager.workflow._interviews[interview_id] = state
-        except Exception:
-            pass
-        stats = db.query(ActiveInterviewCount).filter_by(id="singleton").first()
-        if stats:
-            stats.count = self._active_count
-            stats.updatedAt = _now()
-        # Caller is responsible for db.commit()
-
-    # -------------------------------------------------------------------
-    # Start interview
-    # -------------------------------------------------------------------
+    # ── Start interview ───────────────────────────────────────────────────────
 
     async def start_interview(self, candidate_id: str, candidate_data: dict) -> dict:
-        """
-        Start an interview if a slot is available.
+        db = get_sync_db()
 
-        Returns:
-            no_slot    — all slots are currently in use
-            started    — interview started, returns interview_id + first_question
-            already_active — candidate already has an active session
-        """
-        db = _get_db()
         try:
-            # 1. Attempts check — reject if candidate has exhausted all 3 attempts
-            completed_count = (
-                db.query(InterviewSession)
-                .filter(
-                    InterviewSession.candidateId == candidate_id,
-                    InterviewSession.status == "completed",
-                    InterviewSession.result.in_(["PASS", "FAIL", "WITHDRAWN"]),
-                )
-                .count()
-            )
+            # 1. Attempts check
+            completed_count = db.interview_sessions.count_documents({
+                "candidate_id": candidate_id,
+                "status": "completed",
+                "result": {"$in": ["PASS", "FAIL", "WITHDRAWN"]},
+            })
             if completed_count >= 3:
                 return {
                     "result": "attempts_exhausted",
@@ -214,22 +80,18 @@ class SlotManager:
                     "max_attempts": 3,
                 }
 
-            # 2. Cooldown check — reject if candidate is still within cooldown period
-            # Deadline is computed dynamically from the most recent FAILED InterviewSession's
-            # completedAt + current cooldown_days setting. No stored absolute timestamp used.
-            latest_failed = (
-                db.query(InterviewSession)
-                .filter(
-                    InterviewSession.candidateId == candidate_id,
-                    InterviewSession.status == "completed",
-                    InterviewSession.result == "FAIL",
-                )
-                .order_by(InterviewSession.completedAt.desc())
-                .first()
+            # 2. Cooldown check
+            latest_failed = db.interview_sessions.find_one(
+                {
+                    "candidate_id": candidate_id,
+                    "status": "completed",
+                    "result": "FAIL",
+                },
+                sort=[("completed_at", -1)],
             )
-            if latest_failed and latest_failed.completedAt:
+            if latest_failed and latest_failed.get("completed_at"):
                 cooldown_days = get_cooldown_days()
-                deadline = latest_failed.completedAt + timedelta(days=cooldown_days)
+                deadline = latest_failed["completed_at"] + timedelta(days=cooldown_days)
                 if _now() < deadline:
                     return {
                         "result": "cooldown",
@@ -237,34 +99,19 @@ class SlotManager:
                         "cooldown_until": deadline.isoformat(),
                     }
 
-            # 3. Check for existing active session for this candidate
-            existing_session = (
-                db.query(InterviewSession)
-                .filter(
-                    InterviewSession.candidateId == candidate_id,
-                    InterviewSession.status.in_(["active", "interviewing"]),
-                )
-                .first()
-            )
-            if existing_session:
-                # Rehydrate the in-memory workflow state from the DB session
-                # so subsequent /message calls can find the interview in _interviews
-                interview_data = {}
-                if existing_session.interviewData:
-                    try:
-                        interview_data = json.loads(existing_session.interviewData)
-                    except Exception:
-                        pass
-
-                candidate_data = interview_data.get("candidate_data", {})
-                self._resume_workflow_from_session(existing_session, candidate_data)
-
+            # 3. Existing active session
+            existing = db.interview_sessions.find_one({
+                "candidate_id": candidate_id,
+                "status": {"$in": ["active", "interviewing"]},
+            })
+            if existing:
+                self._resume_workflow_from_session(existing, candidate_data)
                 return {
                     "result": "already_active",
-                    "interview_id": existing_session.id,
+                    "interview_id": existing["_id"],
                 }
 
-            # Check if any slot is available
+            # 4. Slot check
             if not self.has_open_slot:
                 return {
                     "result": "no_slot",
@@ -273,62 +120,78 @@ class SlotManager:
                     "max_concurrent": MAX_CONCURRENT_INTERVIEWS,
                 }
 
-            # Create new InterviewSession
+            # ── Create new interview ─────────────────────────────────────────
             interview_id = str(uuid.uuid4())
             now = _now()
 
-            session = InterviewSession(
-                id=interview_id,
-                candidateId=candidate_id,
-                startedViaQueue=False,
-                status="active",
-                startedAt=now,
-                interviewData=json.dumps({
+            resume_parsed = None
+            resume = db.resumes.find_one({"candidate_id": candidate_id})
+            if resume and resume.get("parsed_data"):
+                try:
+                    resume_parsed = json.loads(resume["parsed_data"])
+                except Exception:
+                    pass
+
+            session_doc = {
+                "_id": interview_id,
+                "candidate_id": candidate_id,
+                "started_via_queue": False,
+                "status": "active",
+                "result": None,
+                "end_reason": None,
+                "score": None,
+                "current_phase": "interview",
+                "interview_data": {
                     "candidate_data": candidate_data,
-                }),
-            )
-            db.add(session)
+                },
+                "started_at": now,
+                "completed_at": None,
+                "created_at": now,
+                "updated_at": now,
+            }
+            db.interview_sessions.insert_one(session_doc)
 
-            # Ensure InterviewQueueEntry exists for this candidate so cooldown can be set later
-            queue_entry = db.query(InterviewQueueEntry).filter(InterviewQueueEntry.candidateId == candidate_id).first()
-            if not queue_entry:
-                queue_entry = InterviewQueueEntry(
-                    id=str(uuid.uuid4()),
-                    candidateId=candidate_id,
-                    status="interviewing",
-                    startedAt=now,
-                )
-                db.add(queue_entry)
-
-            db.commit()
+            # Ensure queue entry exists
+            existing_q = db.queue_entries.find_one({"candidate_id": candidate_id})
+            if not existing_q:
+                db.queue_entries.insert_one({
+                    "_id": str(uuid.uuid4()),
+                    "candidate_id": candidate_id,
+                    "status": "interviewing",
+                    "position": None,
+                    "scheduled_at": None,
+                    "joined_at": now,
+                    "started_at": now,
+                    "completed_at": None,
+                    "cancelled_at": None,
+                    "skipped_at": None,
+                    "skip_count": 0,
+                    "cooldown_until": None,
+                    "created_at": now,
+                    "updated_at": now,
+                })
 
             # Initialize langgraph workflow
             from app.workflows.interview_graph import interview_graph_manager
-
-            # Load resume parsedData for context-aware question generation
-            resume_parsed = None
-            try:
-                from app.db.models.candidate import Resume
-                resume = db.query(Resume).filter(Resume.candidateId == candidate_id).first()
-                if resume and resume.parsedData:
-                    resume_parsed = json.loads(resume.parsedData)
-            except Exception:
-                pass
-
             first_question = await interview_graph_manager.initialize_interview(
                 interview_id=interview_id,
                 candidate_data=candidate_data,
                 resume_parsed=resume_parsed,
             )
 
-            # Update interviewData with first_question now that it's available
-            session.interviewData = json.dumps({
-                "candidate_data": candidate_data,
-                "first_question": first_question,
-            })
-            db.commit()
+            # Update with first_question
+            db.interview_sessions.update_one(
+                {"_id": interview_id},
+                {"$set": {
+                    "interview_data": {
+                        "candidate_data": candidate_data,
+                        "first_question": first_question,
+                    },
+                    "updated_at": _now(),
+                }}
+            )
 
-            self._sync_active_count(db)
+            self._sync_active_count()
 
             return {
                 "result": "started",
@@ -336,11 +199,45 @@ class SlotManager:
                 "first_question": first_question,
             }
         finally:
-            db.close()
+            pass
 
-    # -------------------------------------------------------------------
-    # Complete interview
-    # -------------------------------------------------------------------
+    def _resume_workflow_from_session(self, session: dict, candidate_data: dict) -> None:
+        """Reconstruct in-memory workflow state from a MongoDB session doc."""
+        from app.workflows.interview_workflow import _interviews, InterviewState
+
+        interview_id = session["_id"]
+        if interview_id in _interviews:
+            return
+
+        messages = []
+        interview_data = session.get("interview_data", {})
+        if interview_data:
+            messages = interview_data.get("messages", [])
+
+        resume_parsed = None
+        resume = get_sync_db().resumes.find_one({"candidate_id": session["candidate_id"]})
+        if resume and resume.get("parsed_data"):
+            try:
+                resume_parsed = json.loads(resume["parsed_data"])
+            except Exception:
+                pass
+
+        state = InterviewState(interview_id, candidate_data, resume_parsed=resume_parsed)
+        for msg in messages:
+            role = msg.get("role")
+            content = msg.get("content")
+            if role and content:
+                state.messages.append({"role": role, "content": content, "timestamp": msg.get("timestamp", "")})
+        state.status = session.get("status", "active")
+        _interviews[interview_id] = state
+
+        try:
+            from app.workflows.interview_graph import interview_graph_manager
+            interview_graph_manager.workflow._interviews[interview_id] = state
+        except Exception:
+            pass
+
+    # ── Complete interview ────────────────────────────────────────────────────
 
     def complete_interview(
         self,
@@ -351,178 +248,135 @@ class SlotManager:
         overall_score: Optional[float] = None,
         evaluation: Optional[dict] = None,
     ) -> dict:
-        """
-        Mark an interview as completed and free the slot.
-        Persists the full chat history to InterviewSession.interviewData.
-        result: PASS | FAIL
-        end_reason: anti_cheat | withdrawn | question_limit | time_limit
+        """Mark interview as completed and free the slot."""
+        db = get_sync_db()
+        now = _now()
 
-        Cooldown is set only when result is FAIL (regardless of end_reason).
-        """
-        db = _get_db()
-        try:
-            session = (
-                db.query(InterviewSession)
-                .filter(
-                    InterviewSession.id == interview_id,
-                    InterviewSession.candidateId == candidate_id,
-                )
-                .first()
-            )
-            if session:
-                session.status = "completed"
-                session.completedAt = _now()
-                if result:
-                    session.result = result
-                if end_reason:
-                    session.endReason = end_reason
-                if overall_score is not None:
-                    session.score = overall_score
-
-                # ── Persist full chat history + LLM evaluation to InterviewSession.interviewData ──
+        session = db.interview_sessions.find_one({"_id": interview_id, "candidate_id": candidate_id})
+        if session:
+            messages = []
+            try:
                 from app.workflows.interview_graph import interview_graph_manager
                 messages = interview_graph_manager.get_conversation_history(interview_id) or []
-                try:
-                    existing_data: dict = {}
-                    if session.interviewData:
-                        existing_data = json.loads(session.interviewData)
-                    existing_data["messages"] = messages
-                    if evaluation:
-                        existing_data["evaluation"] = evaluation
-                    session.interviewData = json.dumps(existing_data)
-                except Exception:
-                    pass  # non-fatal — keep whatever was already stored
+            except Exception:
+                pass
 
-            # Cooldown applies ONLY when result is FAIL — regardless of end_reason.
-            # FAIL: record failure timestamp on the session so cooldown can be derived dynamically.
-            # No cooldownUntil is stored on InterviewQueueEntry — deadline is always computed
-            # from InterviewSession.completedAt + current cooldown_days setting.
-            if result == "FAIL":
-                session.completedAt = _now()
-
-            db.commit()
-            self._sync_active_count(db)
-            db.commit()
-
-            return {
-                "result": "completed",
-                "completed_at": session.completedAt if session else None,
+            update = {
+                "status": "completed",
+                "completed_at": now,
+                "updated_at": now,
             }
-        finally:
-            db.close()
+            if result:
+                update["result"] = result
+            if end_reason:
+                update["end_reason"] = end_reason
+            if overall_score is not None:
+                update["score"] = overall_score
 
-    # -------------------------------------------------------------------
-    # Pause interview
-    # -------------------------------------------------------------------
+            interview_data = dict(session.get("interview_data", {}))
+            interview_data["messages"] = messages
+            if evaluation:
+                interview_data["evaluation"] = evaluation
+            update["interview_data"] = interview_data
+
+            db.interview_sessions.update_one({"_id": interview_id}, {"$set": update})
+
+        self._sync_active_count()
+
+        return {
+            "result": "completed",
+            "completed_at": now,
+        }
+
+    # ── Pause / Resume ────────────────────────────────────────────────────────
 
     async def pause_interview(self, candidate_id: str, interview_id: str) -> dict:
-        """
-        Pause an active interview (connection interrupted).
-        """
-        db = _get_db()
+        db = get_sync_db()
+
+        session = db.interview_sessions.find_one({
+            "_id": interview_id,
+            "candidate_id": candidate_id,
+            "status": "active",
+        })
+        if not session:
+            return {"result": "not_found"}
+
+        history = []
+        question_count = 0
         try:
-            session = (
-                db.query(InterviewSession)
-                .filter(
-                    InterviewSession.id == interview_id,
-                    InterviewSession.candidateId == candidate_id,
-                    InterviewSession.status == "active",
-                )
-                .first()
-            )
-            if not session:
-                return {"result": "not_found"}
-
-            session.status = "paused"
-
             from app.workflows.interview_graph import interview_graph_manager
-            history = interview_graph_manager.get_conversation_history(interview_id)
+            history = interview_graph_manager.get_conversation_history(interview_id) or []
             status_info = interview_graph_manager.get_status(interview_id)
             question_count = (status_info or {}).get("messages_count", 0) // 2
+        except Exception:
+            pass
 
-            import uuid as uuid_mod
-            from app.db.models.candidate import InterviewStateSnapshot
+        snapshot_data = {
+            "messages": history,
+            "question_count": question_count,
+        }
 
-            snapshot_data = json.dumps({
-                "messages": history or [],
+        existing = db.state_snapshots.find_one({"candidate_id": candidate_id})
+        if existing:
+            db.state_snapshots.update_one(
+                {"candidate_id": candidate_id},
+                {"$set": {
+                    "queue_entry_id": session.get("queue_entry_id", ""),
+                    "question_count": question_count,
+                    "conversation_history": json.dumps(snapshot_data),
+                }}
+            )
+        else:
+            db.state_snapshots.insert_one({
+                "_id": f"snap_{uuid.uuid4().hex[:12]}",
+                "candidate_id": candidate_id,
+                "queue_entry_id": session.get("queue_entry_id", ""),
                 "question_count": question_count,
+                "conversation_history": json.dumps(snapshot_data),
+                "created_at": _now(),
             })
 
-            existing_snapshot = (
-                db.query(InterviewStateSnapshot)
-                .filter(InterviewStateSnapshot.candidateId == candidate_id)
-                .first()
-            )
-            if existing_snapshot:
-                existing_snapshot.conversationHistory = snapshot_data
-                existing_snapshot.questionCount = question_count
-            else:
-                snapshot = InterviewStateSnapshot(
-                    id=f"snap_{uuid_mod.uuid4().hex[:12]}",
-                    candidateId=candidate_id,
-                    queueEntryId=session.queueEntryId or "",
-                    questionCount=question_count,
-                    conversationHistory=snapshot_data,
-                )
-                db.add(snapshot)
+        db.interview_sessions.update_one(
+            {"_id": interview_id},
+            {"$set": {"status": "paused", "updated_at": _now()}}
+        )
 
-            db.commit()
-
-            return {"result": "paused", "interview_id": interview_id}
-        finally:
-            db.close()
-
-    # -------------------------------------------------------------------
-    # Resume interview
-    # -------------------------------------------------------------------
+        return {"result": "paused", "interview_id": interview_id}
 
     async def resume_interview(self, candidate_id: str) -> dict:
-        """
-        Resume a paused interview from the saved snapshot.
-        """
-        db = _get_db()
-        try:
-            snapshot = (
-                db.query(InterviewStateSnapshot)
-                .filter(InterviewStateSnapshot.candidateId == candidate_id)
-                .first()
-            )
-            if not snapshot:
-                return {"result": "no_snapshot"}
+        db = get_sync_db()
 
-            session = (
-                db.query(InterviewSession)
-                .filter(
-                    InterviewSession.candidateId == candidate_id,
-                    InterviewSession.status == "paused",
-                )
-                .first()
-            )
-            if not session:
-                return {"result": "session_not_paused"}
+        snapshot = db.state_snapshots.find_one({"candidate_id": candidate_id})
+        if not snapshot:
+            return {"result": "no_snapshot"}
 
-            snapshot_data = json.loads(snapshot.conversationHistory or "{}")
-            messages = snapshot_data.get("messages", [])
+        session = db.interview_sessions.find_one({
+            "candidate_id": candidate_id,
+            "status": "paused",
+        })
+        if not session:
+            return {"result": "session_not_paused"}
 
-            session_data = {}
-            if session.interviewData:
-                session_data = json.loads(session.interviewData)
-            candidate_data = session_data.get("candidate_data", {})
+        snapshot_data = json.loads(snapshot.get("conversation_history", "{}"))
+        messages = snapshot_data.get("messages", [])
 
-            next_question = await self._rehydrate_workflow(session.id, messages, candidate_data)
+        interview_data = session.get("interview_data", {})
+        candidate_data = interview_data.get("candidate_data", {})
 
-            session.status = "active"
-            db.delete(snapshot)
-            db.commit()
+        next_question = await self._rehydrate_workflow(session["_id"], messages, candidate_data)
 
-            return {
-                "result": "resumed",
-                "interview_id": session.id,
-                "next_question": next_question,
-                "question_count": snapshot.questionCount,
-            }
-        finally:
-            db.close()
+        db.interview_sessions.update_one(
+            {"_id": session["_id"]},
+            {"$set": {"status": "active", "updated_at": _now()}}
+        )
+        db.state_snapshots.delete_one({"_id": snapshot["_id"]})
+
+        return {
+            "result": "resumed",
+            "interview_id": session["_id"],
+            "next_question": next_question,
+            "question_count": snapshot.get("question_count", 0),
+        }
 
     async def _rehydrate_workflow(
         self, interview_id: str, messages: list, candidate_data: dict
@@ -546,25 +400,15 @@ class SlotManager:
 
         return last_question
 
-    # -------------------------------------------------------------------
-    # Stats
-    # -------------------------------------------------------------------
+    # ── Stats ─────────────────────────────────────────────────────────────────
 
     def get_stats(self) -> dict:
-        """
-        Return current slot stats. Always re-derives from DB.
-        """
-        db = _get_db()
-        try:
-            active_count = _compute_active_count(db)
-            self._active_count = active_count
-            return {
-                "active_interview_count": active_count,
-                "max_concurrent": MAX_CONCURRENT_INTERVIEWS,
-                "slots_available": max(0, MAX_CONCURRENT_INTERVIEWS - active_count),
-            }
-        finally:
-            db.close()
+        self._sync_active_count()
+        return {
+            "active_interview_count": self._active_count,
+            "max_concurrent": MAX_CONCURRENT_INTERVIEWS,
+            "slots_available": max(0, MAX_CONCURRENT_INTERVIEWS - self._active_count),
+        }
 
 
 # Module-level singleton

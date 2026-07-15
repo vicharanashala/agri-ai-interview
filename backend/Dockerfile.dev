@@ -14,9 +14,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy app code (overridden by volume mount at runtime for hot-reload)
 COPY app/ ./app/
 
-# Create empty .env if not exists
-RUN touch .env
-
 EXPOSE 8000
 
 # init_db is called by FastAPI startup event — just start uvicorn with reload

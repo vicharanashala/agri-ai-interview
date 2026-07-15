@@ -1,15 +1,14 @@
 """
-Anti-Cheat Logging API — POST /api/anti-cheat/log
-
-Candidate-facing fire-and-forget endpoint to record anti-cheat violation events.
-Called by the frontend's anti-cheat hook during live interviews.
+Anti-Cheat Logging API — POST /api/anti-cheat/log — MongoDB.
 """
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from typing import Optional
 import uuid
 import traceback
+from datetime import datetime, timezone
 
+from app.db.mongodb import get_sync_db
 from app.middleware.candidate_auth import get_candidate_session
 
 router = APIRouter(prefix="/api/anti-cheat", tags=["anti-cheat"])
@@ -30,35 +29,27 @@ async def log_anti_cheat_event(
     session: dict = Depends(get_candidate_session),
 ):
     """
-    Log an anti-cheat violation event to the AntiCheatEvent table.
-    This is a fire-and-forget endpoint — failures are silently ignored by the frontend.
+    Log an anti-cheat violation event to MongoDB anti_cheat_events collection.
+    Fire-and-forget — failures are silently ignored by the frontend.
     """
-    import uuid
-    from app.db.database import get_db
-    from app.db.models.candidate import AntiCheatEvent
-
     try:
-        db = next(get_db())
         candidate_id = body.candidateId or session.get("candidate_id")
-        event = AntiCheatEvent(
-            id=str(uuid.uuid4()),
-            candidateId=candidate_id,
-            interviewId=body.interviewId,
-            eventType=body.eventType,
-            severity=body.severity,
-            message=body.message,
-            event_metadata=body.metadata,
-        )
-        db.add(event)
-        db.commit()
-        return {"success": True, "eventId": event.id}
+        event_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc)
+
+        db = get_sync_db()
+        db.anti_cheat_events.insert_one({
+            "_id": event_id,
+            "candidate_id": candidate_id,
+            "interview_id": body.interviewId,
+            "event_type": body.eventType,
+            "severity": body.severity,
+            "message": body.message,
+            "metadata": body.metadata,
+            "created_at": now,
+        })
+        return {"success": True, "eventId": event_id}
     except Exception as e:
-        import traceback
         traceback.print_exc()
         print(f"[anti_cheat] Failed to log event: {e}")
         return {"success": False, "error": str(e)}
-    finally:
-        try:
-            db.close()
-        except Exception:
-            pass

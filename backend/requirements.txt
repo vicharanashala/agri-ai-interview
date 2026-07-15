@@ -1,10 +1,8 @@
 fastapi
 python-multipart
 uvicorn[standard]
-sqlalchemy
-asyncpg
-psycopg2-binary
-redis
+pymongo
+motor
 pydantic
 pydantic-settings
 reportlab
@@ -15,7 +13,6 @@ openai
 passlib[bcrypt]
 bcrypt>=4.0.0
 python-jose
-alembic
 httpx
 pdfplumber
 python-docx

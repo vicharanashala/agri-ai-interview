@@ -1,8 +1,18 @@
 import type { NextAuthOptions } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import GoogleProvider from 'next-auth/providers/google'
-import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
+
+const BACKEND_URL = process.env.BACKEND_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+
+async function getBackendCandidateByEmail(email: string) {
+  const res = await fetch(
+    `${BACKEND_URL}/api/candidate?email=${encodeURIComponent(email)}`,
+    { cache: 'no-store' }
+  )
+  if (!res.ok) return null
+  return res.json()
+}
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -17,102 +27,57 @@ export const authOptions: NextAuthOptions = {
         password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
-          return null
-        }
+        if (!credentials?.email || !credentials?.password) return null
 
-        // Look up user in Prisma/PostgreSQL database
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email },
+        // Look up user via backend API
+        const res = await fetch(`${BACKEND_URL}/api/candidate/verify-password`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: credentials.email, password: credentials.password }),
         })
 
-        if (!user || !user.password) {
-          // No user found or user has no password set
-          return null
-        }
-
-        // Compare bcrypt hash
-        const isValid = await bcrypt.compare(credentials.password, user.password)
-        if (!isValid) {
-          return null
-        }
-
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-        }
+        if (!res.ok) return null
+        const user = await res.json()
+        return { id: user.id, email: user.email, name: user.name }
       },
     }),
   ],
-  session: {
-    strategy: 'jwt',
-    maxAge: 30 * 24 * 60 * 60, // 30 days
-  },
+  session: { strategy: 'jwt', maxAge: 30 * 24 * 60 * 60 },
   callbacks: {
     async session({ session, token }) {
       if (session.user) {
-        if (token.sub) {
-          ;(session.user as { id?: string }).id = token.sub
-        }
-        if (token.email) {
-          ;(session.user as { email?: string }).email = token.email as string
-        }
-        // Always expose candidateId from token (set during jwt callback)
-        if (token.candidateId) {
-          ;(session.user as { candidateId?: string }).candidateId = token.candidateId as string
-        }
+        if (token.sub) (session.user as { id?: string }).id = token.sub
+        if (token.email) (session.user as { email?: string }).email = token.email as string
+        if (token.candidateId)
+          (session.user as { candidateId?: string }).candidateId = token.candidateId as string
       }
       return session
     },
     async jwt({ token, user, account, trigger }) {
-      // First-time sign-in
       if (user) {
-        // Credentials: authorize() returned our DB user object with our id
         if (account?.provider === 'credentials') {
           token.sub = user.id
           token.email = user.email
-          // Look up candidateId for this user
-          try {
-            const cand = await prisma.candidate.findUnique({ where: { userId: user.id } })
-            if (cand) token.candidateId = cand.id
-          } catch (err) {
-            console.error('[next-auth] Failed to find candidate for credentials user:', err)
-          }
+          const cand = await getBackendCandidateByEmail(user.email!)
+          if (cand?.id) token.candidateId = cand.id
         }
-        // Google OAuth: need to create/find our DB user and use OUR id
         if (account?.provider === 'google') {
           const email = user.email!
           const name = user.name ?? email.split('@')[0]
-          let dbUser = await prisma.user.findUnique({ where: { email } })
-          if (!dbUser) {
-            dbUser = await prisma.user.create({
-              data: { email, name },
-            })
-          }
-          // Create or find Candidate record — store candidateId in token
-          let candidateId: string | null = null
-          try {
-            const cand = await prisma.candidate.upsert({
-              where: { userId: dbUser.id },
-              update: {},
-              create: { userId: dbUser.id, currentPhase: 'onboarding' },
-            })
-            candidateId = cand.id
-          } catch (err) {
-            // Non-fatal: auth succeeds even if candidate record creation fails
-            console.error('[next-auth] Failed to create candidate record:', err)
-          }
-          token.sub = dbUser.id
+          // Tell NextAuth to use the Google account; no DB ops needed here
+          // We don't create users/candidates at login — that happens on first
+          // Next.js API call to /api/candidate (onboarding form submit).
+          // The candidate_id will be fetched on the session callback on the
+          // Next.js side via the existing /api/candidate?email=... endpoint.
+          token.sub = user.id ?? `google-${Buffer.from(email).toString('base64').slice(0, 12)}`
           token.email = email
-          token.candidateId = candidateId
+          token.name = name
+          const cand = await getBackendCandidateByEmail(email)
+          if (cand?.id) token.candidateId = cand.id
         }
       }
       return token
     },
   },
-  pages: {
-    signIn: '/login',
-    error: '/login',
-  },
+  pages: { signIn: '/login', error: '/login' },
 }

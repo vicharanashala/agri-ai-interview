@@ -1,23 +1,13 @@
 """
-Shared Redis client for the backend.
+Redis compatibility shim — now backed by MongoDB.
 
-Uses a plain redis.Redis (not async) for simplicity, configured via the
-REDIS_URL environment variable (defaults to the Docker internal URL).
+All code that previously used app.core.redis.get_redis_client()
+should use app.core.session.get_session_store() instead.
+This shim is kept only for any lingering imports.
 """
-import os
-from functools import lru_cache
-import redis
+from app.core.session import get_session_store
 
-_redis_client: redis.Redis | None = None
-
-
-def get_redis_client() -> redis.Redis:
-    """
-    Return a singleton Redis client.
-    Connection is lazy — no connection is made until the first command.
-    """
-    global _redis_client
-    if _redis_client is None:
-        redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
-        _redis_client = redis.from_url(redis_url, decode_responses=True)
-    return _redis_client
+# For backward compat only — do not use in new code
+def get_redis_client():
+    """Deprecated: returns session store. Use get_session_store() instead."""
+    return get_session_store()

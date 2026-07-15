@@ -33,16 +33,8 @@ class InterviewState:
     def _get_max_duration_minutes(self) -> int:
         """Load max interview duration in minutes from DB settings, falling back to default."""
         try:
-            from app.services.settings_service import _get_db, Settings
-            db = _get_db()
-            try:
-                setting = db.query(Settings).filter(
-                    Settings.key == "interview_max_duration_minutes"
-                ).first()
-                if setting and setting.value:
-                    return int(setting.value)
-            finally:
-                db.close()
+            from app.services.settings_service import get_interview_settings
+            return get_interview_settings().get("max_duration_minutes", DEFAULT_MAX_DURATION_MINUTES)
         except Exception:
             pass
         return DEFAULT_MAX_DURATION_MINUTES
@@ -437,20 +429,16 @@ class InterviewWorkflow:
         if state:
             return state
         
-        # DB fallback: reconstruct a lightweight state-like object from DB
-        from app.db.database import SessionLocal
-        from app.db.models.candidate import InterviewSession
+        # DB fallback: reconstruct a lightweight state-like object from MongoDB
+        from app.db.mongodb import get_sync_db
         import json
-        db = SessionLocal()
+        db = get_sync_db()
         try:
-            session = db.query(InterviewSession).filter(
-                InterviewSession.id == interview_id
-            ).first()
-            if session and session.interviewData:
+            session = db.interview_sessions.find_one({"_id": interview_id})
+            interview_data = session.get("interview_data") if session else None
+            if interview_data:
                 try:
-                    data = json.loads(session.interviewData)
-                    # Use a SimpleNamespace so callers can access .candidate_data / .qa_pairs
-                    # via attribute access (same as the real InterviewState object)
+                    data = interview_data if isinstance(interview_data, dict) else json.loads(interview_data)
                     from types import SimpleNamespace
                     ns = SimpleNamespace(
                         candidate_data=data.get("candidate_data", {}),
@@ -460,7 +448,7 @@ class InterviewWorkflow:
                 except Exception:
                     pass
         finally:
-            db.close()
+            pass
         
         return None
 
@@ -481,23 +469,22 @@ class InterviewWorkflow:
         if state:
             return state.messages
         
-        # 3. DB fallback: different worker or after restart — InterviewSession.interviewData
-        from app.db.database import SessionLocal
-        from app.db.models.candidate import InterviewSession
+        # 3. DB fallback: different worker or after restart — MongoDB interview_sessions
+        from app.db.mongodb import get_sync_db
         import json
-        db = SessionLocal()
+        db = get_sync_db()
         try:
-            session = db.query(InterviewSession).filter(
-                InterviewSession.id == interview_id
-            ).first()
-            if session and session.interviewData:
-                try:
-                    data = json.loads(session.interviewData)
-                    return data.get("messages", [])
-                except Exception:
-                    pass
+            session = db.interview_sessions.find_one({"_id": interview_id})
+            if session:
+                interview_data = session.get("interview_data")
+                if interview_data:
+                    try:
+                        data = interview_data if isinstance(interview_data, dict) else json.loads(interview_data)
+                        return data.get("messages", [])
+                    except Exception:
+                        pass
         finally:
-            db.close()
+            pass
         
         return None
 

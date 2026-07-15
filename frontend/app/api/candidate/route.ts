@@ -1,209 +1,126 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
-import { prisma } from '@/lib/prisma'
 import { authOptions } from '@/lib/auth-options'
 
-export async function POST(request: NextRequest) {
-  try {
-    const session = await getServerSession(authOptions);
-    
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+const BACKEND_URL = process.env.BACKEND_URL || (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000')
 
-    const body = await request.json();
-    const { 
-      fullName, 
-      phone, 
-      state,
-      district,
-      pincode,
-      address,
-      currentRole, 
-      yearsOfExperience, 
-      highestEducation, 
-      institution,
-      farmingBackground,
-      cropsGrown,
-      farmSize,
-      primaryExpertise
-    } = body;
-
-    // Get user by email or create if not exists
-    let user = await prisma.user.findUnique({
-      where: { email: session.user.email }
-    });
-
-    if (!user) {
-      // Create user if they don't exist (for demo credentials)
-      user = await prisma.user.create({
-        data: {
-          email: session.user.email,
-          name: session.user.name || 'Demo User',
-        }
-      });
-    }
-
-    // Create or update candidate profile
-    const candidate = await prisma.candidate.upsert({
-      where: { userId: user.id },
-      update: {
-        fullName,
-        phone,
-        state,
-        district,
-        pincode,
-        address,
-        currentRole,
-        yearsOfExperience: yearsOfExperience ? parseInt(yearsOfExperience) : null,
-        highestEducation,
-        institution,
-        farmingBackground,
-        cropsGrown,
-        farmSize,
-        primaryExpertise,
-      },
-      create: {
-        userId: user.id,
-        fullName,
-        phone,
-        state,
-        district,
-        pincode,
-        address,
-        currentRole,
-        yearsOfExperience: yearsOfExperience ? parseInt(yearsOfExperience) : null,
-        highestEducation,
-        institution,
-        farmingBackground,
-        cropsGrown,
-        farmSize,
-        primaryExpertise,
-      },
-    });
-
-    return NextResponse.json(candidate, { status: 200 });
-  } catch (error) {
-    console.error('Error saving candidate:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  }
+// Read candidate session token from request cookies
+function getCandidateToken(request: NextRequest): string | null {
+  return request.cookies.get('candidate_session')?.value() ?? null
 }
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    
+    const session = await getServerSession(authOptions)
     if (!session?.user?.email) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-      include: { candidate: true }
-    });
+    const { searchParams } = new URL(request.url)
+    const email = searchParams.get('email') ?? session.user.email
 
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    const res = await fetch(
+      `${BACKEND_URL}/api/candidate?email=${encodeURIComponent(email)}`,
+      { cache: 'no-store', credentials: 'include' }
+    )
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      return NextResponse.json(err, { status: res.status })
     }
 
-    return NextResponse.json({ ...user.candidate, email: user.email }, { status: 200 });
+    return NextResponse.json(await res.json())
   } catch (error) {
-    console.error('Error fetching candidate:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('[api/candidate GET]', error)
+    return NextResponse.json({ error: 'Bad gateway' }, { status: 502 })
   }
 }
 
-const PHASE_MAP: Record<number, string> = {
-  1: "onboarding",
-  2: "interview",
-  3: "summary",
-  4: "documents",
-};
+export async function POST(request: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
-const REVERSE_PHASE_MAP: Record<string, number> = {
-  "onboarding": 1,
-  "interview": 2,
-  "summary": 3,
-  "documents": 4,
-};
+    const body = await request.json()
+    const token = getCandidateToken(request)
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Cookie': token ? `candidate_session=${token}` : '',
+    }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+
+    const res = await fetch(`${BACKEND_URL}/api/candidate`, {
+      method: 'POST',
+      headers,
+      credentials: 'include',
+      body: JSON.stringify(body),
+    })
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      return NextResponse.json(err, { status: res.status })
+    }
+
+    return NextResponse.json(await res.json())
+  } catch (error) {
+    console.error('[api/candidate POST]', error)
+    return NextResponse.json({ error: 'Bad gateway' }, { status: 502 })
+  }
+}
 
 export async function PATCH(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const token = getCandidateToken(request)
+    if (!token) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const body = await request.json();
-    const { phase, offerLetterViewed, passedAndVisitedSummary, joiningDetailsVisited, documentsSubmitted } = body;
+    const body = await request.json()
+    const res = await fetch(`${BACKEND_URL}/api/candidate`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        'Cookie': `candidate_session=${token}`,
+      },
+      credentials: 'include',
+      body: JSON.stringify(body),
+    })
 
-    const user = await prisma.user.findUnique({ where: { email: session.user.email } });
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-
-    const updateData: Record<string, unknown> = {};
-    if (phase !== undefined) {
-      updateData.currentPhase = PHASE_MAP[phase];
-    }
-    if (offerLetterViewed !== undefined) {
-      updateData.offerLetterViewed = offerLetterViewed;
-    }
-    if (passedAndVisitedSummary !== undefined) {
-      updateData.passedAndVisitedSummary = passedAndVisitedSummary;
-    }
-    if (joiningDetailsVisited !== undefined) {
-      updateData.joiningDetailsVisited = joiningDetailsVisited;
-    }
-    if (documentsSubmitted !== undefined) {
-      updateData.documentsSubmitted = documentsSubmitted;
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      return NextResponse.json(err, { status: res.status })
     }
 
-    const candidate = await prisma.candidate.update({
-      where: { userId: user.id },
-      data: updateData,
-    });
-
-    // Cast to include documentsSubmitted — Prisma types regenerated after schema change
-    const c = candidate as typeof candidate & { documentsSubmitted: boolean };
-
-    return NextResponse.json({
-      currentPhase: c.currentPhase,
-      offerLetterViewed: c.offerLetterViewed,
-      passedAndVisitedSummary: c.passedAndVisitedSummary,
-      joiningDetailsVisited: c.joiningDetailsVisited,
-      documentsSubmitted: c.documentsSubmitted,
-    }, { status: 200 });
+    return NextResponse.json(await res.json())
   } catch (error) {
-    console.error("Error updating candidate phase:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    console.error('[api/candidate PATCH]', error)
+    return NextResponse.json({ error: 'Bad gateway' }, { status: 502 })
   }
 }
 
 export async function DELETE(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const token = getCandidateToken(request)
+    if (!token) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email }
-    });
+    const res = await fetch(`${BACKEND_URL}/api/candidate`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Cookie': `candidate_session=${token}`,
+      },
+      credentials: 'include',
+    })
 
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
-    }
-
-    // Delete candidate record (cascade will handle any related data)
-    await prisma.candidate.delete({
-      where: { userId: user.id }
-    });
-
-    return NextResponse.json({ success: true, message: 'Candidate data deleted' }, { status: 200 });
+    return NextResponse.json(await res.json(), { status: res.status })
   } catch (error) {
-    console.error('Error deleting candidate:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('[api/candidate DELETE]', error)
+    return NextResponse.json({ error: 'Bad gateway' }, { status: 502 })
   }
 }

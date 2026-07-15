@@ -1,22 +1,13 @@
 """
 Email Service — handles all outbound candidate emails.
-
-Currently implements:
-  - send_offer_email: Email #3 — offer letter PDF + joining details PDF attached.
-    Admin-triggered via POST /api/admin/candidates/{id}/send-offer-email
-
-Uses the NotificationService (console / SendGrid / SES) for delivery.
 """
-from __future__ import annotations
-
 import logging
 import base64
 from datetime import datetime
 from io import BytesIO
 from typing import Optional
 
-from app.db.database import SessionLocal
-from app.db.models.candidate import Candidate, User
+from app.db.mongodb import get_sync_db
 from app.services.notification_service import notification_service
 from app.api.offer import generate_offer_letter_pdf
 from app.services.settings_service import get_offer_letter_config
@@ -24,36 +15,32 @@ from app.services.settings_service import get_offer_letter_config
 logger = logging.getLogger(__name__)
 
 
-def _get_candidate_full(candidate_id: str) -> tuple[Candidate, User | None, str]:
+def _get_candidate_full(candidate_id: str) -> tuple[dict, dict, str]:
     """
-    Resolve candidate + user + email for a candidate_id.
-    Returns (Candidate, User or None, email string).
+    Resolve candidate + user doc + email for a candidate_id.
+    Returns (candidate_doc, user_doc, email_string).
     Raises ValueError if candidate not found.
     """
-    db = SessionLocal()
-    try:
-        cand = db.query(Candidate).filter(Candidate.id == candidate_id).first()
-        if not cand:
-            raise ValueError(f"Candidate {candidate_id} not found")
+    db = get_sync_db()
 
-        user_email = ""
-        user: Optional[User] = None
-        if cand.userId:
-            user = db.query(User).filter(User.id == cand.userId).first()
-            if user and user.email:
-                user_email = user.email
+    cand = db.candidates.find_one({"_id": candidate_id})
+    if not cand:
+        raise ValueError(f"Candidate {candidate_id} not found")
 
-        return cand, user, user_email
-    finally:
-        db.close()
+    user_email = ""
+    user_doc = {}
+    user_id = cand.get("user_id")
+    if user_id:
+        user_doc = db.users.find_one({"_id": user_id}) or {}
+        user_email = user_doc.get("email", "")
+
+    return cand, user_doc, user_email
 
 
-def _generate_joining_pdf_bytes(cand: Candidate, user_email: str) -> bytes:
+def _generate_joining_pdf_bytes(cand: dict, user_email: str) -> bytes:
     """Generate joining details PDF bytes for a candidate."""
-    # Import here to avoid circular imports
     from app.api.joining_details import create_joining_pdf
 
-    # Use sensible defaults for joining details (admin sets these via settings)
     joining_config = {
         "stipend": "₹15,000/month",
         "location": "Hybrid (Remote + On-site training)",
@@ -72,9 +59,9 @@ def _generate_joining_pdf_bytes(cand: Candidate, user_email: str) -> bytes:
 
     data = {
         "user": {
-            "name": cand.fullName or "Candidate",
+            "name": cand.get("full_name", "Candidate"),
             "email": user_email,
-            "phone": cand.phone or "",
+            "phone": cand.get("phone", ""),
         },
         "joining": joining_config,
         "generatedAt": datetime.now().isoformat(),
@@ -86,18 +73,12 @@ def _generate_joining_pdf_bytes(cand: Candidate, user_email: str) -> bytes:
 async def send_offer_email(candidate_id: str, to_email: str, candidate_name: str) -> dict:
     """
     Send Email #3: offer letter + joining details, admin-triggered.
-
-    Attaches:
-      - Offer letter PDF (unsigned)
-      - Joining details PDF
-
-    Returns a dict with send status details.
     """
-    # ── Generate PDFs in memory ──────────────────────────────────────────────
+    # Generate PDFs in memory
     offer_buffer = generate_offer_letter_pdf(
         candidate_name=candidate_name,
         email=to_email,
-        phone="",  # phone not always available at this stage
+        phone="",
     )
     offer_pdf_bytes = offer_buffer.read()
     offer_b64 = base64.b64encode(offer_pdf_bytes).decode("utf-8")
@@ -107,7 +88,6 @@ async def send_offer_email(candidate_id: str, to_email: str, candidate_name: str
     )
     joining_b64 = base64.b64encode(joining_pdf_bytes).decode("utf-8")
 
-    # ── Compose email ────────────────────────────────────────────────────────
     subject = "Congratulations! Your Offer Letter — Annam Agri Internship Program"
 
     body = f"""Dear {candidate_name},
@@ -144,8 +124,7 @@ Annam AgriTech Hiring Team
     </html>
     """
 
-    # ── Attachments ──────────────────────────────────────────────────────────
-    # Build a MIME multipart message manually so we can attach binary PDFs
+    # Build MIME multipart
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
     from email.mime.base import MIMEBase
@@ -159,7 +138,6 @@ Annam AgriTech Hiring Team
     msg.attach(MIMEText(body, "plain"))
     msg.attach(MIMEText(html_body, "html"))
 
-    # Attach offer letter
     for filename, b64data in [
         ("Offer_Letter.pdf", offer_b64),
         ("Joining_Details.pdf", joining_b64),
@@ -173,10 +151,7 @@ Annam AgriTech Hiring Team
         )
         msg.attach(part)
 
-    # ── Send via notification service ────────────────────────────────────────
-    # The notification_service.send() doesn't support raw MIME messages,
-    # so we fall back to direct SMTP for this multi-attachment email.
-    # Try notification_service first; if it fails, log and return failure.
+    # Try notification_service first
     try:
         sent = notification_service.send(
             to=to_email,
@@ -188,9 +163,7 @@ Annam AgriTech Hiring Team
         logger.error(f"notification_service.send failed: {e}")
         sent = False
 
-    # For multi-attachment emails, also try direct SMTP
     if not sent:
-        # Try direct SMTP as fallback
         sent = _send_smtp_direct(msg, to_email)
 
     return {
@@ -213,7 +186,6 @@ def _send_smtp_direct(msg, to_email: str) -> bool:
 
     try:
         if provider == "sendgrid":
-            # SendGrid REST API for multipart
             import urllib.request
             import json
 
@@ -223,9 +195,6 @@ def _send_smtp_direct(msg, to_email: str) -> bool:
             if not api_key:
                 logger.warning("SendGrid: no API key, skipping")
                 return False
-
-            # Convert MIME to raw SMTP message
-            raw_msg = msg.as_bytes()
 
             payload = {
                 "personalizations": [{"to": [{"email": to_email}]}],
@@ -251,9 +220,6 @@ def _send_smtp_direct(msg, to_email: str) -> bool:
                 return resp.status in (200, 201, 202)
 
         elif provider == "ses":
-            import smtplib
-            from email.mime.multipart import MIMEMultipart
-
             host = os.getenv("AWS_SES_SMTP_HOST", "")
             port = int(os.getenv("AWS_SES_SMTP_PORT", "587"))
             username = os.getenv("AWS_SES_SMTP_USER", "")

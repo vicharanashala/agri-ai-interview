@@ -347,7 +347,7 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
       if (resultFilter) params.set("result", resultFilter);
       if (searchQuery.trim()) params.set("search", searchQuery.trim());
 
-      const res = await fetch(`${adminApiBase}/api/admin/interviews/evaluations?${params}`, {
+      const res = await fetch(`${adminApiBase}/api/admin/evaluations?${params}`, {
         headers: token ? { "X-Admin-Token": token } : {},
         credentials: "include",
       });

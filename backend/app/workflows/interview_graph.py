@@ -130,38 +130,37 @@ class InterviewGraphManager:
             return None
 
     def _persist_evaluation(self, interview_id: str, evaluation: Optional[Dict[str, Any]]) -> None:
-        """Persist evaluation to InterviewSession.interviewData + score/result columns."""
+        """Persist evaluation to MongoDB interview_sessions — interview_data + score/result columns."""
         try:
-            from app.db.database import SessionLocal
-            from app.db.models.candidate import InterviewSession
+            from app.db.mongodb import get_sync_db
             from app.services.settings_service import get_evaluation_settings
-            db = SessionLocal()
+            db = get_sync_db()
             try:
-                session = db.query(InterviewSession).filter(
-                    InterviewSession.id == interview_id
-                ).first()
+                session = db.interview_sessions.find_one({"_id": interview_id})
                 if session:
-                    data = {}
-                    if session.interviewData:
+                    interview_data = session.get("interview_data") or {}
+                    if isinstance(interview_data, str):
                         try:
-                            data = json.loads(session.interviewData)
+                            interview_data = json.loads(interview_data)
                         except Exception:
-                            pass
-                    data["evaluation"] = evaluation
-                    session.interviewData = json.dumps(data)
+                            interview_data = {}
+                    interview_data["evaluation"] = evaluation
 
-                    # Also write score + result to DB columns (used by polling endpoint)
+                    update = {"interview_data": interview_data}
+
+                    # Also write score + result to document (used by polling endpoint)
                     if evaluation and evaluation.get("overall_score") is not None:
                         threshold = get_evaluation_settings()["pass_threshold"]
-                        session.score = evaluation["overall_score"]
-                        session.result = "PASS" if session.score >= threshold else "FAIL"
+                        score = evaluation["overall_score"]
+                        update["overall_score"] = score
+                        update["result"] = "PASS" if score >= threshold else "FAIL"
 
-                    db.commit()
-                    logger.info(f"[InterviewGraph] {interview_id}: evaluation persisted to DB (score={session.score})")
+                    db.interview_sessions.update_one({"_id": interview_id}, {"$set": update})
+                    logger.info(f"[InterviewGraph] {interview_id}: evaluation persisted to MongoDB (score={evaluation.get('overall_score') if evaluation else None})")
                 else:
-                    logger.warning(f"[InterviewGraph] {interview_id}: session not found in DB for persistence")
+                    logger.warning(f"[InterviewGraph] {interview_id}: session not found in MongoDB for persistence")
             finally:
-                db.close()
+                pass
         except Exception as e:
             logger.error(f"[InterviewGraph] {interview_id}: failed to persist evaluation: {e}")
 
@@ -179,23 +178,25 @@ class InterviewGraphManager:
             logger.info(f"[InterviewGraph] {interview_id}: returning cached evaluation")
             return cached["evaluation"]
 
-        # 2. DB
+        # 2. MongoDB
         try:
-            from app.db.database import SessionLocal
-            from app.db.models.candidate import InterviewSession
-            db = SessionLocal()
+            from app.db.mongodb import get_sync_db
+            db = get_sync_db()
             try:
-                session = db.query(InterviewSession).filter(
-                    InterviewSession.id == interview_id
-                ).first()
-                if session and session.interviewData:
-                    data = json.loads(session.interviewData)
-                    existing = data.get("evaluation")
+                session = db.interview_sessions.find_one({"_id": interview_id})
+                if session:
+                    interview_data = session.get("interview_data") or {}
+                    if isinstance(interview_data, str):
+                        try:
+                            interview_data = json.loads(interview_data)
+                        except Exception:
+                            interview_data = {}
+                    existing = interview_data.get("evaluation")
                     if existing and existing.get("overall_score", 0) > 0:
-                        logger.info(f"[InterviewGraph] {interview_id}: using cached evaluation from DB")
+                        logger.info(f"[InterviewGraph] {interview_id}: using cached evaluation from MongoDB")
                         return existing
             finally:
-                db.close()
+                pass
         except Exception as e:
             logger.warning(f"[InterviewGraph] {interview_id}: could not check DB: {e}")
 

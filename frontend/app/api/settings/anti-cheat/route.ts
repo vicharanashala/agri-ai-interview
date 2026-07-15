@@ -7,7 +7,7 @@ const INTERNAL_SERVICE_TOKEN = process.env.INTERNAL_SERVICE_TOKEN ?? ''
 
 export async function GET(request: NextRequest) {
   try {
-    const response = await fetch(`${BACKEND_URL}/api/admin/settings/anti-cheat-config`, {
+    const response = await fetch(`${BACKEND_URL}/api/admin/settings/anti-cheat`, {
       headers: {
         'Content-Type': 'application/json',
         'X-Admin-Token': INTERNAL_SERVICE_TOKEN,

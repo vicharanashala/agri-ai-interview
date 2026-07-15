@@ -1,32 +1,24 @@
 """
-Candidate Document Upload & List Endpoints.
-
-POST /api/candidate/documents         — upload one or more documents
-GET  /api/candidate/documents         — list all submitted documents for current candidate
-GET  /api/candidate/documents/{fieldName} — download a specific document
-DELETE /api/candidate/documents/{fieldName} — delete all documents for a field
+Candidate Document Upload & List Endpoints — MongoDB.
 """
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends, Request
-from fastapi.responses import Response
+from fastapi import APIRouter, HTTPException, UploadFile, File, Depends, Request, Response
 from pydantic import BaseModel
 from typing import Optional, List
+from datetime import datetime, timezone
 import base64
+import uuid
 
-from sqlalchemy.orm import Session
-from app.db.database import get_db
-from app.db.models.candidate import CandidateDocument, Candidate
+from app.db.mongodb import get_sync_db
 from app.api.candidate.route import _get_candidate_id_from_request
 
 router = APIRouter(prefix="/api/candidate", tags=["candidate-documents"])
 
-# Allowed file types per spec
 ALLOWED_CONTENT_TYPES = {
     "application/pdf",
     "application/msword",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 }
 
-# Per-field max sizes (in bytes)
 MAX_SIZES = {
     "updated_resume": 5 * 1024 * 1024,
     "marksheet_10": 10 * 1024 * 1024,
@@ -44,21 +36,13 @@ MAX_SIZES = {
     "noc": 5 * 1024 * 1024,
 }
 
-# Required fields for submission
-REQUIRED_FIELDS = {"updated_resume", "marksheet_10", "marksheet_12", "aadhaar", "pan", "bank_details"}
-
-
-# ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _guess_file_type(filename: str) -> str:
     ext = filename.lower().split(".")[-1]
-    if ext in ("doc", "docx"):
-        return "docx" if ext == "docx" else "doc"
-    return "pdf"
+    return "docx" if ext == "docx" else ("doc" if ext == "doc" else "pdf")
 
 
 def _validate_file(file: UploadFile, field_name: str) -> bytes:
-    """Validate file type and size. Returns file bytes."""
     content_type = file.content_type or ""
     if content_type not in ALLOWED_CONTENT_TYPES and not file.filename.lower().endswith((".pdf", ".doc", ".docx")):
         raise HTTPException(status_code=400, detail=f"Only PDF and DOCX files are allowed for {field_name}")
@@ -66,20 +50,8 @@ def _validate_file(file: UploadFile, field_name: str) -> bytes:
     file_bytes = file.file.read()
     max_size = MAX_SIZES.get(field_name, 5 * 1024 * 1024)
     if len(file_bytes) > max_size:
-        max_mb = max_size // (1024 * 1024)
-        raise HTTPException(status_code=400, detail=f"File exceeds {max_mb}MB limit for {field_name}")
-
+        raise HTTPException(status_code=400, detail=f"File exceeds {max_size // (1024 * 1024)}MB limit for {field_name}")
     return file_bytes
-
-
-def _get_next_file_index(db: Session, candidate_id: str, field_name: str) -> int:
-    """Return the next fileIndex for a given candidate+field (1-based)."""
-    existing = db.query(CandidateDocument).filter(
-        CandidateDocument.candidateId == candidate_id,
-        CandidateDocument.fieldName == field_name,
-    ).order_by(CandidateDocument.fileIndex.desc()).first()
-
-    return (existing.fileIndex + 1) if existing else 1
 
 
 # ── Response models ────────────────────────────────────────────────────────────
@@ -121,18 +93,12 @@ async def upload_documents(
     bank_details: Optional[UploadFile] = File(None),
     other_docs: Optional[UploadFile] = File(None),
     noc: Optional[UploadFile] = File(None),
-    db: Session = Depends(get_db),
 ):
-    """
-    Upload one or more candidate documents.
-    Multiple files per field are supported (e.g., semester marksheets, payslips).
-    Each file is stored as Base64-encoded bytes in CandidateDocument table.
-    """
     candidate_id = _get_candidate_id_from_request(request)
+    db = get_sync_db()
 
-    # Check candidate exists
-    cand = db.query(Candidate).filter(Candidate.id == candidate_id).first()
-    if not cand:
+    # Verify candidate exists
+    if not db.candidates.find_one({"_id": candidate_id}):
         raise HTTPException(status_code=404, detail="Candidate not found")
 
     files_to_save = {
@@ -153,12 +119,12 @@ async def upload_documents(
     }
 
     uploaded: List[DocumentInfo] = []
+    now = datetime.now(timezone.utc)
 
     for field_name, file in files_to_save.items():
         if file is None:
             continue
 
-        # Validate
         try:
             file_bytes = _validate_file(file, field_name)
         except HTTPException:
@@ -167,32 +133,38 @@ async def upload_documents(
             raise HTTPException(status_code=400, detail=f"Invalid file for {field_name}: {str(e)}")
 
         file_type = _guess_file_type(file.filename)
-        file_index = _get_next_file_index(db, candidate_id, field_name)
 
-        # Upsert new doc (no delete — append for multi-file fields)
-        import uuid
-        doc = CandidateDocument(
-            id=str(uuid.uuid4()),
-            candidateId=candidate_id,
-            fieldName=field_name,
-            fileIndex=file_index,
-            fileName=file.filename,
-            fileType=file_type,
-            fileData=base64.b64encode(file_bytes).decode("utf-8"),
-        )
-        db.add(doc)
+        # Get next fileIndex for this field
+        existing_count = db.candidate_documents.count_documents({
+            "candidate_id": candidate_id,
+            "field_name": field_name,
+        })
+        file_index = existing_count + 1
+
+        doc_id = str(uuid.uuid4())
+        doc = {
+            "_id": doc_id,
+            "candidate_id": candidate_id,
+            "field_name": field_name,
+            "file_index": file_index,
+            "file_name": file.filename,
+            "file_type": file_type,
+            "file_data": base64.b64encode(file_bytes).decode("utf-8"),
+            "created_at": now,
+        }
+        db.candidate_documents.insert_one(doc)
+
         uploaded.append(DocumentInfo(
             fieldName=field_name,
             fileIndex=file_index,
             fileName=file.filename,
             fileType=file_type,
-            createdAt=doc.createdAt.isoformat() if doc.createdAt else "",
+            createdAt=now.isoformat(),
         ))
 
     if not uploaded:
         raise HTTPException(status_code=400, detail="No files provided")
 
-    db.commit()
     return DocumentsUploadResponse(
         success=True,
         message="Documents uploaded successfully",
@@ -201,72 +173,64 @@ async def upload_documents(
 
 
 @router.get("/documents", response_model=DocumentsListResponse)
-async def list_documents(request: Request, db: Session = Depends(get_db)):
-    """List all documents submitted by the current candidate."""
+async def list_documents(request: Request):
     candidate_id = _get_candidate_id_from_request(request)
+    db = get_sync_db()
 
-    docs = db.query(CandidateDocument).filter(
-        CandidateDocument.candidateId == candidate_id
-    ).order_by(CandidateDocument.createdAt.asc()).all()
+    cursor = db.candidate_documents.find({"candidate_id": candidate_id}).sort("created_at", 1)
 
     return DocumentsListResponse(documents=[
         DocumentInfo(
-            fieldName=d.fieldName,
-            fileIndex=d.fileIndex,
-            fileName=d.fileName,
-            fileType=d.fileType,
-            createdAt=d.createdAt.isoformat() if d.createdAt else "",
+            fieldName=doc.get("field_name", ""),
+            fileIndex=doc.get("file_index", 1),
+            fileName=doc.get("file_name", ""),
+            fileType=doc.get("file_type", ""),
+            createdAt=doc.get("created_at", "").isoformat() if doc.get("created_at") else "",
         )
-        for d in docs
+        for doc in cursor
     ])
 
 
 @router.get("/documents/{field_name}")
-async def download_document(field_name: str, request: Request, db: Session = Depends(get_db)):
-    """Download all documents for a field, or a specific one via ?index=N."""
-    import urllib.parse
-    parsed = urllib.parse.urlparse(f"/{field_name}")
-    # field_name from path param
+async def download_document(field_name: str, request: Request):
+    candidate_id = _get_candidate_id_from_request(request)
+    db = get_sync_db()
+
     idx_param = request.query_params.get("index")
 
-    candidate_id = _get_candidate_id_from_request(request)
-
-    q = db.query(CandidateDocument).filter(
-        CandidateDocument.candidateId == candidate_id,
-        CandidateDocument.fieldName == field_name,
-    )
+    query = {"candidate_id": candidate_id, "field_name": field_name}
     if idx_param:
-        q = q.filter(CandidateDocument.fileIndex == int(idx_param))
+        query["file_index"] = int(idx_param)
 
-    docs = q.order_by(CandidateDocument.fileIndex.asc()).all()
+    docs = list(db.candidate_documents.find(query).sort("file_index", 1))
+
     if not docs:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    # If single file, return it directly
     if len(docs) == 1:
         doc = docs[0]
-        file_bytes = base64.b64decode(doc.fileData.encode("utf-8"))
+        file_bytes = base64.b64decode(doc.get("file_data", "").encode("utf-8"))
         media_types = {
             "pdf": "application/pdf",
             "doc": "application/msword",
             "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         }
-        media_type = media_types.get(doc.fileType, "application/octet-stream")
+        media_type = media_types.get(doc.get("file_type", ""), "application/octet-stream")
         return Response(
             content=file_bytes,
             media_type=media_type,
-            headers={"Content-Disposition": f'attachment; filename="{doc.fileName}"'},
+            headers={"Content-Disposition": f'attachment; filename="{doc.get("file_name", "")}"'},
         )
 
-    # Multiple files — return JSON with metadata (frontend will handle multi-download)
+    # Multiple files
     return {
         "fieldName": field_name,
         "files": [
             {
-                "fileIndex": d.fileIndex,
-                "fileName": d.fileName,
-                "fileType": d.fileType,
-                "createdAt": d.createdAt.isoformat() if d.createdAt else "",
+                "fileIndex": d.get("file_index"),
+                "fileName": d.get("file_name"),
+                "fileType": d.get("file_type"),
+                "createdAt": d.get("created_at", "").isoformat() if d.get("created_at") else "",
             }
             for d in docs
         ],
@@ -274,24 +238,18 @@ async def download_document(field_name: str, request: Request, db: Session = Dep
 
 
 @router.delete("/documents/{field_name}")
-async def delete_documents(field_name: str, request: Request, db: Session = Depends(get_db)):
-    """Delete all documents for a field, or a specific one via ?index=N."""
+async def delete_documents(field_name: str, request: Request):
     candidate_id = _get_candidate_id_from_request(request)
+    db = get_sync_db()
 
     idx_param = request.query_params.get("index")
-    q = db.query(CandidateDocument).filter(
-        CandidateDocument.candidateId == candidate_id,
-        CandidateDocument.fieldName == field_name,
-    )
+    query = {"candidate_id": candidate_id, "field_name": field_name}
     if idx_param:
-        q = q.filter(CandidateDocument.fileIndex == int(idx_param))
+        query["file_index"] = int(idx_param)
 
-    deleted = q.all()
-    if not deleted:
+    result = db.candidate_documents.delete_many(query)
+
+    if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="No documents found to delete")
 
-    for doc in deleted:
-        db.delete(doc)
-
-    db.commit()
-    return {"success": True, "deleted": len(deleted)}
+    return {"success": True, "deleted": result.deleted_count}

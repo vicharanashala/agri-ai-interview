@@ -1,25 +1,17 @@
 """
-Settings Service — reads LLM guidelines from the DB, with fallback to defaults.
-
-Allows the admin dashboard to update guidelines that are actually used by the
-interview workflow and LLM evaluation.
+Settings Service — reads guidelines from MongoDB, with fallback to defaults.
 """
-from datetime import datetime
+import json
+from datetime import datetime, timezone
 from typing import Optional
-from sqlalchemy.orm import Session
-from app.db.database import SessionLocal
-from app.db.models.settings import Settings
+
+from app.db.mongodb import get_sync_db
 
 
-# -------------------------------------------------------------------
-# Interview configuration defaults
-# -------------------------------------------------------------------
+# ── Defaults ──────────────────────────────────────────────────────────────────
+
 DEFAULT_MAX_QUESTIONS = 10
 
-
-# -------------------------------------------------------------------
-# Default guideline content (must match backend/app/api/admin/settings.py)
-# -------------------------------------------------------------------
 DEFAULT_GUIDELINES = {
     "question_guidelines": """# Question Generation Guidelines
 
@@ -98,7 +90,6 @@ Score: 0 = no understanding, 5 = knows general issues, 10 = understands cause-ef
 ---
 
 ## Overall Score Calculation
-
 Formula: overall_score = (sum of topic scores / 6) * 10
 All 6 topics are included in the average. Topics with no questions asked score 0.
 
@@ -128,29 +119,6 @@ Score 9-10: Excellent — connects theory to application, shows scientific reaso
 - Claims field experience they cannot back up with specifics
 - No reference to any coursework, practical, or academic source
 - Guesses wildly without logical reasoning""",
-
-    "interview_system": """# Interview System Prompt
-
-You are an expert agricultural interviewer
-1. Technical Knowledge (Weight: 30%)
-   - Understanding of farming practices
-   - Knowledge of modern agricultural techniques
-
-2. Problem-Solving (Weight: 25%)
-   - Analytical thinking
-   - Decision-making abilities
-
-3. Communication (Weight: 20%)
-   - Clarity of expression
-   - Listening skills
-
-4. Experience Relevance (Weight: 15%)
-   - Practical experience
-   - Achievement history
-
-5. Cultural Fit (Weight: 10%)
-   - Teamwork potential
-   - Adaptability""",
 
     "interview_system": """# Interview System Prompt
 
@@ -190,44 +158,47 @@ Answer candidate questions about the company, role, and process.
 }
 
 
-def _get_db():
-    """Get a bare DB session (no FastAPI Depends, so usable anywhere)."""
-    db = SessionLocal()
-    try:
-        return db
-    except Exception:
-        db.close()
-        raise
+# ── Low-level MongoDB read/write ──────────────────────────────────────────────
 
+def _get_setting(db, key: str) -> Optional[str]:
+    doc = db.settings.find_one({"_id": key})
+    return doc.get("value") if doc else None
+
+
+def _set_setting(db, key: str, value: str, category: str = "general") -> None:
+    now = datetime.now(timezone.utc)
+    db.settings.update_one(
+        {"_id": key},
+        {
+            "$set": {
+                "value": value,
+                "category": category,
+                "updated_at": now,
+            },
+            "$setOnInsert": {
+                "created_at": now,
+            }
+        },
+        upsert=True,
+    )
+
+
+# ── Guideline accessors ───────────────────────────────────────────────────────
 
 def get_guideline(key: str) -> str:
-    """
-    Load a single guideline from the DB, falling back to the default if
-    not found or if the DB is unavailable.
-    """
     default = DEFAULT_GUIDELINES.get(key, "")
-
     try:
-        db = _get_db()
-        try:
-            setting: Optional[Settings] = db.query(Settings).filter(Settings.key == key).first()
-            if setting and setting.value:
-                return setting.value
-        finally:
-            db.close()
+        db = get_sync_db()
+        val = _get_setting(db, key)
+        return val if val else default
     except Exception:
-        # DB not available — use default
-        pass
-
-    return default
+        return default
 
 
 def get_all_guidelines() -> dict:
-    """Load all guidelines from DB (or defaults if not set)."""
     return {key: get_guideline(key) for key in DEFAULT_GUIDELINES}
 
 
-# Convenience helpers so callers don't have to import DEFAULT_GUIDELINES
 def get_question_guidelines() -> str:
     return get_guideline("question_guidelines")
 
@@ -244,183 +215,100 @@ def get_faq_system() -> str:
     return get_guideline("faq_system")
 
 
-# -------------------------------------------------------------------
-# Interview configuration
-# -------------------------------------------------------------------
+# ── Interview settings ────────────────────────────────────────────────────────
+
 def get_interview_settings() -> dict:
-    """
-    Load interview configuration from the DB, falling back to defaults.
-    Returns {"max_questions": int, "max_duration_minutes": int}.
-    """
-    max_questions = DEFAULT_MAX_QUESTIONS
-    max_duration_minutes = 30
-
+    defaults = {"max_questions": DEFAULT_MAX_QUESTIONS, "max_duration_minutes": 30}
     try:
-        db = _get_db()
-        try:
-            q_setting = db.query(Settings).filter(
-                Settings.key == "interview_max_questions"
-            ).first()
-            if q_setting and q_setting.value:
-                max_questions = int(q_setting.value)
+        db = get_sync_db()
+        q_val = _get_setting(db, "interview_max_questions")
+        d_val = _get_setting(db, "interview_max_duration_minutes")
+        if q_val:
+            defaults["max_questions"] = int(q_val)
+        if d_val:
+            defaults["max_duration_minutes"] = int(d_val)
+    except Exception:
+        pass
+    return defaults
 
-            d_setting = db.query(Settings).filter(
-                Settings.key == "interview_max_duration_minutes"
-            ).first()
-            if d_setting and d_setting.value:
-                max_duration_minutes = int(d_setting.value)
-        finally:
-            db.close()
+
+# ── First question ────────────────────────────────────────────────────────────
+
+def get_first_question(candidate_name: str = "") -> str:
+    base = "Hello {name}, Welcome to the interview, please tell me about yourself."
+    try:
+        db = get_sync_db()
+        val = _get_setting(db, "interview_first_question")
+        if val:
+            base = val
     except Exception:
         pass
 
-    return {
-        "max_questions": max_questions,
-        "max_duration_minutes": max_duration_minutes,
-    }
-
-
-# -------------------------------------------------------------------
-# First question
-# -------------------------------------------------------------------
-def get_first_question(candidate_name: str = "") -> str:
-    """
-    Load the admin-configured first question, optionally personalised with candidate name.
-    Falls back to a default if not set.
-    """
-    try:
-        db = _get_db()
-        try:
-            setting: Optional[Settings] = db.query(Settings).filter(
-                Settings.key == "interview_first_question"
-            ).first()
-            if setting and setting.value:
-                base = setting.value
-            else:
-                base = "Hello {name}, Welcome to the interview, please tell me about yourself."
-        finally:
-            db.close()
-    except Exception:
-        base = "Hello {name}, Welcome to the interview, please tell me about yourself."
-
-    # Personalise: replace {name} placeholder with actual candidate name
     if candidate_name:
         base = base.replace("{name}", candidate_name)
     else:
         base = base.replace("{name}", "there")
-
     return base
 
 
-# -------------------------------------------------------------------
-# Anti-cheat settings
-# -------------------------------------------------------------------
+# ── Anti-cheat settings ───────────────────────────────────────────────────────
+
 def get_anti_cheat_settings() -> dict:
-    """
-    Load anti-cheat configuration from DB, falling back to defaults.
-    Returns {"idle_threshold_ms": int, "platform_idle_ms": int}.
-    """
-    idle_threshold_ms = 15000
-    platform_idle_ms = 900000
-
+    defaults = {"idle_threshold_ms": 15000, "platform_idle_ms": 900000}
     try:
-        db = _get_db()
-        try:
-            idle_setting = db.query(Settings).filter(
-                Settings.key == "anti_cheat_idle_threshold_ms"
-            ).first()
-            if idle_setting and idle_setting.value:
-                idle_threshold_ms = int(idle_setting.value)
-
-            platform_setting = db.query(Settings).filter(
-                Settings.key == "anti_cheat_platform_idle_ms"
-            ).first()
-            if platform_setting and platform_setting.value:
-                platform_idle_ms = int(platform_setting.value)
-        finally:
-            db.close()
+        db = get_sync_db()
+        idle = _get_setting(db, "anti_cheat_idle_threshold_ms")
+        platform = _get_setting(db, "anti_cheat_platform_idle_ms")
+        if idle:
+            defaults["idle_threshold_ms"] = int(idle)
+        if platform:
+            defaults["platform_idle_ms"] = int(platform)
     except Exception:
         pass
+    return defaults
 
-    return {
-        "idle_threshold_ms": idle_threshold_ms,
-        "platform_idle_ms": platform_idle_ms,
-    }
 
-# -------------------------------------------------------------------
-# Cooldown configuration
-# -------------------------------------------------------------------
+# ── Cooldown ──────────────────────────────────────────────────────────────────
+
 def get_cooldown_days() -> int:
-    """
-    Load cooldown days (wait period after a FAIL) from DB, defaulting to 3.
-    """
     try:
-        db = _get_db()
-        try:
-            setting: Optional[Settings] = db.query(Settings).filter(
-                Settings.key == "interview_cooldown_days"
-            ).first()
-            if setting and setting.value:
-                return int(setting.value)
-        finally:
-            db.close()
+        db = get_sync_db()
+        val = _get_setting(db, "interview_cooldown_days")
+        if val:
+            return int(val)
     except Exception:
         pass
-
     return 3
 
 
-# -------------------------------------------------------------------
-# Evaluation configuration
-# -------------------------------------------------------------------
+# ── Evaluation settings ───────────────────────────────────────────────────────
+
 def get_evaluation_settings() -> dict:
-    """
-    Load evaluation settings from DB (pass_threshold), falling back to defaults.
-    Returns {"pass_threshold": int}.
-    """
     try:
-        db = _get_db()
-        try:
-            setting: Optional[Settings] = db.query(Settings).filter(
-                Settings.key == "evaluation_pass_threshold"
-            ).first()
-            if setting and setting.value:
-                return {"pass_threshold": int(setting.value)}
-        finally:
-            db.close()
+        db = get_sync_db()
+        val = _get_setting(db, "evaluation_pass_threshold")
+        if val:
+            return {"pass_threshold": int(val)}
     except Exception:
         pass
-
     return {"pass_threshold": 60}
 
 
 def get_evaluation_criteria() -> list:
-    """
-    Load evaluation criteria (list of {name, weight} dicts) from DB.
-    Falls back to an empty list (unweighted / legacy mode).
-    """
     try:
-        db = _get_db()
-        try:
-            setting: Optional[Settings] = db.query(Settings).filter(
-                Settings.key == "evaluation_criteria"
-            ).first()
-            if setting and setting.value:
-                import json
-                criteria = json.loads(setting.value)
-                if isinstance(criteria, list):
-                    return criteria
-        finally:
-            db.close()
+        db = get_sync_db()
+        val = _get_setting(db, "evaluation_criteria")
+        if val:
+            criteria = json.loads(val)
+            if isinstance(criteria, list):
+                return criteria
     except Exception:
         pass
-
     return []
 
 
-# -------------------------------------------------------------------
-# Offer letter configuration
-# -------------------------------------------------------------------
+# ── Offer letter config ───────────────────────────────────────────────────────
+
 OFFER_LETTER_DEFAULTS = {
     "companyName": "ANNAM AGRITECH",
     "companyTagline": "Empowering Agriculture Through Technology",
@@ -476,7 +364,7 @@ OFFER_LETTER_DEFAULTS = {
         "<b>Acceptance of Offer:</b>\n"
         "I, _________________________ (Candidate Name), accept the offer of {{position}} "
         "at {{companyName}} on the terms and conditions mentioned above.\n\n"
-        "_________________________\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0_________________________\n"
+        "_________________________\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0_________________________\n"
         "{{signatureLabel}}\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0Date\n\n"
         "{{footerText}}"
     ),
@@ -484,53 +372,22 @@ OFFER_LETTER_DEFAULTS = {
 
 
 def get_offer_letter_config() -> dict:
-    """
-    Load offer-letter configuration from the DB, falling back to defaults.
-    Returns a dict matching OFFER_LETTER_DEFAULTS keys.
-    """
     defaults = OFFER_LETTER_DEFAULTS
     try:
-        db = _get_db()
-        try:
-            setting: Optional[Settings] = db.query(Settings).filter(
-                Settings.key == "offer_letter_config"
-            ).first()
-            if setting and setting.value:
-                import json
-                cfg = json.loads(setting.value)
-                # Merge with defaults so any missing keys use default values
-                return {**defaults, **cfg}
-        finally:
-            db.close()
+        db = get_sync_db()
+        val = _get_setting(db, "offer_letter_config")
+        if val:
+            cfg = json.loads(val)
+            return {**defaults, **cfg}
     except Exception:
         pass
     return defaults
 
 
 def save_offer_letter_config(config: dict) -> None:
-    """
-    Persist offer-letter configuration to the DB.
-    """
-    import json
-    now = datetime.utcnow()
-    db = _get_db()
     try:
-        setting: Optional[Settings] = db.query(Settings).filter(
-            Settings.key == "offer_letter_config"
-        ).first()
+        db = get_sync_db()
         payload = json.dumps(config)
-        if setting:
-            setting.value = payload
-            setting.updated_at = now
-        else:
-            setting = Settings(
-                key="offer_letter_config",
-                value=payload,
-                category="offer_letter",
-                description="Offer letter format and field values",
-            )
-            db.add(setting)
-        db.commit()
-    finally:
-        db.close()
-
+        _set_setting(db, "offer_letter_config", payload, category="offer_letter")
+    except Exception:
+        pass

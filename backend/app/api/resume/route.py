@@ -1,11 +1,6 @@
 """
-FastAPI Resume Upload & Download Endpoints.
-
-POST /api/resume/upload  — save file + extract raw text, store in PostgreSQL
-GET  /api/resume/{id}    — serve the original file for download
-GET  /api/admin/resumes  — list resumes for a given candidate (for admin table)
+Resume Upload, Download & Parse Endpoints — MongoDB.
 """
-
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, BackgroundTasks, Query, Depends
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -14,17 +9,13 @@ import os
 import json
 import uuid
 
-from sqlalchemy.orm import Session
-from app.db.database import get_db
-from app.db.models.candidate import Resume
+from app.db.mongodb import get_sync_db
 from app.services.resume_parser import extract_raw_text
 
 router = APIRouter(prefix="/api", tags=["resume"])
 
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "..", "uploads", "resumes")
 
-
-# ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _ensure_upload_dir():
     os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -36,10 +27,23 @@ def _guess_file_type(filename: str) -> str:
         return "pdf"
     if ext in ("doc", "docx"):
         return "docx"
-    return "pdf"  # default
+    return "pdf"
 
 
-# ── Request / Response models ──────────────────────────────────────────────────
+# ── Background task ────────────────────────────────────────────────────────────
+
+def _run_llm_parse(resume_id: str, raw_text: str):
+    import asyncio
+    from app.services.resume_llm_parser import parse_resume_with_llm, save_parsed_data
+
+    async def _async():
+        parsed = await parse_resume_with_llm(raw_text)
+        save_parsed_data(resume_id, parsed)
+
+    asyncio.run(_async())
+
+
+# ── Response models ────────────────────────────────────────────────────────────
 
 class ResumeUploadResponse(BaseModel):
     resumeId: str
@@ -59,19 +63,6 @@ class ResumeInfo(BaseModel):
     createdAt: str
 
 
-# ── Background task ────────────────────────────────────────────────────────────
-
-def _run_llm_parse(resume_id: str, raw_text: str):
-    import asyncio
-    from app.services.resume_llm_parser import parse_resume_with_llm, save_parsed_data
-
-    async def _async():
-        parsed = await parse_resume_with_llm(raw_text)
-        save_parsed_data(resume_id, parsed)
-
-    asyncio.run(_async())
-
-
 # ── Endpoints ──────────────────────────────────────────────────────────────────
 
 @router.post("/resume/upload", response_model=ResumeUploadResponse)
@@ -79,11 +70,10 @@ async def upload_resume(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     candidateId: str = Form(...),
-    db: Session = Depends(get_db),
 ):
     """
-    Save uploaded resume to disk and record in PostgreSQL.
-    Extracts raw text for admin preview (parsing is server-side async).
+    Save uploaded resume to disk and record in MongoDB resumes collection.
+    Triggers async LLM parsing in background.
     """
     _ensure_upload_dir()
 
@@ -93,7 +83,6 @@ async def upload_resume(
         raise HTTPException(status_code=400, detail="Only PDF or DOCX files are allowed")
 
     file_bytes = await file.read()
-
     if len(file_bytes) > 5 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File size must be less than 5MB")
 
@@ -107,20 +96,19 @@ async def upload_resume(
 
     raw_text = extract_raw_text(file_bytes, file_type)
 
-    resume = Resume(
-        id=resume_id,
-        candidateId=candidateId,
-        fileName=file.filename,
-        fileType=file_type,
-        rawText=raw_text,
-        status="uploaded",
-    )
-    db.add(resume)
-    db.commit()
+    db = get_sync_db()
+    db.resumes.insert_one({
+        "_id": resume_id,
+        "candidate_id": candidateId,
+        "file_name": file.filename,
+        "file_type": file_type,
+        "raw_text": raw_text,
+        "parsed_data": None,
+        "status": "uploaded",
+        "file_path": file_path,
+        "created_at": datetime.now(timezone.utc),
+    })
 
-    # Always trigger LLM parsing — even if raw_text is empty (unreadable PDF/DOCX),
-    # the parser will return "Not Available" for all fields so downstream uses
-    # have consistent, non-null data and don't need defensive null-checks everywhere.
     background_tasks.add_task(_run_llm_parse, resume_id, raw_text or "")
 
     return ResumeUploadResponse(
@@ -131,100 +119,80 @@ async def upload_resume(
     )
 
 
+from datetime import datetime, timezone
+
+
 @router.get("/resume/{resume_id}")
-async def download_resume(resume_id: str, db: Session = Depends(get_db)):
-    """
-    Serve the original resume file for download.
-    Looks up the file by resumeId and returns it as an attachment.
-    """
-    resume = db.query(Resume).filter(Resume.id == resume_id).first()
+async def download_resume(resume_id: str):
+    db = get_sync_db()
+    resume = db.resumes.find_one({"_id": resume_id})
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
 
-    safe_filename = f"{resume_id}_{resume.fileName}"
-    file_path = os.path.join(UPLOAD_DIR, safe_filename)
-
+    file_path = resume.get("file_path", "")
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Resume file not found on disk")
 
     return FileResponse(
         path=file_path,
-        filename=resume.fileName,
+        filename=resume.get("file_name", ""),
         media_type="application/octet-stream",
     )
 
 
 @router.post("/resume/parse/{resume_id}", response_model=ResumeInfo)
-async def trigger_resume_parse(
-    resume_id: str,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
-):
-    """
-    Re-trigger LLM parsing for an existing resume.
-    Useful when rawText was empty during upload or parsing failed.
-    """
-    resume = db.query(Resume).filter(Resume.id == resume_id).first()
+async def trigger_resume_parse(resume_id: str, background_tasks: BackgroundTasks):
+    db = get_sync_db()
+    resume = db.resumes.find_one({"_id": resume_id})
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
 
-    raw_text = resume.rawText or ""
+    raw_text = resume.get("raw_text") or ""
     if not raw_text.strip():
         raise HTTPException(status_code=400, detail="No raw text available — upload a file first")
 
-    resume.status = "parsing"
-    db.commit()
+    db.resumes.update_one({"_id": resume_id}, {"$set": {"status": "parsing"}})
 
     background_tasks.add_task(_run_llm_parse, resume_id, raw_text)
 
     return ResumeInfo(
-        id=resume.id,
-        candidateId=resume.candidateId,
-        fileName=resume.fileName,
-        fileType=resume.fileType,
-        rawText=resume.rawText,
+        id=resume["_id"],
+        candidateId=resume.get("candidate_id", ""),
+        fileName=resume.get("file_name", ""),
+        fileType=resume.get("file_type", ""),
+        rawText=resume.get("raw_text"),
         parsedData=None,
         status="parsing",
-        createdAt=resume.createdAt.isoformat() if resume.createdAt else "",
+        createdAt=resume.get("created_at", "").isoformat() if resume.get("created_at") else "",
     )
 
 
 @router.get("/admin/resumes", response_model=List[ResumeInfo])
-async def list_candidate_resumes(candidateId: str, db: Session = Depends(get_db)):
-    """
-    Return all resumes for a given candidate (newest first).
-    Used by the admin dashboard to show resume status in the candidates table.
-    """
-    resumes = (
-        db.query(Resume)
-        .filter(Resume.candidateId == candidateId)
-        .order_by(Resume.createdAt.desc())
-        .all()
-    )
+async def list_candidate_resumes(candidateId: str):
+    db = get_sync_db()
+    cursor = db.resumes.find({"candidate_id": candidateId}).sort("created_at", -1)
 
     result = []
-    for r in resumes:
+    for r in cursor:
         parsed_data = None
-        if r.status == "parsed" and r.parsedData:
+        if r.get("status") == "parsed" and r.get("parsed_data"):
             try:
-                parsed_data = json.loads(r.parsedData)
+                parsed_data = json.loads(r["parsed_data"]) if isinstance(r["parsed_data"], str) else r["parsed_data"]
             except Exception:
                 pass
 
         result.append(ResumeInfo(
-            id=r.id,
-            candidateId=r.candidateId,
-            fileName=r.fileName,
-            fileType=r.fileType,
-            rawText=r.rawText,
+            id=str(r["_id"]),
+            candidateId=r.get("candidate_id", ""),
+            fileName=r.get("file_name", ""),
+            fileType=r.get("file_type", ""),
+            rawText=r.get("raw_text"),
             parsedData=parsed_data,
-            status=r.status,
-            createdAt=r.createdAt.isoformat() if r.createdAt else "",
+            status=r.get("status", "unknown"),
+            createdAt=r.get("created_at", "").isoformat() if r.get("created_at") else "",
         ))
     return result
 
-
-# ── Skills Match ──────────────────────────────────────────────────────────────
 
 class SkillMatchResponse(BaseModel):
     candidateId: str
@@ -241,15 +209,7 @@ class SkillMatchResponse(BaseModel):
 
 
 @router.get("/admin/resume/match", response_model=SkillMatchResponse)
-async def get_skill_match(
-    candidateId: str = Query(...),
-    role: str = Query(...),
-    db: Session = Depends(get_db),
-):
-    """
-    Compare a candidate's parsed resume skills against a role's requirements.
-    Returns match percentage + breakdown of matched/missing required & preferred skills.
-    """
+async def get_skill_match(candidateId: str = Query(...), role: str = Query(...)):
     role_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", "app", "data", "role_requirements.json")
     with open(role_path) as f:
         roles_data = json.load(f)
@@ -262,18 +222,17 @@ async def get_skill_match(
     required = set(s.lower() for s in role_info["required"])
     preferred = set(s.lower() for s in role_info["preferred"])
 
-    resume = (
-        db.query(Resume)
-        .filter(Resume.candidateId == candidateId, Resume.status == "parsed")
-        .order_by(Resume.createdAt.desc())
-        .first()
-    )
+    db = get_sync_db()
+    resume = db.resumes.find_one({
+        "candidate_id": candidateId,
+        "status": "parsed",
+    }, sort=[("created_at", -1)])
 
-    if not resume or not resume.parsedData:
+    if not resume or not resume.get("parsed_data"):
         raise HTTPException(status_code=404, detail="No parsed resume found for this candidate. Resume may still be parsing.")
 
     try:
-        parsed = json.loads(resume.parsedData)
+        parsed = resume["parsed_data"] if isinstance(resume["parsed_data"], dict) else json.loads(resume["parsed_data"])
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to parse resume data.")
 
@@ -302,9 +261,9 @@ async def get_skill_match(
         overallScore=round(overall, 2),
         requiredMatch=round(required_score, 2),
         preferredMatch=round(preferred_score, 2),
-        requiredMatched=sorted(required & candidate_skills, key=lambda s: s),
-        requiredMissing=sorted(required - candidate_skills, key=lambda s: s),
-        preferredMatched=sorted(preferred & candidate_skills, key=lambda s: s),
-        preferredMissing=sorted(preferred - candidate_skills, key=lambda s: s),
+        requiredMatched=sorted(required & candidate_skills),
+        requiredMissing=sorted(required - candidate_skills),
+        preferredMatched=sorted(preferred & candidate_skills),
+        preferredMissing=sorted(preferred - candidate_skills),
         summary=summary,
     )

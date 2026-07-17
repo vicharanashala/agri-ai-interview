@@ -1,0 +1,110 @@
+name: Agri Frontend Staging Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Ref to deploy (branch / tag / SHA). Leave blank to use the branch selected above."
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+
+env:
+  NODE_VERSION: "22"
+
+jobs:
+  build:
+    name: Build Frontend (staging)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Guard — NEXT_PUBLIC_API_URL_STAGING
+        run: test -n "$NEXT_PUBLIC_API_URL_STAGING"
+        env:
+          NEXT_PUBLIC_API_URL_STAGING: ${{ vars.NEXT_PUBLIC_API_URL_STAGING }}
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm run build
+        env:
+          NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL_STAGING }}
+          NEXTAUTH_URL: ${{ vars.NEXTAUTH_URL_STAGING }}
+
+      - name: Export to static
+        run: |
+          cd frontend
+          npx next export -o out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build-staging
+          path: ./frontend/out
+          retention-days: 1
+
+  deploy_staging:
+    name: Deploy to Firebase Hosting (Staging)
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Generate staging Firebase config
+        run: |
+          mkdir -p deploy/staging
+          cat > deploy/staging/firebase.json <<'JSON'
+          {
+            "hosting": {
+              "site": "agri-interview-staging",
+              "public": "dist",
+              "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+              "rewrites": []
+            }
+          }
+          JSON
+          cat > deploy/staging/.firebaserc <<'JSON'
+          {
+            "projects": {
+              "default": "${{ secrets.FIREBASE_PROJECT_ID }}"
+            }
+          }
+          JSON
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-build-staging
+          path: ./deploy/staging/dist
+
+      - name: Deploy to Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.GCP_GH_SA_KEY }}
+          projectId: ${{ secrets.FIREBASE_PROJECT_ID }}
+          channelId: live
+          entryPoint: ./deploy/staging

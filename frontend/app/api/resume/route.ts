@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth-options'
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const BACKEND_URL = process.env.BACKEND_URL
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const token = request.cookies.get('candidate_session')?.value()
+    const token = request.cookies.get('candidate_session')?.value
     if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     // Look up candidate_id via backend (requires candidate_session token)

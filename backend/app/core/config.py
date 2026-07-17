@@ -39,5 +39,9 @@ class Settings(BaseSettings):
     LLM_BASE_URL: str = "https://api.minimax.io/v1/"
     LLM_API_KEY: str = ""
 
+    # Storage
+    STORAGE_BACKEND: str = "local"  # local | gcs
+    STORAGE_LOCAL_PATH: str = "./uploads"
+
 
 settings = Settings()

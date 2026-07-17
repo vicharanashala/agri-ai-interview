@@ -13,6 +13,7 @@ from app.api.candidate import auth as candidate_auth
 from app.api.candidate.session import router as candidate_session_router
 from app.api.candidate.route import router as candidate_router
 from app.api.candidate.documents import router as candidate_documents_router
+from app.api.candidate.attempts import router as candidate_attempts_router
 from app.api.anti_cheat import router as anti_cheat_router
 from app.api import interview, joining_details, offer
 from app.api.interview.queue import router as interview_queue_router
@@ -103,4 +104,5 @@ app.include_router(candidate_auth.router)
 app.include_router(candidate_session_router)
 app.include_router(candidate_router)
 app.include_router(candidate_documents_router)
+app.include_router(candidate_attempts_router)
 app.include_router(anti_cheat_router)

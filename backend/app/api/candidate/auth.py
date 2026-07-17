@@ -2,24 +2,27 @@
 Candidate Authentication — NextAuth callback proxy.
 
 Forwards NextAuth credential-login callbacks to the NextAuth handler
-running in the Next.js frontend (http://localhost:3000).
+running in the Next.js frontend.
 Keeps all NextAuth logic on the frontend side; this module just
 proxies the request so the backend can issue a session cookie.
+
+Set NEXTAUTH_URL env var to the browser-accessible NextAuth frontend URL.
 """
 from fastapi import APIRouter, HTTPException, Response, Request
 from pydantic import BaseModel
+import os
 import httpx
 
 router = APIRouter(prefix="/api/auth", tags=["candidate-auth"])
 
-NEXTAUTH_URL = "http://localhost:3000"
-NEXTAUTH_SECRET = "annam-secret-key-123"  # must match NEXTAUTH_SECRET env
+# Browser-accessible NextAuth URL — set via NEXTAUTH_URL env var
+NEXTAUTH_URL = os.environ.get("NEXTAUTH_URL", "http://localhost:3003")
 
 
 # ── NextAuth callback proxy ───────────────────────────────────────────────────
 
 class AuthCallbackRequest(BaseModel):
-    callbackUrl: str = "http://localhost:3000/api/auth/callback"
+    callbackUrl: str = f"{NEXTAUTH_URL}/api/auth/callback"
     csrfToken: str
     credentials: dict  # { email, password }
 

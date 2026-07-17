@@ -1,7 +1,7 @@
 """
 Resume Upload, Download & Parse Endpoints — MongoDB.
 """
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form, BackgroundTasks, Query, Depends
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, BackgroundTasks, Query, Depends, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Optional, List
@@ -13,12 +13,6 @@ from app.db.mongodb import get_sync_db
 from app.services.resume_parser import extract_raw_text
 
 router = APIRouter(prefix="/api", tags=["resume"])
-
-UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "..", "uploads", "resumes")
-
-
-def _ensure_upload_dir():
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
 def _guess_file_type(filename: str) -> str:
@@ -75,8 +69,6 @@ async def upload_resume(
     Save uploaded resume to disk and record in MongoDB resumes collection.
     Triggers async LLM parsing in background.
     """
-    _ensure_upload_dir()
-
     allowed = {"application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
     content_type = file.content_type or ""
     if content_type not in allowed and not file.filename.lower().endswith((".pdf", ".docx")):
@@ -89,10 +81,13 @@ async def upload_resume(
     file_type = _guess_file_type(file.filename)
     resume_id = str(uuid.uuid4())
     safe_filename = f"{resume_id}_{file.filename}"
-    file_path = os.path.join(UPLOAD_DIR, safe_filename)
 
-    with open(file_path, "wb") as f:
-        f.write(file_bytes)
+    # Store file via pluggable storage (local or GCS)
+    from app.core.storage import get_storage, candidate_resume_path
+    storage = get_storage()
+    storage_path = candidate_resume_path(candidateId, safe_filename)
+    content_type_str = "application/pdf" if file_type == "pdf" else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    await storage.write(storage_path, file_bytes, content_type=content_type_str)
 
     raw_text = extract_raw_text(file_bytes, file_type)
 
@@ -105,7 +100,7 @@ async def upload_resume(
         "raw_text": raw_text,
         "parsed_data": None,
         "status": "uploaded",
-        "file_path": file_path,
+        "storage_path": storage_path,
         "created_at": datetime.now(timezone.utc),
     })
 
@@ -129,14 +124,23 @@ async def download_resume(resume_id: str):
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
 
-    file_path = resume.get("file_path", "")
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Resume file not found on disk")
+    storage_path = resume.get("storage_path", "")
+    if not storage_path:
+        raise HTTPException(status_code=404, detail="Resume file path not found")
 
-    return FileResponse(
-        path=file_path,
-        filename=resume.get("file_name", ""),
-        media_type="application/octet-stream",
+    from app.core.storage import get_storage
+    storage = get_storage()
+    try:
+        file_bytes = await storage.read(storage_path)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Resume file not found")
+
+    content_type = "application/pdf" if resume.get("file_type") == "pdf" else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    from fastapi.responses import Response
+    return Response(
+        content=file_bytes,
+        headers={"Content-Disposition": f"attachment; filename=\"{resume.get('file_name', 'resume.pdf')}\""},
+        media_type=content_type,
     )
 
 
@@ -165,6 +169,36 @@ async def trigger_resume_parse(resume_id: str, background_tasks: BackgroundTasks
         status="parsing",
         createdAt=resume.get("created_at", "").isoformat() if resume.get("created_at") else "",
     )
+
+
+@router.get("/candidate/resume")
+async def get_my_resume(request: Request):
+    """Get the latest resume for the authenticated candidate."""
+    from app.db.mongodb import get_sync_db
+
+    token = request.cookies.get("candidate_session") or request.headers.get("authorization", "").replace("Bearer ", "")
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    from app.core.session import _hash_token
+    token_hash = _hash_token(token)
+    session = db.sessions.find_one({"token_hash": token_hash})
+    if not session:
+        raise HTTPException(status_code=401, detail="Invalid session")
+
+    candidate_id = session.get("candidate_id")
+    resume = db.resumes.find_one({"candidate_id": candidate_id}, sort=[("created_at", -1)])
+    if not resume:
+        return {"exists": False}
+
+    return {
+        "exists": True,
+        "resumeId": str(resume["_id"]),
+        "fileName": resume.get("file_name", ""),
+        "fileType": resume.get("file_type", ""),
+        "status": resume.get("status", "unknown"),
+        "createdAt": resume.get("created_at", "").isoformat() if resume.get("created_at") else "",
+    }
 
 
 @router.get("/admin/resumes", response_model=List[ResumeInfo])

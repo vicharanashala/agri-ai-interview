@@ -3,7 +3,7 @@ import CredentialsProvider from 'next-auth/providers/credentials'
 import GoogleProvider from 'next-auth/providers/google'
 import bcrypt from 'bcryptjs'
 
-const BACKEND_URL = process.env.BACKEND_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const BACKEND_URL = process.env.BACKEND_URL ?? ''
 
 async function getBackendCandidateByEmail(email: string) {
   const res = await fetch(
@@ -29,7 +29,6 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null
 
-        // Look up user via backend API
         const res = await fetch(`${BACKEND_URL}/api/candidate/verify-password`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

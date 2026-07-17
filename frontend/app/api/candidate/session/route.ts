@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const BACKEND_URL = process.env.BACKEND_URL
 
 export async function POST(request: NextRequest) {
   try {
@@ -30,7 +30,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(data, { status: response.status })
     }
 
-    return NextResponse.json(data)
+    // Forward the candidate_session cookie from backend to the browser
+    const setCookie = response.headers.get('set-cookie')
+    const nextResponse = NextResponse.json(data)
+    if (setCookie) {
+      nextResponse.headers.append('set-cookie', setCookie)
+    }
+
+    return nextResponse
   } catch (error) {
     console.error('[candidate/session] Proxy error:', error)
     return NextResponse.json(

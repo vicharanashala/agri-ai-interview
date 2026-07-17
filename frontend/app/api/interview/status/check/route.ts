@@ -4,7 +4,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const candidateId = searchParams.get('candidate_id');
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+    const backendUrl = process.env.BACKEND_URL;
 
     const authHeader = request.headers.get('Authorization');
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };

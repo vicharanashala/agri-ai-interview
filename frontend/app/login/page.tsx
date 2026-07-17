@@ -56,7 +56,12 @@ function LoginPageInner() {
 
         if (!regRes.ok) {
           const data = await regRes.json();
-          setError(data.error || 'Registration failed');
+          if (regRes.status === 409) {
+            setError('An account with this email already exists. Please sign in instead.');
+            setMode('signin');
+          } else {
+            setError(data.error || 'Registration failed');
+          }
           setIsLoading(false);
           return;
         }

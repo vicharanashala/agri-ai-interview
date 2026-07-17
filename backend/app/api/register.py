@@ -7,8 +7,8 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional
 import bcrypt
-import uuid
 from datetime import datetime, timezone
+from bson import ObjectId
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -34,12 +34,12 @@ async def register(request: Request, body: RegisterRequest):
 
     password_hash = bcrypt.hashpw(body.password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
-    user_id = str(uuid.uuid4())
-    candidate_id = str(uuid.uuid4())
+    user_id = ObjectId()
+    candidate_id = ObjectId()
     now = datetime.now(timezone.utc)
 
     db.users.insert_one({
-        "_id": user_id,
+        "_id": str(user_id),
         "name": body.name,
         "email": body.email,
         "password": password_hash,
@@ -49,14 +49,14 @@ async def register(request: Request, body: RegisterRequest):
 
     db.candidates.insert_one({
         "_id": candidate_id,
-        "user_id": user_id,
+        "user_id": str(user_id),
         "email": body.email,
         "current_phase": "onboarding",
         "created_at": now,
         "updated_at": now,
     })
 
-    return {"id": user_id, "name": body.name, "email": body.email, "message": "Account created successfully"}
+    return {"id": str(user_id), "name": body.name, "email": body.email, "message": "Account created successfully"}
 
 
 def get_sync_db():

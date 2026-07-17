@@ -161,14 +161,14 @@ Answer candidate questions about the company, role, and process.
 # ── Low-level MongoDB read/write ──────────────────────────────────────────────
 
 def _get_setting(db, key: str) -> Optional[str]:
-    doc = db.settings.find_one({"_id": key})
+    doc = db.settings.find_one({"key": key})
     return doc.get("value") if doc else None
 
 
 def _set_setting(db, key: str, value: str, category: str = "general") -> None:
     now = datetime.now(timezone.utc)
     db.settings.update_one(
-        {"_id": key},
+        {"key": key},
         {
             "$set": {
                 "value": value,
@@ -218,15 +218,26 @@ def get_faq_system() -> str:
 # ── Interview settings ────────────────────────────────────────────────────────
 
 def get_interview_settings() -> dict:
-    defaults = {"max_questions": DEFAULT_MAX_QUESTIONS, "max_duration_minutes": 30}
+    defaults = {
+        "max_questions": DEFAULT_MAX_QUESTIONS,
+        "max_duration_minutes": 30,
+        "cooldown_days": 3,
+        "pass_threshold": 60,
+    }
     try:
         db = get_sync_db()
         q_val = _get_setting(db, "interview_max_questions")
         d_val = _get_setting(db, "interview_max_duration_minutes")
+        c_val = _get_setting(db, "interview_cooldown_days")
+        t_val = _get_setting(db, "evaluation_pass_threshold")
         if q_val:
             defaults["max_questions"] = int(q_val)
         if d_val:
             defaults["max_duration_minutes"] = int(d_val)
+        if c_val:
+            defaults["cooldown_days"] = int(c_val)
+        if t_val:
+            defaults["pass_threshold"] = int(t_val)
     except Exception:
         pass
     return defaults

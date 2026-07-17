@@ -94,6 +94,7 @@ def _save_chat_to_db(interview_id: str, messages: list, end_reason: str, evaluat
         "status": "completed",
         "end_reason": end_reason,
         "updated_at": datetime.now(timezone.utc),
+        "completed_at": datetime.now(timezone.utc),
     }
     # Merge messages into interview_data.messages (don't overwrite other fields)
     interview_data = existing.get("interview_data") or {}

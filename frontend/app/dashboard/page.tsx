@@ -285,7 +285,7 @@ export default function DashboardPage() {
     // Destroy Redis session (best-effort — don't block if it fails)
     const redisToken = sessionStorage.getItem('candidate_session_token')
     if (redisToken) {
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL
       fetch(`${backendUrl}/api/candidate/session/logout`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${redisToken}` },

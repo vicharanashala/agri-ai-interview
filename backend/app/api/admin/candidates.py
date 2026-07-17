@@ -178,20 +178,21 @@ async def create_candidate(
 
     existing_user = db.users.find_one({"email": email})
     if existing_user:
-        existing_cand = db.candidates.find_one({"user_id": existing_user["_id"]})
+        existing_cand = db.candidates.find_one({"user_id": str(existing_user["_id"])})
         if existing_cand:
             raise HTTPException(status_code=400, detail="Candidate with this email already exists")
-        user_id = existing_user["_id"]
+        user_id = str(existing_user["_id"])
     else:
-        user_id = str(uuid.uuid4())
+        user_id = ObjectId()
         db.users.insert_one({
-            "_id": user_id,
+            "_id": str(user_id),
             "name": name,
             "email": email,
             "created_at": datetime.now(timezone.utc),
         })
+        user_id = str(user_id)
 
-    candidate_id = str(uuid.uuid4())
+    candidate_id = ObjectId()
     now = datetime.now(timezone.utc)
     db.candidates.insert_one({
         "_id": candidate_id,
@@ -218,7 +219,7 @@ async def reset_candidate_cooldown(candidate_id: str, _admin=Depends(require_adm
     now = datetime.now(timezone.utc)
 
     # Clear completedAt on latest FAIL session
-    db.interview_sessions.update_one(
+    db.interview_sessions.find_one_and_update(
         {"candidate_id": candidate_id, "status": "completed", "result": "FAIL"},
         {"$set": {"completed_at": None}},
         sort=[("started_at", -1)],
@@ -232,7 +233,7 @@ async def reset_candidate_cooldown(candidate_id: str, _admin=Depends(require_adm
 
     # Move candidate back to interview phase, reset flags
     db.candidates.update_one(
-        {"_id": candidate_id},
+        {"_id": ObjectId(candidate_id)},
         {"$set": {
             "current_phase": "interview",
             "passed_and_visited_summary": False,
@@ -250,6 +251,8 @@ async def reset_candidate_cooldown(candidate_id: str, _admin=Depends(require_adm
 
 @router.get("/interviews/active")
 async def get_active_interviews(_admin=Depends(require_admin_auth)):
+    from bson import ObjectId
+
     db = get_sync_db()
     sessions = list(db.interview_sessions.find(
         {"status": {"$in": ["active", "interviewing", "paused"]}}
@@ -268,12 +271,11 @@ async def get_active_interviews(_admin=Depends(require_admin_auth)):
         if not isinstance(messages, list):
             messages = []
 
-        candidate = db.candidates.find_one({"_id": s.get("candidate_id")})
-        candidate_name = ""
-        if candidate:
-            candidate_name = f"{candidate.get('name', '')}".strip()
-            if not candidate_name:
-                candidate_name = candidate.get("email", "")
+        cid = s.get("candidate_id")
+        candidate = db.candidates.find_one({"_id": ObjectId(cid)}) if cid else None
+        user = db.users.find_one({"_id": ObjectId(candidate.get("user_id"))}) if candidate and candidate.get("user_id") else None
+
+        candidate_name = (candidate.get("full_name") or user.get("name") or "").strip() if candidate else ""
 
         interviews.append({
             "id": s["_id"],
@@ -486,12 +488,15 @@ async def get_anti_cheat_violations(
     limit: int = Query(100, ge=1, le=500),
     _admin=Depends(require_admin_auth),
 ):
+    from bson import ObjectId
+
     db = get_sync_db()
     cursor = db.anti_cheat_events.find().sort("created_at", -1).limit(limit)
     violations = []
     for event in cursor:
-        cand = db.candidates.find_one({"_id": event.get("candidate_id")}) if event.get("candidate_id") else None
-        user = db.users.find_one({"_id": cand.get("user_id")}) if cand and cand.get("user_id") else None
+        cid = event.get("candidate_id")
+        cand = db.candidates.find_one({"_id": ObjectId(cid)}) if cid else None
+        user = db.users.find_one({"_id": ObjectId(cand.get("user_id"))}) if cand and cand.get("user_id") else None
         name = (cand.get("full_name") if cand else None) or (user.get("name") if user else None) or "Unknown"
         email = (user.get("email") if user else None) or "—"
         violations.append({
@@ -528,6 +533,24 @@ async def update_candidate(
     return {"success": True}
 
 
+# ── Backfill missing completed_at (one-time migration) ─────────────────────────
+
+@router.post("/evaluations/backfill-completed-at")
+async def backfill_completed_at(_admin=Depends(require_admin_auth)):
+    """One-time migration: set completed_at = started_at for sessions where it's missing."""
+    db = get_sync_db()
+    result = db.interview_sessions.update_many(
+        {"completed_at": None, "started_at": {"$ne": None}},
+        [{"$set": {"completed_at": "$started_at"}}],
+    )
+    return {
+        "success": True,
+        "matched": result.matched_count,
+        "modified": result.modified_count,
+        "message": "completed_at backfilled from started_at for sessions where missing.",
+    }
+
+
 # ── Get all evaluations (admin view) ──────────────────────────────────────────
 
 @router.get("/evaluations")
@@ -538,6 +561,8 @@ async def get_all_evaluations(
     search: str = Query(None),
     _admin=Depends(require_admin_auth),
 ):
+    from bson import ObjectId
+
     db = get_sync_db()
 
     query: dict = {"status": "completed", "result": {"$in": ["PASS", "FAIL"]}}
@@ -546,7 +571,7 @@ async def get_all_evaluations(
 
     total = db.interview_sessions.count_documents(query)
 
-    cursor = db.interview_sessions.find(query).sort("completed_at", -1).skip(offset).limit(limit)
+    cursor = db.interview_sessions.find(query).sort("started_at", -1).skip(offset).limit(limit)
 
     evals = []
     for s in cursor:
@@ -558,13 +583,15 @@ async def get_all_evaluations(
                 interview_data = {}
 
         candidate_id = s.get("candidate_id")
-        # candidate_id is a UUID string, not ObjectId — query directly
-        candidate = db.candidates.find_one({"_id": candidate_id}) if candidate_id else None
+        # candidate_id stored as string; candidates._id is ObjectId
+        candidate = db.candidates.find_one({"_id": ObjectId(candidate_id)}) if candidate_id else None
+        user = db.users.find_one({"_id": ObjectId(candidate.get("user_id"))}) if candidate and candidate.get("user_id") else None
 
         if candidate:
-            name = f"{candidate.get('name', '')}".strip()
-            candidate_name = name if name else candidate.get("email", "")
-            candidate_email = candidate.get("email")
+            candidate_name = (candidate.get("full_name") or user.get("name") or "").strip()
+            if not candidate_name:
+                candidate_name = user.get("email", "")
+            candidate_email = user.get("email") if user else None
         else:
             candidate_name = ""
             candidate_email = None
@@ -573,11 +600,22 @@ async def get_all_evaluations(
         if not isinstance(messages, list):
             messages = []
 
-        attempt_num = db.interview_sessions.count_documents({
-            "candidate_id": candidate_id,
-            "status": "completed",
-            "result": {"$in": ["PASS", "FAIL"]},
-        }) if candidate_id else 1
+        # Determine the 1-indexed attempt number for this session.
+        # Count how many completed sessions for this candidate started BEFORE or AT the same time.
+        # Sessions are ordered by started_at ASC; this gives each session its distinct attempt number.
+        if candidate_id:
+            attempt_num = db.interview_sessions.count_documents({
+                "candidate_id": candidate_id,
+                "status": "completed",
+                "result": {"$in": ["PASS", "FAIL"]},
+                "started_at": {"$lte": s.get("started_at")},
+            })
+        else:
+            attempt_num = 1
+
+        eval_data = interview_data.get("evaluation") or {}
+        raw_score = s.get("score")
+        score = raw_score if raw_score is not None else eval_data.get("overall_score")
 
         evals.append({
             "id": s.get("_id"),
@@ -586,9 +624,13 @@ async def get_all_evaluations(
             "email": candidate_email,
             "result": s.get("result"),
             "endReason": s.get("end_reason"),
-            "score": s.get("score"),
+            "score": score,
             "startedAt": s.get("started_at", "").isoformat() if s.get("started_at") else None,
-            "completedAt": s.get("completed_at", "").isoformat() if s.get("completed_at") else None,
+            "completedAt": (
+                s.get("completed_at", "").isoformat() if s.get("completed_at") else
+                s.get("started_at", "").isoformat() if s.get("started_at") else
+                None
+            ),
             "messages": messages,
             "evaluation": interview_data.get("evaluation"),
             "attempt": attempt_num,

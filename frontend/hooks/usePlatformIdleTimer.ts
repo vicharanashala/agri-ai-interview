@@ -97,7 +97,7 @@ export function usePlatformIdleTimer({ enabled = true }: { enabled?: boolean } =
           clearInterval(checkInterval!)
 
           // Call logout endpoint (clear server-side session)
-          const backendUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+          const backendUrl = process.env.NEXT_PUBLIC_API_URL
           try {
             await fetch(`${backendUrl}/api/candidate/session/logout`, {
               method: 'POST',

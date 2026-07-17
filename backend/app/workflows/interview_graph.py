@@ -87,7 +87,7 @@ class InterviewGraphManager:
                 logger.error(f"[InterviewGraph] {interview_id}: background evaluation returned None")
 
             # Persist to DB so it survives restarts
-            self._persist_evaluation(interview_id, evaluation)
+            self._persist_evaluation_sync(interview_id, evaluation)
 
         asyncio.create_task(_run())
 
@@ -129,8 +129,11 @@ class InterviewGraphManager:
             logger.error(f"[InterviewGraph] {interview_id}: LLM evaluation failed: {type(e).__name__}: {e}")
             return None
 
-    def _persist_evaluation(self, interview_id: str, evaluation: Optional[Dict[str, Any]]) -> None:
-        """Persist evaluation to MongoDB interview_sessions — interview_data + score/result columns."""
+    def _persist_evaluation_sync(self, interview_id: str, evaluation: Optional[Dict[str, Any]]) -> None:
+        """Persist evaluation to MongoDB interview_sessions — interview_data + score/result columns.
+
+        Runs synchronously (no await needed) using the sync MongoDB driver.
+        """
         try:
             from app.db.mongodb import get_sync_db
             from app.services.settings_service import get_evaluation_settings
@@ -148,12 +151,13 @@ class InterviewGraphManager:
 
                     update = {"interview_data": interview_data}
 
-                    # Also write score + result to document (used by polling endpoint)
+                    # Also write score + result to document root fields (used for cooldown computation)
                     if evaluation and evaluation.get("overall_score") is not None:
                         threshold = get_evaluation_settings()["pass_threshold"]
                         score = evaluation["overall_score"]
                         update["overall_score"] = score
                         update["result"] = "PASS" if score >= threshold else "FAIL"
+                        logger.info(f"[InterviewGraph] {interview_id}: writing result={update['result']} score={score} (threshold={threshold})")
 
                     db.interview_sessions.update_one({"_id": interview_id}, {"$set": update})
                     logger.info(f"[InterviewGraph] {interview_id}: evaluation persisted to MongoDB (score={evaluation.get('overall_score') if evaluation else None})")

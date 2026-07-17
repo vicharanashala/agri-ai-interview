@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const BACKEND_URL = process.env.BACKEND_URL || (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000')
+const BACKEND_URL = process.env.BACKEND_URL
+
+function getToken(request: NextRequest): string | null {
+  const auth = request.headers.get('authorization') ?? ''
+  if (auth.startsWith('Bearer ')) return auth.slice(7)
+  return request.cookies.get('candidate_session')?.value ?? null
+}
 
 export async function GET(request: NextRequest) {
   try {
-    const token = request.cookies.get('candidate_session')?.value()
+    const token = getToken(request)
     if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const res = await fetch(`${BACKEND_URL}/api/candidate/documents`, {
@@ -22,7 +28,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const token = request.cookies.get('candidate_session')?.value()
+    const token = getToken(request)
     if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const formData = await request.formData()

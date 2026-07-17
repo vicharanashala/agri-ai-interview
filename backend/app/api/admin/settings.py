@@ -23,14 +23,14 @@ PHASES = ["onboarding", "interview", "summary", "documents"]
 
 
 def _get_setting(db, key: str) -> Optional[str]:
-    doc = db.settings.find_one({"_id": key})
+    doc = db.settings.find_one({"key": key})
     return doc.get("value") if doc else None
 
 
 def _set_setting(db, key: str, value: str, category: str = "general") -> None:
     now = datetime.now(timezone.utc)
     db.settings.update_one(
-        {"_id": key},
+        {"key": key},
         {"$set": {"value": value, "category": category, "updated_at": now},
          "$setOnInsert": {"created_at": now}},
         upsert=True,
@@ -74,7 +74,12 @@ async def update_interview_config(request: Dict[str, Any], _admin=Depends(requir
         _set_setting(db, "interview_max_questions", str(request["max_questions"]), "interview")
     if "max_duration_minutes" in request:
         _set_setting(db, "interview_max_duration_minutes", str(request["max_duration_minutes"]), "interview")
-    return {"success": True}
+    if "cooldown_days" in request:
+        _set_setting(db, "interview_cooldown_days", str(request["cooldown_days"]), "interview")
+    if "pass_threshold" in request:
+        _set_setting(db, "evaluation_pass_threshold", str(request["pass_threshold"]), "evaluation")
+    # Return the full saved config so the frontend can update its state
+    return get_interview_settings()
 
 
 @router.get("/interview/first-question")

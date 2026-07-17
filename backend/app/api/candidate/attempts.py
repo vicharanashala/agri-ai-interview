@@ -67,11 +67,11 @@ async def get_attempts(request: Request, email: str = Query(default=None)):
     sessions = list(db.interview_sessions.find({
         "candidate_id": candidate_id,
         "status": "completed",
-    }).sort("started_at", 1))
+    }).sort("started_at", -1))
 
-    # Find latest failed session for cooldown computation
+    # Find latest failed session for cooldown computation (sessions already DESC = newest first)
     latest_failed = None
-    for s in reversed(sessions):
+    for s in sessions:
         if s.get("result") == "FAIL":
             latest_failed = s
             break

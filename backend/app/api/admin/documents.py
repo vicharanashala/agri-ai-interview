@@ -1,19 +1,25 @@
 """
-Admin Document Management Endpoints — MongoDB.
+Admin Document Management Endpoints — Storage + MongoDB metadata.
 """
 from fastapi import APIRouter, HTTPException, Depends, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime, timezone
-import base64
 import io
 import zipfile
 
 from app.db.mongodb import get_sync_db
 from app.api.admin.middleware import require_admin_auth
+from bson import ObjectId
 
 router = APIRouter(prefix="/api/admin", tags=["admin-documents"])
+
+_CONTENT_TYPES = {
+    "pdf": "application/pdf",
+    "doc": "application/msword",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
 
 
 class DocumentDetail(BaseModel):
@@ -21,6 +27,7 @@ class DocumentDetail(BaseModel):
     fieldName: str
     fileName: str
     fileType: str
+    storagePath: str
     createdAt: str
 
 
@@ -35,7 +42,7 @@ class CandidateDocumentsResponse(BaseModel):
 def _get_candidate_with_docs(candidate_id: str) -> tuple:
     """Returns (candidate_doc, user_email). Raises HTTPException if not found."""
     db = get_sync_db()
-    cand = db.candidates.find_one({"_id": candidate_id})
+    cand = db.candidates.find_one({"_id": ObjectId(candidate_id)})
     if not cand:
         raise HTTPException(status_code=404, detail="Candidate not found")
 
@@ -67,6 +74,7 @@ async def list_candidate_documents(
             fieldName=doc.get("field_name", ""),
             fileName=doc.get("file_name", ""),
             fileType=doc.get("file_type", ""),
+            storagePath=doc.get("storage_path", ""),
             createdAt=doc.get("created_at", "").isoformat() if doc.get("created_at") else "",
         )
         for doc in cursor
@@ -94,10 +102,19 @@ async def download_documents_zip(
     if not docs:
         raise HTTPException(status_code=404, detail="No documents found for this candidate")
 
+    from app.core.storage import get_storage
+    storage = get_storage()
+
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
         for doc in docs:
-            file_bytes = base64.b64decode(doc.get("file_data", "").encode("utf-8"))
+            storage_path = doc.get("storage_path", "")
+            if not storage_path:
+                continue
+            try:
+                file_bytes = await storage.read(storage_path)
+            except FileNotFoundError:
+                continue
             zf.writestr(f"{doc.get('field_name', '')}/{doc.get('file_name', '')}", file_bytes)
 
     buffer.seek(0)
@@ -125,15 +142,18 @@ async def download_single_document(
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    file_bytes = base64.b64decode(doc.get("file_data", "").encode("utf-8"))
+    storage_path = doc.get("storage_path", "")
+    if not storage_path:
+        raise HTTPException(status_code=404, detail="Document storage path not found")
 
-    media_types = {
-        "pdf": "application/pdf",
-        "doc": "application/msword",
-        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    }
-    media_type = media_types.get(doc.get("file_type", ""), "application/octet-stream")
+    from app.core.storage import get_storage
+    storage = get_storage()
+    try:
+        file_bytes = await storage.read(storage_path)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Document file not found in storage")
 
+    media_type = _CONTENT_TYPES.get(doc.get("file_type", ""), "application/octet-stream")
     return Response(
         content=file_bytes,
         media_type=media_type,
@@ -148,16 +168,30 @@ async def delete_candidate_document(
     _admin=Depends(require_admin_auth),
 ):
     db = get_sync_db()
-    result = db.candidate_documents.delete_one({
+
+    idx_param = None
+    doc = db.candidate_documents.find_one({
         "candidate_id": candidate_id,
         "field_name": field_name,
     })
-    if result.deleted_count == 0:
+    if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
+
+    # Delete file from storage
+    from app.core.storage import get_storage
+    storage = get_storage()
+    storage_path = doc.get("storage_path", "")
+    if storage_path:
+        try:
+            await storage.delete(storage_path)
+        except FileNotFoundError:
+            pass
+
+    db.candidate_documents.delete_one({"_id": doc["_id"]})
 
     # Reset documents_submitted flag so candidate must re-upload
     db.candidates.update_one(
-        {"_id": candidate_id},
+        {"_id": ObjectId(candidate_id)},
         {"$set": {"documents_submitted": False, "updated_at": datetime.now(timezone.utc)}},
     )
 
@@ -172,10 +206,23 @@ async def reset_candidate_documents(
     cand, _ = _get_candidate_with_docs(candidate_id)
 
     db = get_sync_db()
+    docs = list(db.candidate_documents.find({"candidate_id": candidate_id}))
+
+    # Delete all files from storage
+    from app.core.storage import get_storage
+    storage = get_storage()
+    for doc in docs:
+        storage_path = doc.get("storage_path", "")
+        if storage_path:
+            try:
+                await storage.delete(storage_path)
+            except FileNotFoundError:
+                pass
+
     db.candidate_documents.delete_many({"candidate_id": candidate_id})
 
     db.candidates.update_one(
-        {"_id": candidate_id},
+        {"_id": ObjectId(candidate_id)},
         {"$set": {
             "documents_submitted": False,
             "current_phase": "documents",

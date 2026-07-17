@@ -3,7 +3,8 @@ const nextConfig = {
   output: 'standalone',
   reactStrictMode: true,
   async rewrites() {
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    // Use BACKEND_URL for Docker-internal routing, NEXT_PUBLIC_API_URL for host access
+    const backendUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
     return [
       {
         source: '/api/admin/:path*',

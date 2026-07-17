@@ -2,11 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth-options'
 
-const BACKEND_URL = process.env.BACKEND_URL || (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000')
+const BACKEND_URL = process.env.BACKEND_URL
 
-// Read candidate session token from request cookies
+// Read candidate session token from Authorization header (authFetch / sessionStorage)
+// or candidate_session httpOnly cookie — one will be present.
 function getCandidateToken(request: NextRequest): string | null {
-  return request.cookies.get('candidate_session')?.value() ?? null
+  const auth = request.headers.get('authorization') ?? ''
+  if (auth.startsWith('Bearer ')) return auth.slice(7)
+  return request.cookies.get('candidate_session')?.value ?? null
 }
 
 export async function GET(request: NextRequest) {

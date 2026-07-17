@@ -237,24 +237,52 @@ export default function AdminDashboard() {
 
   // Reload data when tab changes
   useEffect(() => {
-    loadData();
+    loadData(activeTab);
   }, [activeTab]);
 
-  const loadData = async () => {
+  const loadData = async (tab?: Tab) => {
+    const target = tab ?? activeTab;
     setLoading(true);
     try {
-      await Promise.all([
-        loadStats().catch(err => console.error("loadStats error:", err)),
-        loadActiveInterviews().catch(err => console.error("loadActiveInterviews error:", err)),
-        loadCandidates().catch(err => console.error("loadCandidates error:", err)),
-        loadGuidelines().catch(err => console.error("loadGuidelines error:", err)),
-        loadCriteria().catch(err => console.error("loadCriteria error:", err)),
-        loadInterviewConfig().catch(err => console.error("loadInterviewConfig error:", err)),
-        loadAntiCheatConfig().catch(err => console.error("loadAntiCheatConfig error:", err)),
-        loadGeoStats().catch(err => console.error("loadGeoStats error:", err)),
-        loadStateFunnel().catch(err => console.error("loadStateFunnel error:", err)),
-        loadViolations().catch(err => console.error("loadViolations error:", err)),
-      ]);
+      const calls: Promise<void>[] = [];
+      if (target === "live") {
+        calls.push(
+          loadStats().catch(err => console.error("loadStats error:", err)),
+          loadActiveInterviews().catch(err => console.error("loadActiveInterviews error:", err)),
+        );
+      } else if (target === "candidates") {
+        calls.push(
+          loadStats().catch(err => console.error("loadStats error:", err)),
+          loadCandidates().catch(err => console.error("loadCandidates error:", err)),
+        );
+      } else if (target === "analytics") {
+        calls.push(
+          loadStats().catch(err => console.error("loadStats error:", err)),
+          loadGeoStats().catch(err => console.error("loadGeoStats error:", err)),
+          loadStateFunnel().catch(err => console.error("loadStateFunnel error:", err)),
+        );
+      } else if (target === "evaluations") {
+        calls.push(
+          loadStats().catch(err => console.error("loadStats error:", err)),
+        );
+      } else if (target === "anti-cheat") {
+        calls.push(
+          loadStats().catch(err => console.error("loadStats error:", err)),
+          loadViolations().catch(err => console.error("loadViolations error:", err)),
+        );
+      } else if (target === "documents") {
+        calls.push(
+          loadStats().catch(err => console.error("loadStats error:", err)),
+        );
+      } else if (target === "settings") {
+        calls.push(
+          loadGuidelines().catch(err => console.error("loadGuidelines error:", err)),
+          loadCriteria().catch(err => console.error("loadCriteria error:", err)),
+          loadInterviewConfig().catch(err => console.error("loadInterviewConfig error:", err)),
+          loadAntiCheatConfig().catch(err => console.error("loadAntiCheatConfig error:", err)),
+        );
+      }
+      await Promise.all(calls);
     } finally {
       setLoading(false);
     }
@@ -633,12 +661,12 @@ export default function AdminDashboard() {
       if (res.ok) {
         const data = await res.json();
         setInterviewConfig({
-          max_questions: data.max_questions,
-          max_duration_minutes: data.max_duration_minutes,
-          cooldown_days: data.cooldown_days,
+          max_questions: data.max_questions ?? 10,
+          max_duration_minutes: data.max_duration_minutes ?? 30,
+          cooldown_days: data.cooldown_days ?? 3,
           pass_threshold: data.pass_threshold ?? 60,
         });
-        setMaxQuestionsInput(data.max_questions);
+        setMaxQuestionsInput(data.max_questions ?? 10);
         setMaxDurationInput(data.max_duration_minutes ?? 30);
         setCooldownDaysInput(data.cooldown_days ?? 3);
         setPassThresholdInput(data.pass_threshold ?? 60);

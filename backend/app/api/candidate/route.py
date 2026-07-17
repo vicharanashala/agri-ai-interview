@@ -10,9 +10,17 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime, timezone
 import uuid
+from bson import ObjectId
 
 from app.core.session import get_session_store, _hash_token
 from app.db.mongodb import get_sync_db
+
+
+def _to_objectid(id_value) -> ObjectId:
+    """Convert string or ObjectId to ObjectId. Pass through if already ObjectId."""
+    if isinstance(id_value, ObjectId):
+        return id_value
+    return ObjectId(id_value)
 import bcrypt
 import uuid
 
@@ -51,9 +59,9 @@ class OnboardingRequest(BaseModel):
     yearsOfExperience: Optional[int] = None
     highestEducation: str
     institution: str
-    farmingBackground: bool
+    farmingBackground: Optional[str] = None
     cropsGrown: str
-    farmSize: str
+    farmSize: Optional[str] = None
     primaryExpertise: str
 
 
@@ -70,12 +78,15 @@ class CandidateProfileResponse(BaseModel):
     yearsOfExperience: Optional[int] = None
     highestEducation: Optional[str] = None
     institution: Optional[str] = None
-    farmingBackground: Optional[bool] = None
+    farmingBackground: Optional[str] = None
     cropsGrown: Optional[str] = None
     farmSize: Optional[str] = None
     primaryExpertise: Optional[str] = None
     currentPhase: str = "onboarding"
     userId: Optional[str] = None
+    resumeName: Optional[str] = None
+    resumeId: Optional[str] = None
+    resumeStatus: Optional[str] = None
 
 
 class CandidatePatchRequest(BaseModel):
@@ -146,15 +157,15 @@ async def upsert_candidate(request: Request, body: OnboardingRequest):
     }
 
     db.candidates.update_one(
-        {"_id": candidate_id},
+        {"_id": _to_objectid(candidate_id)},
         {"$set": updates},
     )
 
-    cand = db.candidates.find_one({"_id": candidate_id})
+    cand = db.candidates.find_one({"_id": _to_objectid(candidate_id)})
     if not cand:
         raise HTTPException(status_code=404, detail="Candidate not found")
 
-    return {"success": True, "message": "Candidate data saved"}
+    return {"success": True, "message": "Candidate data saved", "id": str(cand["_id"])}
 
 
 @router.get("", response_model=CandidateProfileResponse)
@@ -177,6 +188,22 @@ async def get_candidate_profile(email: Optional[str] = Query(None)):
     if not cand:
         raise HTTPException(status_code=404, detail="Candidate not found")
 
+    # Fetch latest resume for this candidate.
+    # candidates._id is stored as ObjectId; resumes.candidate_id is stored as
+    # string. Query by string form to match both old and new data.
+    cand_id_str = str(cand["_id"])
+    resume = db.resumes.find_one(
+        {"candidate_id": cand_id_str},
+        sort=[("created_at", -1)]
+    )
+    resume_name = None
+    resume_id = None
+    resume_status = None
+    if resume:
+        resume_name = resume.get("file_name")
+        resume_id = str(resume["_id"])
+        resume_status = resume.get("status")
+
     return CandidateProfileResponse(
         id=str(cand["_id"]),
         email=email,
@@ -196,6 +223,9 @@ async def get_candidate_profile(email: Optional[str] = Query(None)):
         primaryExpertise=cand.get("primary_expertise"),
         currentPhase=cand.get("current_phase", "onboarding"),
         userId=str(user["_id"]),
+        resumeName=resume_name,
+        resumeId=resume_id,
+        resumeStatus=resume_status,
     )
 
 
@@ -205,9 +235,9 @@ async def delete_candidate(request: Request):
     candidate_id = _get_candidate_id_from_request(request)
     db = get_sync_db()
     # Also delete the user and all related data
-    user_id = db.candidates.find_one({"_id": candidate_id}, {"user_id": 1})
+    user_id = db.candidates.find_one({"_id": _to_objectid(candidate_id)}, {"user_id": 1})
     if user_id:
-        db.candidates.delete_one({"_id": candidate_id})
+        db.candidates.delete_one({"_id": _to_objectid(candidate_id)})
         db.users.delete_one({"_id": user_id["user_id"]})
     return {"success": True, "message": "Candidate deleted"}
 
@@ -243,12 +273,12 @@ async def patch_candidate(request: Request, body: CandidatePatchRequest):
 
     from app.db.mongodb import get_sync_db
     db = get_sync_db()
-    result = db.candidates.update_one({"_id": candidate_id}, {"$set": updates})
+    result = db.candidates.update_one({"_id": _to_objectid(candidate_id)}, {"$set": updates})
 
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Candidate not found")
 
-    updated_cand = db.candidates.find_one({"_id": candidate_id})
+    updated_cand = db.candidates.find_one({"_id": _to_objectid(candidate_id)})
     current_phase = updated_cand.get("current_phase", "onboarding") if updated_cand else None
 
     return CandidatePatchResponse(success=True, currentPhase=current_phase, message="Candidate updated")

@@ -8,9 +8,10 @@ import { INDIA_STATES_DISTRICTS, INDIAN_STATES } from '@/data/india-states-distr
 import SearchableSelect from '@/components/SearchableSelect';
 
 interface ResumeData {
+  id?: string;
   name: string;
   size: string;
-  data: string; // base64 encoded file
+  data: string | null; // base64 encoded file
 }
 
 interface FormData {
@@ -93,6 +94,14 @@ export default function OnboardingPage() {
               primaryExpertise: candidate.primaryExpertise || '',
               districtCustom: candidate.districtCustom || '',
             });
+            if (candidate.resumeName) {
+              setResume({
+                id: candidate.resumeId,
+                name: candidate.resumeName,
+                size: '',
+                data: null,
+              });
+            }
           }
         }
       } catch (error) {

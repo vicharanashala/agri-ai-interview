@@ -1,15 +1,15 @@
 """
-Candidate Document Upload & List Endpoints — MongoDB.
+Candidate Document Upload, List & Download Endpoints — Storage + MongoDB metadata.
 """
 from fastapi import APIRouter, HTTPException, UploadFile, File, Depends, Request, Response
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, timezone
-import base64
 import uuid
 
 from app.db.mongodb import get_sync_db
 from app.api.candidate.route import _get_candidate_id_from_request
+from bson import ObjectId
 
 router = APIRouter(prefix="/api/candidate", tags=["candidate-documents"])
 
@@ -34,6 +34,12 @@ MAX_SIZES = {
     "bank_details": 5 * 1024 * 1024,
     "other_docs": 5 * 1024 * 1024,
     "noc": 5 * 1024 * 1024,
+}
+
+_CONTENT_TYPES = {
+    "pdf": "application/pdf",
+    "doc": "application/msword",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 }
 
 
@@ -61,6 +67,7 @@ class DocumentInfo(BaseModel):
     fileIndex: int
     fileName: str
     fileType: str
+    storagePath: str
     createdAt: str
 
 
@@ -97,8 +104,9 @@ async def upload_documents(
     candidate_id = _get_candidate_id_from_request(request)
     db = get_sync_db()
 
-    # Verify candidate exists
-    if not db.candidates.find_one({"_id": candidate_id}):
+    # Verify candidate exists — _id is ObjectId in MongoDB
+    cand = db.candidates.find_one({"_id": ObjectId(candidate_id)})
+    if not cand:
         raise HTTPException(status_code=404, detail="Candidate not found")
 
     files_to_save = {
@@ -117,6 +125,8 @@ async def upload_documents(
         "other_docs": other_docs,
         "noc": noc,
     }
+
+    from app.core.storage import get_storage, candidate_docs_path
 
     uploaded: List[DocumentInfo] = []
     now = datetime.now(timezone.utc)
@@ -141,6 +151,13 @@ async def upload_documents(
         })
         file_index = existing_count + 1
 
+        # Write to storage
+        storage = get_storage()
+        safe_filename = f"{uuid.uuid4()}_{file.filename}"
+        storage_path = candidate_docs_path(candidate_id, field_name, safe_filename)
+        content_type_str = _CONTENT_TYPES.get(file_type, "application/octet-stream")
+        await storage.write(storage_path, file_bytes, content_type=content_type_str)
+
         doc_id = str(uuid.uuid4())
         doc = {
             "_id": doc_id,
@@ -149,7 +166,7 @@ async def upload_documents(
             "file_index": file_index,
             "file_name": file.filename,
             "file_type": file_type,
-            "file_data": base64.b64encode(file_bytes).decode("utf-8"),
+            "storage_path": storage_path,
             "created_at": now,
         }
         db.candidate_documents.insert_one(doc)
@@ -159,6 +176,7 @@ async def upload_documents(
             fileIndex=file_index,
             fileName=file.filename,
             fileType=file_type,
+            storagePath=storage_path,
             createdAt=now.isoformat(),
         ))
 
@@ -185,6 +203,7 @@ async def list_documents(request: Request):
             fileIndex=doc.get("file_index", 1),
             fileName=doc.get("file_name", ""),
             fileType=doc.get("file_type", ""),
+            storagePath=doc.get("storage_path", ""),
             createdAt=doc.get("created_at", "").isoformat() if doc.get("created_at") else "",
         )
         for doc in cursor
@@ -209,20 +228,25 @@ async def download_document(field_name: str, request: Request):
 
     if len(docs) == 1:
         doc = docs[0]
-        file_bytes = base64.b64decode(doc.get("file_data", "").encode("utf-8"))
-        media_types = {
-            "pdf": "application/pdf",
-            "doc": "application/msword",
-            "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        }
-        media_type = media_types.get(doc.get("file_type", ""), "application/octet-stream")
+        storage_path = doc.get("storage_path", "")
+        if not storage_path:
+            raise HTTPException(status_code=404, detail="Document storage path not found")
+
+        from app.core.storage import get_storage
+        storage = get_storage()
+        try:
+            file_bytes = await storage.read(storage_path)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="Document file not found in storage")
+
+        media_type = _CONTENT_TYPES.get(doc.get("file_type", ""), "application/octet-stream")
         return Response(
             content=file_bytes,
             media_type=media_type,
             headers={"Content-Disposition": f'attachment; filename="{doc.get("file_name", "")}"'},
         )
 
-    # Multiple files
+    # Multiple files — return list
     return {
         "fieldName": field_name,
         "files": [
@@ -247,9 +271,21 @@ async def delete_documents(field_name: str, request: Request):
     if idx_param:
         query["file_index"] = int(idx_param)
 
-    result = db.candidate_documents.delete_many(query)
-
-    if result.deleted_count == 0:
+    docs = list(db.candidate_documents.find(query))
+    if not docs:
         raise HTTPException(status_code=404, detail="No documents found to delete")
 
-    return {"success": True, "deleted": result.deleted_count}
+    # Delete files from storage
+    from app.core.storage import get_storage
+    storage = get_storage()
+    for doc in docs:
+        storage_path = doc.get("storage_path", "")
+        if storage_path:
+            try:
+                await storage.delete(storage_path)
+            except FileNotFoundError:
+                pass  # Already gone, fine
+
+    db.candidate_documents.delete_many(query)
+
+    return {"success": True, "deleted": len(docs)}

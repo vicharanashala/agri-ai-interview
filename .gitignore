@@ -66,3 +66,4 @@ frontend/prisma/migrations/
 
 # Uploaded resumes
 backend/uploads/resumes/
+backend/backend/uploads/candidates/

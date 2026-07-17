@@ -67,7 +67,11 @@ async def create_session(request: Request, response: Response):
     if not user:
         raise HTTPException(status_code=401, detail="Invalid session establishment")
 
-    candidate = db.candidates.find_one({"_id": candidate_id, "user_id": user["_id"]})
+    # user_id is stored as string in candidates, so convert consistently
+    user_id_str = str(user["_id"])
+    candidate = db.candidates.find_one({
+        "user_id": user_id_str,
+    })
     if not candidate:
         raise HTTPException(status_code=401, detail="Invalid session establishment")
 
@@ -81,12 +85,12 @@ async def create_session(request: Request, response: Response):
     session_data = {
         "token_hash": token_hash,
         "user_id": user_id,
-        "candidate_id": candidate_id,
+        "candidate_id": str(candidate["_id"]),
     }
 
-    store.setex(_session_key(candidate_id), _SESSION_TTL, json.dumps(session_data))
+    store.setex(_session_key(str(candidate["_id"])), _SESSION_TTL, json.dumps(session_data))
 
-    print(f"[SESSION CREATE] candidate_id={candidate_id} | token(first 8)={token[:8]} | token_hash(first 8)={token_hash[:8]}")
+    print(f"[SESSION CREATE] candidate_id={str(candidate['_id'])} | token(first 8)={token[:8]} | token_hash(first 8)={token_hash[:8]}")
 
     # Set httpOnly cookie
     response.set_cookie(

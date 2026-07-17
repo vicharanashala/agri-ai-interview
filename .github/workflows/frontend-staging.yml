@@ -49,11 +49,6 @@ jobs:
           NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL_STAGING }}
           NEXTAUTH_URL: ${{ vars.NEXTAUTH_URL_STAGING }}
 
-      - name: Export to static
-        run: |
-          cd frontend
-          npx next export -o out
-
       - uses: actions/upload-artifact@v4
         with:
           name: frontend-build-staging

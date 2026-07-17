@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone',
+  output: 'export',
   reactStrictMode: true,
   async rewrites() {
     // Use BACKEND_URL for Docker-internal routing, NEXT_PUBLIC_API_URL for host access

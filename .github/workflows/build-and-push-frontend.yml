@@ -41,3 +41,4 @@ jobs:
           build-args: |
             NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL_STAGING }}
             NEXTAUTH_URL=${{ vars.NEXTAUTH_URL_STAGING }}
+            BACKEND_URL=${{ vars.NEXT_PUBLIC_API_URL_STAGING }}

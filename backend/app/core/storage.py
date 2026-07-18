@@ -12,7 +12,7 @@ Usage:
 
 Backend is selected via STORAGE_BACKEND env var:
     local  → LocalFileStorage  (STORAGE_LOCAL_PATH / candidates / {cid} / ...)
-    gcs    → GCSStorage        (GCS_BUCKET_NAME / candidates / {cid} / ...)
+    gcs    → GCSStorage        (GCS_BUCKET_NAME / GCS_BASE_PREFIX / candidates / {cid} / ...)
 """
 
 from __future__ import annotations
@@ -227,19 +227,33 @@ def reset_storage() -> None:
     _storage_instance = None
 
 
-# ── Path helpers ──────────────────────────────────────────────────────────────
+# ── Path helpers ───────────────────────────────────────────────────────────────
+
+def _prefix_path(path: str) -> str:
+    """Prepend GCS_BASE_PREFIX to a storage path when using GCS."""
+    prefix = settings.GCS_BASE_PREFIX.strip("/")
+    if not prefix:
+        return path
+    return f"{prefix}/{path}"
+
 
 def candidate_docs_path(candidate_id: str, field_name: str, filename: str) -> str:
     """
     Build a storage path for a candidate document.
-    e.g. candidates/abc123/updated_resume/resume.pdf
+    e.g. agri-interview-platform/staging/candidates/abc123/updated_resume/resume.pdf
     """
-    return f"candidates/{candidate_id}/{field_name}/{filename}"
+    raw = f"candidates/{candidate_id}/{field_name}/{filename}"
+    if settings.STORAGE_BACKEND == StorageBackend.GCS.value:
+        return _prefix_path(raw)
+    return raw
 
 
 def candidate_resume_path(candidate_id: str, filename: str) -> str:
     """
     Build a storage path for a candidate's resume.
-    e.g. candidates/abc123/resume/resume.pdf
+    e.g. agri-interview-platform/staging/candidates/abc123/resume/resume.pdf
     """
-    return f"candidates/{candidate_id}/resume/{filename}"
+    raw = f"candidates/{candidate_id}/resume/{filename}"
+    if settings.STORAGE_BACKEND == StorageBackend.GCS.value:
+        return _prefix_path(raw)
+    return raw

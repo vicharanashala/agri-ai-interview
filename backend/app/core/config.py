@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     # Storage
     STORAGE_BACKEND: str = "local"  # local | gcs
     STORAGE_LOCAL_PATH: str = "./uploads"
+    GCS_BUCKET_NAME: str = ""
+    GCS_BASE_PREFIX: str = ""  # e.g. "agri-interview-platform/staging"
 
 
 settings = Settings()

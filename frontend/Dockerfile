@@ -11,8 +11,10 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 ARG NEXT_PUBLIC_API_URL=http://localhost:8000
+ARG NEXT_PUBLIC_ADMIN_API_URL=http://localhost:8000
 ARG BACKEND_URL=http://localhost:8000
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_ADMIN_API_URL=$NEXT_PUBLIC_ADMIN_API_URL
 ENV BACKEND_URL=$BACKEND_URL
 
 RUN npm run build
@@ -30,6 +32,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 USER nextjs
+
+ENV BACKEND_URL=http://localhost:8000
 
 EXPOSE 3000
 ENV PORT=3000

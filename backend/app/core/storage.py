@@ -137,7 +137,7 @@ class GCSStorage(Storage):
 
     def _get_bucket(self):
         from google.cloud import storage
-        creds_path = settings.GOOGLE_APPLICATION_CREDENTIALS
+        creds_path = getattr(settings, 'GOOGLE_APPLICATION_CREDENTIALS', None)
         if creds_path and os.path.exists(creds_path):
             client = storage.Client.from_service_account_json(creds_path)
         else:

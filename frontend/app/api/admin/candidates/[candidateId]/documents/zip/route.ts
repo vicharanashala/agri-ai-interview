@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authOptions } from "@/lib/auth-options";
 
-const API_BASE = process.env.BACKEND_URL;
+const API_BASE = process.env.NEXT_PUBLIC_API_URL;
 
 export async function GET(
   request: NextRequest,
@@ -12,9 +12,14 @@ export async function GET(
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { candidateId } = await params;
+    const adminSession = request.cookies.get("admin_session")?.value;
+    const headers = {} as Record<string, string>;
+    if (adminSession) headers["Cookie"] = `admin_session=${adminSession}`;
+    if (process.env.ADMIN_SECRET) headers["X-Admin-Token"] = process.env.ADMIN_SECRET;
+
     const res = await fetch(
       `${API_BASE}/api/admin/candidates/${candidateId}/documents/zip`,
-      { headers: { "X-Admin-Token": process.env.ADMIN_SECRET || "" } }
+      { headers }
     );
 
     if (!res.ok) {

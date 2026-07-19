@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL;
+// BACKEND_URL is server-only (not NEXT_PUBLIC_), set by docker-compose to the Docker service name.
+const API_BASE = process.env.BACKEND_URL || "http://localhost:8003";
 
 export async function GET(
   request: NextRequest,
@@ -8,13 +9,16 @@ export async function GET(
 ) {
   try {
     const { candidateId } = await params;
-    // Forward cookies from the browser request to the backend
-    // (admin_session cookie is set by backend on admin login)
+    // Forward cookies AND X-Admin-Token from the browser request to the backend.
+    // withAuth (DocumentsTab) sends X-Admin-Token; cookie handles cross-origin cookie auth.
     const cookieHeader = request.headers.get("cookie") || "";
+    const adminToken = request.headers.get("x-admin-token") || "";
+    const headers: Record<string, string> = { cookie: cookieHeader };
+    if (adminToken) headers["x-admin-token"] = adminToken;
 
     const res = await fetch(
       `${API_BASE}/api/admin/candidates/${candidateId}/documents/zip`,
-      { headers: { cookie: cookieHeader } }
+      { headers }
     );
 
     if (!res.ok) {

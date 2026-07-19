@@ -20,14 +20,46 @@ const PASS_PHASES = ['documents', 'offer', 'signing', 'joining'];
 export default function DocumentsTab({ adminToken }: Props) {
   const [candidates, setCandidates] = useState<CandidateRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState<string | null>(null);
 
-  const withAuth = useCallback((url: string, opts: RequestInit = {}) => {
+  const withAuth = useCallback((url: string, opts: RequestInit = {}): Promise<Response> => {
     const headers: Record<string, string> = {
       ...((opts.headers as Record<string, string>) || {}),
     };
     if (adminToken) headers['X-Admin-Token'] = adminToken;
     return fetch(url, { ...opts, headers, credentials: 'include' });
   }, [adminToken]);
+
+  const downloadZip = useCallback(async (candidateId: string, fullName: string | null) => {
+    setDownloading(candidateId);
+    try {
+      const res = await withAuth(`/api/admin/candidates/${candidateId}/documents/zip`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.detail || 'Download failed');
+        return;
+      }
+      const blob = await res.blob();
+      const disposition = res.headers.get('content-disposition') || '';
+      const match = disposition.match(/filename="(.+)"/);
+      const filename = match
+        ? match[1]
+        : `${fullName || candidateId}_documents.zip`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(e);
+      alert('Download failed');
+    } finally {
+      setDownloading(null);
+    }
+  }, [withAuth]);
 
   useEffect(() => {
     const load = async () => {
@@ -90,12 +122,21 @@ export default function DocumentsTab({ adminToken }: Props) {
                 </td>
                 <td style={{ padding: '10px 12px' }}>
                   {c.documentsSubmitted ? (
-                    <a
-                      href={`/api/admin/candidates/${c.id}/documents/zip`}
-                      style={{ color: '#08CB00', textDecoration: 'none', fontSize: 13 }}
+                    <button
+                      onClick={() => downloadZip(c.id, c.fullName)}
+                      disabled={downloading === c.id}
+                      style={{
+                        color: '#08CB00',
+                        background: 'none',
+                        border: 'none',
+                        cursor: downloading === c.id ? 'default' : 'pointer',
+                        fontSize: 13,
+                        padding: 0,
+                        opacity: downloading === c.id ? 0.6 : 1,
+                      }}
                     >
-                      Download ZIP
-                    </a>
+                      {downloading === c.id ? 'Downloading…' : 'Download ZIP'}
+                    </button>
                   ) : (
                     <span style={{ color: '#d1d5db', fontSize: 13 }}>—</span>
                   )}

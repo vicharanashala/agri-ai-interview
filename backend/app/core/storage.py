@@ -138,12 +138,11 @@ class GCSStorage(Storage):
     def _get_bucket(self):
         from google.cloud import storage
         creds_path = settings.GOOGLE_APPLICATION_CREDENTIALS
-        if not creds_path or not os.path.exists(creds_path):
-            raise RuntimeError(
-                "GCSStorage requires GOOGLE_APPLICATION_CREDENTIALS to be set to a valid "
-                "service-account JSON file path."
-            )
-        client = storage.Client.from_service_account_json(creds_path)
+        if creds_path and os.path.exists(creds_path):
+            client = storage.Client.from_service_account_json(creds_path)
+        else:
+            # Use Application Default Credentials (ADC) — works on Cloud Run, GCE, etc.
+            client = storage.Client()
         return client.bucket(settings.GCS_BUCKET_NAME)
 
     async def write(self, path: str, data: bytes, content_type: str = "application/octet-stream") -> UploadResult:

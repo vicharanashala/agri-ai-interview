@@ -16,3 +16,4 @@ python-jose
 httpx
 pdfplumber
 python-docx
+google-cloud-storage

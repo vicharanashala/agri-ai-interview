@@ -143,7 +143,8 @@ class GCSStorage(Storage):
         else:
             # Use Application Default Credentials (ADC) — works on Cloud Run, GCE, etc.
             client = storage.Client()
-        return client.bucket(settings.GCS_BUCKET_NAME)
+        bucket_name = settings.GCS_BUCKET_NAME.strip()
+        return client.bucket(bucket_name)
 
     async def write(self, path: str, data: bytes, content_type: str = "application/octet-stream") -> UploadResult:
         bucket = self._get_bucket()
@@ -230,7 +231,7 @@ def reset_storage() -> None:
 
 def _prefix_path(path: str) -> str:
     """Prepend GCS_BASE_PREFIX to a storage path when using GCS."""
-    prefix = settings.GCS_BASE_PREFIX.strip("/")
+    prefix = settings.GCS_BASE_PREFIX.strip().strip("/")
     if not prefix:
         return path
     return f"{prefix}/{path}"

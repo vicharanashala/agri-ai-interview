@@ -1,7 +1,6 @@
 import type { NextAuthOptions } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import GoogleProvider from 'next-auth/providers/google'
-import bcrypt from 'bcryptjs'
 
 const BACKEND_URL = process.env.BACKEND_URL ?? ''
 
@@ -55,16 +54,16 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async session({ session, token }) {
+    async session({ session, token }: any) {
       if (session.user) {
         if (token.sub) (session.user as { id?: string }).id = token.sub
-        if (token.email) (session.user as { email?: string }).email = token.email as string
+        if (token.email) (session.user as { email?: string }).email = token.email
         if (token.candidateId)
-          (session.user as { candidateId?: string }).candidateId = token.candidateId as string
+          (session.user as { candidateId?: string }).candidateId = token.candidateId
       }
       return session
     },
-    async jwt({ token, user, account, trigger }) {
+    async jwt({ token, user, account }: any) {
       if (user) {
         if (account?.provider === 'credentials') {
           token.sub = user.id
@@ -75,11 +74,6 @@ export const authOptions: NextAuthOptions = {
         if (account?.provider === 'google') {
           const email = user.email!
           const name = user.name ?? email.split('@')[0]
-          // Tell NextAuth to use the Google account; no DB ops needed here
-          // We don't create users/candidates at login — that happens on first
-          // Next.js API call to /api/candidate (onboarding form submit).
-          // The candidate_id will be fetched on the session callback on the
-          // Next.js side via the existing /api/candidate?email=... endpoint.
           token.sub = user.id ?? `google-${Buffer.from(email).toString('base64').slice(0, 12)}`
           token.email = email
           token.name = name
@@ -91,4 +85,4 @@ export const authOptions: NextAuthOptions = {
     },
   },
   pages: { signIn: '/login', error: '/login' },
-}
+} as NextAuthOptions

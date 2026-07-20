@@ -15,6 +15,19 @@ async function getBackendCandidateByEmail(email: string) {
 }
 
 export const authOptions: NextAuthOptions = {
+  trustHost: true,
+  session: { strategy: 'jwt', maxAge: 30 * 24 * 60 * 60 },
+  cookies: {
+    sessionToken: {
+      name: `__Secure-next-auth.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: true,
+      },
+    },
+  },
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID ?? '',
@@ -41,7 +54,6 @@ export const authOptions: NextAuthOptions = {
       },
     }),
   ],
-  session: { strategy: 'jwt', maxAge: 30 * 24 * 60 * 60 },
   callbacks: {
     async session({ session, token }) {
       if (session.user) {

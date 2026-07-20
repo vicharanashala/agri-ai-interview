@@ -53,7 +53,8 @@ jobs:
             ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.FRONTEND_IMAGE }}:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
           build-args: |
-            NEXT_PUBLIC_API_URL=http://100.100.108.101:8003
+            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL_STAGING }}
+            NEXT_PUBLIC_ADMIN_API_URL=${{ vars.NEXT_PUBLIC_API_URL_STAGING }}
 
   deploy:
     name: Deploy to VM

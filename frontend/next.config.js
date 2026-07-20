@@ -20,10 +20,7 @@ const nextConfig = {
           ],
           destination: `${process.env.BACKEND_URL || 'http://agri-interview-backend:8000'}/api/admin/:path*`,
         },
-        {
-          source: '/api/candidate/:path*',
-          destination: `${process.env.NEXT_PUBLIC_API_URL}/api/candidate/:path*`,
-        },
+
       ],
     };
   },

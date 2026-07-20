@@ -15,7 +15,6 @@ async function getBackendCandidateByEmail(email: string) {
 }
 
 export const authOptions: NextAuthOptions = {
-  trustHost: true,
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID ?? '',

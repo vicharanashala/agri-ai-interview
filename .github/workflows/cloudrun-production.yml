@@ -138,6 +138,7 @@ jobs:
             NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL_PROD }}
             NEXTAUTH_URL=${{ vars.NEXTAUTH_URL_PROD }}
             NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET_PROD }}
+            AUTH_TRUST_HOST=true
             GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
             GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
             INTERNAL_SERVICE_TOKEN=${{ secrets.INTERNAL_SERVICE_TOKEN_PROD }}

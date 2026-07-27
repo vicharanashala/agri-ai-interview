@@ -64,7 +64,11 @@ export default function UploadDocumentsPage() {
   const router = useRouter();
 
   // Foundation course must be completed before this step is accessible
-  const foundationCompleted = localStorage.getItem('foundationCourseCompleted') === 'true';
+  const [foundationCompleted, setFoundationCompleted] = useState(false);
+
+  useEffect(() => {
+    setFoundationCompleted(localStorage.getItem('foundationCourseCompleted') === 'true');
+  }, []);
 
   const requiredKeys = ALL_FIELDS.filter(f => f.required).map(f => f.key);
   const allRequiredUploaded = requiredKeys.every(

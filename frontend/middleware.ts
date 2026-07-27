@@ -7,6 +7,7 @@ const protectedRoutes = [
   '/interview',
   '/onboarding',
   '/summary',
+  '/foundation-course',
   '/upload-documents',
 ];
 

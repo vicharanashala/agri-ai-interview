@@ -6,7 +6,7 @@ import { signOut } from 'next-auth/react';
 import styles from './page.module.css';
 import HowToUseModal from '@/components/HowToUseModal';
 
-type Phase = 1 | 2 | 3 | 4;
+type Phase = 1 | 2 | 3 | 4 | 5;
 
 interface PhaseInfo {
   id: Phase;
@@ -58,7 +58,8 @@ export default function DashboardPage() {
       'onboarding': 1,
       'interview':  2,
       'summary':    3,
-      'documents':  4,
+      'foundation': 4,
+      'documents':  5,
     };
 
     const checkProfile = async () => {
@@ -76,20 +77,23 @@ export default function DashboardPage() {
         const dbPhaseNum = (DB_PHASE_NUM[candidate.currentPhase] ?? 1) as Phase;
 
         // 2. Pull latest flag values from DB (authoritative) and localStorage (for in-flight updates)
-        const dbSummaryVisited  = !!candidate.passedAndVisitedSummary;
-        const lsSummaryVisited  = localStorage.getItem('passedAndVisitedSummary') === 'true';
+        const dbSummaryVisited      = !!candidate.passedAndVisitedSummary;
+        const lsSummaryVisited      = localStorage.getItem('passedAndVisitedSummary') === 'true';
+        const lsFoundationCompleted = localStorage.getItem('foundationCourseCompleted') === 'true';
 
         const summaryVisited = dbSummaryVisited || lsSummaryVisited;
 
-        // 3. Pull documentsSubmitted flag from DB
-        const docsSubmitted = !!candidate.documentsSubmitted;
+        // 3. Pull milestone flags from DB and localStorage
+        const docsSubmitted       = !!candidate.documentsSubmitted;
+        const foundationCompleted = lsFoundationCompleted || !!candidate.foundationCourseCompleted;
         setDocumentsSubmitted(docsSubmitted);
 
         // 4. Reconstruct actual phase from DB phase + flags
         let actualPhase: Phase = dbPhaseNum;
 
-        if (summaryVisited && actualPhase < 3) actualPhase = 3;
-        if (docsSubmitted && actualPhase < 4) actualPhase = 4;
+        if (summaryVisited       && actualPhase < 3) actualPhase = 3;
+        if (foundationCompleted  && actualPhase < 4) actualPhase = 4;
+        if (docsSubmitted        && actualPhase < 5) actualPhase = 5;
 
         setCurrentPhase(actualPhase);
         setHasCompletedInterview(actualPhase >= 3);
@@ -134,9 +138,10 @@ export default function DashboardPage() {
 
     const loadAttempts = async () => {
       try {
-        const res = await fetch('/api/candidate/attempts');
+        const res = await fetch('/api/candidate/attempts', { credentials: 'include' });
         if (res.ok) {
           const data = await res.json();
+          console.log('[loadAttempts] API response:', JSON.stringify(data));
           setAttempts(data.attempts ?? []);
           // Always sync cooldown from fresh API response — deadline is computed
           // dynamically so stale localStorage values must not override it.
@@ -206,9 +211,15 @@ export default function DashboardPage() {
     },
     {
       id: 4,
+      name: 'Foundation Course',
+      description: 'Complete the foundation course to unlock document upload',
+      status: currentPhase > 4 ? 'completed' : currentPhase >= 4 ? 'current' : 'locked',
+    },
+    {
+      id: 5,
       name: 'Upload Documents',
       description: 'Submit required documents to complete the process',
-      status: documentsSubmitted ? 'completed' : currentPhase >= 4 ? 'current' : 'locked',
+      status: documentsSubmitted ? 'completed' : currentPhase >= 5 ? 'current' : 'locked',
     },
   ];
 
@@ -252,6 +263,9 @@ export default function DashboardPage() {
           router.push('/summary');
           break;
         case 4:
+          router.push('/foundation-course');
+          break;
+        case 5:
           router.push('/upload-documents');
           break;
       }
@@ -272,7 +286,7 @@ export default function DashboardPage() {
   const handleAdvancePhase = (completedPhase: Phase) => {
     // Only advance if the current phase is completed
     // This is called by child pages when they finish their tasks
-    if (completedPhase === currentPhase && currentPhase < 4) {
+    if (completedPhase === currentPhase && currentPhase < 5) {
       const nextPhase = (currentPhase + 1) as Phase;
       setCurrentPhase(nextPhase);
       sessionStorage.setItem('interviewPhase', String(nextPhase));
@@ -356,11 +370,11 @@ export default function DashboardPage() {
         <div className={styles.progressBar}>
           <div 
             className={styles.progressFill} 
-            style={{ width: `${documentsSubmitted ? 100 : (currentPhase - 1) * 25}%` }}
+            style={{ width: `${documentsSubmitted ? 100 : Math.round(((currentPhase - 1) / 4) * 100)}%` }}
           />
         </div>
         <span className={styles.progressPercent}>
-          {documentsSubmitted ? 100 : (currentPhase - 1) * 25}% Complete
+          {documentsSubmitted ? 100 : Math.round(((currentPhase - 1) / 4) * 100)}% Complete
         </span>
       </div>
 

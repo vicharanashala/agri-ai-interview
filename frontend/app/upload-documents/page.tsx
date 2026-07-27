@@ -63,6 +63,13 @@ export default function UploadDocumentsPage() {
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const router = useRouter();
 
+  // Foundation course must be completed before this step is accessible
+  const [foundationCompleted, setFoundationCompleted] = useState(false);
+
+  useEffect(() => {
+    setFoundationCompleted(localStorage.getItem('foundationCourseCompleted') === 'true');
+  }, []);
+
   const requiredKeys = ALL_FIELDS.filter(f => f.required).map(f => f.key);
   const allRequiredUploaded = requiredKeys.every(
     key => files[key] && files[key].length > 0
@@ -182,7 +189,7 @@ export default function UploadDocumentsPage() {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.detail || 'Upload failed.');
       }
-      await syncPhaseToDb(4, { documentsSubmitted: true });
+      await syncPhaseToDb(5, { documentsSubmitted: true });
       setSubmitSuccess(true);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Upload failed.';
@@ -191,6 +198,27 @@ export default function UploadDocumentsPage() {
       setIsLoading(false);
     }
   };
+
+  // Locked state: foundation course must be completed first
+  if (!foundationCompleted) {
+    return (
+      <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, fontFamily: 'system-ui, sans-serif' }}>
+        <div style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: 32, maxWidth: 440, width: '100%', color: '#fff', textAlign: 'center' }}>
+          <div style={{ fontSize: 40, marginBottom: 16 }}>🔒</div>
+          <h1 style={{ color: 'rgba(255,255,255,0.9)', fontSize: 20, margin: '0 0 12px' }}>Foundation Course Required</h1>
+          <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, lineHeight: 1.6, margin: '0 0 24px' }}>
+            You must complete the Foundation Course before uploading documents.
+          </p>
+          <button
+            onClick={() => router.push('/foundation-course')}
+            style={{ background: '#08CB00', color: '#000', border: 'none', borderRadius: 8, padding: '10px 24px', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'system-ui' }}
+          >
+            Go to Foundation Course
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (submitSuccess) {
     return (

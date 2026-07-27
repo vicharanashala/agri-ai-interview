@@ -7,6 +7,7 @@ export interface Candidate {
   phone?: string
   createdAt: Date
   updatedAt: Date
+  foundationCourseCompleted?: boolean
 }
 
 export interface InterviewSession {

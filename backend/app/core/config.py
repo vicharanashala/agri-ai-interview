@@ -45,5 +45,9 @@ class Settings(BaseSettings):
     GCS_BUCKET_NAME: str = ""
     GCS_BASE_PREFIX: str = ""  # e.g. "agri-interview-platform/staging"
 
+    # ViBe integration (Foundation Course)
+    VIBE_API_URL: str = "https://vibe.vicharanashala.ai"
+    VIBE_COURSE_ID: str = "6a2be954ca990e71be4e3751"
+
 
 settings = Settings()

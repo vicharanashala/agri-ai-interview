@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import styles from './page.module.css';
 import { syncPhaseToDb } from '@/lib/phaseSync';
+import { interceptAuthFetch } from '@/lib/auth-fetch';
 
 const POLL_INTERVAL_MS = 3000;
 const POLL_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes max
@@ -54,7 +55,7 @@ export default function SummaryPage() {
           if (data.evaluation) {
             localStorage.setItem('interviewEvaluation', JSON.stringify(data.evaluation));
           }
-          await syncPhaseToDb(data.result === 'PASS' ? 4 : 3);
+          await syncPhaseToDb(data.result === 'PASS' ? 4 : 3);  // PASS → phase 4 (foundation), FAIL → phase 3 (summary)
           setEvaluating(false);
           setLoading(false);
         } else if (data.status === 'error') {
@@ -80,6 +81,9 @@ export default function SummaryPage() {
 
   // ── Main load effect ────────────────────────────────────────────────
   useEffect(() => {
+    // Auto-attach Authorization header to all fetch calls on this page
+    const restore = interceptAuthFetch();
+
     const justCompleted =
       sessionStorage.getItem('interviewJustCompleted') === 'true' ||
       localStorage.getItem('interviewJustCompleted') === 'true';
@@ -109,6 +113,7 @@ export default function SummaryPage() {
         (async () => {
           try {
             const res = await fetch('/api/candidate/attempts', {
+              credentials: 'include',
               headers: {
                 Authorization: `Bearer ${sessionStorage.getItem('candidate_session_token') || ''}`,
               },
@@ -121,7 +126,7 @@ export default function SummaryPage() {
                 setScore(latest.overall_score ?? null);
                 localStorage.setItem('interviewResult', latest.result ?? '');
                 localStorage.setItem('interviewScore', String(latest.overall_score ?? ''));
-                if (latest.result === 'PASS') await syncPhaseToDb(4);
+                if (latest.result === 'PASS') await syncPhaseToDb(4);  // foundation
                 setEvaluating(false);
                 setLoading(false);
                 return;
@@ -137,6 +142,7 @@ export default function SummaryPage() {
       (async () => {
         try {
           const res = await fetch('/api/candidate/attempts', {
+            credentials: 'include',
             headers: {
               Authorization: `Bearer ${sessionStorage.getItem('candidate_session_token') || ''}`,
             },
@@ -155,6 +161,7 @@ export default function SummaryPage() {
       (async () => {
         try {
           const res = await fetch('/api/candidate/attempts', {
+            credentials: 'include',
             headers: {
               Authorization: `Bearer ${sessionStorage.getItem('candidate_session_token') || ''}`,
             },
@@ -177,9 +184,9 @@ export default function SummaryPage() {
           if (storedResult) setResult(storedResult);
           if (storedScore) setScore(Number(storedScore));
         } finally {
-          // Sync phase if PASS — backend already updated currentPhase to 'documents'
+          // Sync phase if PASS — backend already updated currentPhase to 'foundation'
           if (localStorage.getItem('interviewResult') === 'PASS') {
-            await syncPhaseToDb(4);
+            await syncPhaseToDb(4);  // foundation
           }
           setPhaseSynced(true);
           setLoading(false);
@@ -187,7 +194,7 @@ export default function SummaryPage() {
       })();
     }
 
-    return () => clearPolling();
+    return () => { clearPolling(); restore(); };
   }, []);
 
   const formatEndReason = (reason: string | null): string => {
@@ -284,7 +291,7 @@ export default function SummaryPage() {
         {isPass && (
           <div className={styles.passMessage}>
             <p>Congratulations on passing the interview!</p>
-            <p>Please upload the required documents to complete your application.</p>
+            <p>Please complete the Foundation Course to proceed.</p>
           </div>
         )}
 

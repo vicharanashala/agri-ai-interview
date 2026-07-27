@@ -418,10 +418,9 @@ export default function InterviewPage() {
   // Calls /end and immediately shows the closing page.
   const endInterviewAndClose = async (effectiveInterviewId: string, endReason: string) => {
     // Fire-and-forget — /end now returns instantly and triggers background eval
-    fetch(`/api/interview/end/${effectiveInterviewId}`, {
+    authFetch(`/api/interview/end/${effectiveInterviewId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
       body: JSON.stringify({ end_reason: endReason }),
     }).catch(() => { /* non-fatal — backend will still process */ });
 

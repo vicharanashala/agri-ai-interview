@@ -6,16 +6,19 @@
  *   1 = onboarding   → "onboarding"
  *   2 = interview    → "interview"
  *   3 = summary      → "summary"
- *   4 = documents    → "documents"
+ *   4 = foundation   → "foundation"
+ *   5 = documents    → "documents"
  *
  * Milestone flags:
- *   passedAndVisitedSummary → user has seen their summary
- *   documentsSubmitted      → user has submitted documents (Phase 4)
+ *   passedAndVisitedSummary  → user has seen their summary
+ *   foundationCourseCompleted → user has completed the foundation course (Phase 4)
+ *   documentsSubmitted       → user has submitted documents (Phase 5)
  */
 export async function syncPhaseToDb(
   phase: number,
   flags?: {
     passedAndVisitedSummary?: boolean
+    foundationCourseCompleted?: boolean
     documentsSubmitted?: boolean
   }
 ): Promise<void> {

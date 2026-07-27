@@ -109,6 +109,13 @@ async def upload_documents(
     if not cand:
         raise HTTPException(status_code=404, detail="Candidate not found")
 
+    # Block document upload until Foundation Course is verified
+    if not cand.get("foundation_course_completed"):
+        raise HTTPException(
+            status_code=403,
+            detail="Foundation Course must be completed before uploading documents.",
+        )
+
     files_to_save = {
         "updated_resume": updated_resume,
         "marksheet_10": marksheet_10,

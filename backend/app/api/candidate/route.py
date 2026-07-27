@@ -26,7 +26,7 @@ import uuid
 
 router = APIRouter(prefix="/api/candidate", tags=["candidate"])
 
-_PHASE_MAP = {1: "onboarding", 2: "interview", 3: "summary", 4: "documents"}
+_PHASE_MAP = {1: "onboarding", 2: "interview", 3: "summary", 4: "foundation", 5: "documents"}
 
 
 # ── Auth helper ───────────────────────────────────────────────────────────────
@@ -87,6 +87,7 @@ class CandidateProfileResponse(BaseModel):
     resumeName: Optional[str] = None
     resumeId: Optional[str] = None
     resumeStatus: Optional[str] = None
+    foundationCourseCompleted: Optional[bool] = False
 
 
 class CandidatePatchRequest(BaseModel):
@@ -95,6 +96,7 @@ class CandidatePatchRequest(BaseModel):
     passedAndVisitedSummary: Optional[bool] = None
     joiningDetailsVisited: Optional[bool] = None
     documentsSubmitted: Optional[bool] = None
+    foundationCourseCompleted: Optional[bool] = None
 
 
 class CandidatePatchResponse(BaseModel):
@@ -226,6 +228,7 @@ async def get_candidate_profile(email: Optional[str] = Query(None)):
         resumeName=resume_name,
         resumeId=resume_id,
         resumeStatus=resume_status,
+        foundationCourseCompleted=cand.get("foundation_course_completed", False),
     )
 
 
@@ -265,6 +268,8 @@ async def patch_candidate(request: Request, body: CandidatePatchRequest):
         updates["joining_details_visited"] = body.joiningDetailsVisited
     if body.documentsSubmitted is not None:
         updates["documents_submitted"] = body.documentsSubmitted
+    if body.foundationCourseCompleted is not None:
+        updates["foundation_course_completed"] = body.foundationCourseCompleted
 
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")

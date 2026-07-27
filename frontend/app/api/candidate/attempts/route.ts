@@ -31,6 +31,7 @@ export async function GET(request: NextRequest) {
     })
 
     const data = await res.json()
+    console.log('[attempts/route] BACKEND RESPONSE:', JSON.stringify(data))
     return NextResponse.json(data, { status: res.status })
   } catch (error) {
     console.error('[candidate/attempts]', error)

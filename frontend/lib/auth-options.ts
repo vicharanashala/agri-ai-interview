@@ -63,16 +63,30 @@ export const authOptions: NextAuthOptions = {
         if (account?.provider === 'google') {
           const email = user.email!
           const name = user.name ?? email.split('@')[0]
-          // Tell NextAuth to use the Google account; no DB ops needed here
-          // We don't create users/candidates at login — that happens on first
-          // Next.js API call to /api/candidate (onboarding form submit).
-          // The candidate_id will be fetched on the session callback on the
-          // Next.js side via the existing /api/candidate?email=... endpoint.
+
+          let cand = await getBackendCandidateByEmail(email)
+          if (!cand) {
+            // Eagerly register Google OAuth user in the backend MongoDB
+            try {
+              const regRes = await fetch(`${BACKEND_URL}/api/auth/google-register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, email }),
+              })
+              if (regRes.ok) {
+                const regData = await regRes.json()
+                token.candidateId = regData.candidate_id
+              }
+            } catch (err) {
+              console.error('[NextAuth JWT Callback] Google registration failed:', err)
+            }
+          } else {
+            token.candidateId = cand.id
+          }
+
           token.sub = user.id ?? `google-${Buffer.from(email).toString('base64').slice(0, 12)}`
           token.email = email
           token.name = name
-          const cand = await getBackendCandidateByEmail(email)
-          if (cand?.id) token.candidateId = cand.id
         }
       }
       return token

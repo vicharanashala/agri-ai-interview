@@ -15,6 +15,10 @@ async function getBackendCandidateByEmail(email: string) {
 }
 
 export const authOptions: NextAuthOptions = {
+  // Firebase Hosting → Cloud Run rewrites the Host header before forwarding,
+  // so NextAuth would otherwise reject requests as "untrusted host" and the
+  // session cookie would never round-trip on the custom domain.
+  trustHost: true,
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID ?? '',

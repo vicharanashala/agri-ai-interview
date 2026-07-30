@@ -13,10 +13,13 @@ function getCandidateToken(request: NextRequest): string | null {
 }
 
 export async function GET(request: NextRequest) {
+  const headers = {
+    'Cache-Control': 'no-store, max-age=0, must-revalidate',
+  }
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.email) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers })
     }
 
     const { searchParams } = new URL(request.url)
@@ -29,13 +32,13 @@ export async function GET(request: NextRequest) {
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}))
-      return NextResponse.json(err, { status: res.status })
+      return NextResponse.json(err, { status: res.status, headers })
     }
 
-    return NextResponse.json(await res.json())
+    return NextResponse.json(await res.json(), { headers })
   } catch (error) {
     console.error('[api/candidate GET]', error)
-    return NextResponse.json({ error: 'Bad gateway' }, { status: 502 })
+    return NextResponse.json({ error: 'Bad gateway' }, { status: 502, headers })
   }
 }
 

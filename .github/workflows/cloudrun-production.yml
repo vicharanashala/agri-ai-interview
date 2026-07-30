@@ -78,6 +78,7 @@ jobs:
             NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL_PROD }}
             NEXT_PUBLIC_ADMIN_API_URL=${{ vars.NEXT_PUBLIC_API_URL_PROD }}
             NEXTAUTH_URL=${{ vars.NEXTAUTH_URL_PROD }}
+            AUTH_TRUST_HOST=true
             BACKEND_URL=${{ vars.NEXT_PUBLIC_API_URL_PROD }}
 
   deploy_backend:

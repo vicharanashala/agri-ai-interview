@@ -14,10 +14,12 @@ async function getBackendCandidateByEmail(email: string) {
   return res.json()
 }
 
-export const authOptions: NextAuthOptions = {
+export const authOptions = {
   // Firebase Hosting → Cloud Run rewrites the Host header before forwarding,
   // so NextAuth would otherwise reject requests as "untrusted host" and the
   // session cookie would never round-trip on the custom domain.
+  // `trustHost` is a runtime option supported by next-auth v4.21+ but is not
+  // declared in the v4.24.14 types, hence the cast at the bottom of this file.
   trustHost: true,
   providers: [
     GoogleProvider({
@@ -83,4 +85,4 @@ export const authOptions: NextAuthOptions = {
     },
   },
   pages: { signIn: '/login', error: '/login' },
-}
+} as NextAuthOptions

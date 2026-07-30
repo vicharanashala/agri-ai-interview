@@ -151,7 +151,7 @@ jobs:
 
       - name: Generate production Firebase config
         run: |
-          mkdir -p deploy/prod
+          mkdir -p deploy/prod/public
           cat > deploy/prod/firebase.json <<'JSON'
           {
             "hosting": {

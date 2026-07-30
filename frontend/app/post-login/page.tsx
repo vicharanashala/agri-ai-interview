@@ -46,7 +46,7 @@ function PostLoginContent() {
 
     console.log('[post-login] Fetching /api/candidate...');
     // Step 1: Fetch candidate record to know phase AND to pass to session creation
-    fetch('/api/candidate', { credentials: 'include' })
+    fetch('/api/candidate', { credentials: 'include', cache: 'no-store' })
       .then((res) => {
         console.log('[post-login] /api/candidate status:', res.status);
         if (res.ok) return res.json();

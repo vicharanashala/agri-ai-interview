@@ -63,7 +63,7 @@ export default function OnboardingPage() {
     // so we can't rely on it here. The DB is the source of truth.
     const checkProfile = async () => {
       try {
-        const response = await fetch('/api/candidate');
+        const response = await fetch('/api/candidate', { cache: 'no-store' });
         if (response.ok) {
           const candidate = await response.json();
           // Only freeze the form if the candidate has at least one meaningful field filled in.

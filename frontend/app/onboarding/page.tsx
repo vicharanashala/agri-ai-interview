@@ -6,6 +6,7 @@ import styles from './page.module.css';
 import { syncPhaseToDb } from '@/lib/phaseSync';
 import { INDIA_STATES_DISTRICTS, INDIAN_STATES } from '@/data/india-states-districts';
 import SearchableSelect from '@/components/SearchableSelect';
+import { interceptAuthFetch } from '@/lib/auth-fetch';
 
 interface ResumeData {
   id?: string;
@@ -59,6 +60,7 @@ export default function OnboardingPage() {
 
   // Check if onboarding is already completed on mount
   useEffect(() => {
+    const restore = interceptAuthFetch();
     // Always check the DB for existing profile — sessionStorage is cleared on logout,
     // so we can't rely on it here. The DB is the source of truth.
     const checkProfile = async () => {
@@ -74,7 +76,14 @@ export default function OnboardingPage() {
             candidate.state ||
             candidate.district ||
             candidate.pincode ||
-            candidate.currentRole
+            candidate.address ||
+            candidate.currentRole ||
+            candidate.yearsOfExperience ||
+            candidate.highestEducation ||
+            candidate.institution ||
+            candidate.farmingBackground ||
+            candidate.cropsGrown ||
+            candidate.primaryExpertise
           );
           if (hasProfileData) {
             setIsFrozen(true);
@@ -110,6 +119,10 @@ export default function OnboardingPage() {
     };
 
     checkProfile();
+
+    return () => {
+      restore();
+    };
   }, []);
 
   const validatePhone = (value: string): boolean => {

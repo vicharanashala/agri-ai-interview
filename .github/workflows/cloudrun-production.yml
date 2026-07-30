@@ -123,6 +123,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
@@ -145,3 +148,40 @@ jobs:
             INTERNAL_SERVICE_TOKEN=${{ secrets.INTERNAL_SERVICE_TOKEN_PROD }}
             BACKEND_URL=${{ vars.NEXT_PUBLIC_API_URL_PROD }}
             NEXT_PUBLIC_ADMIN_API_URL=${{ vars.NEXT_PUBLIC_API_URL_PROD }}
+
+      - name: Generate production Firebase config
+        run: |
+          mkdir -p deploy/prod
+          cat > deploy/prod/firebase.json <<'JSON'
+          {
+            "hosting": {
+              "site": "agri-interview-platform-prod",
+              "public": "public",
+              "rewrites": [
+                {
+                  "source": "**",
+                  "run": {
+                    "serviceId": "agri-interview-frontend-prod",
+                    "region": "asia-south1"
+                  }
+                }
+              ]
+            }
+          }
+          JSON
+          cat > deploy/prod/.firebaserc <<'JSON'
+          {
+            "projects": {
+              "default": "${{ secrets.FIREBASE_PROJECT_ID }}"
+            }
+          }
+          JSON
+
+      - name: Deploy to Firebase Hosting (Production)
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.GCP_GH_SA_KEY }}
+          projectId: ${{ secrets.FIREBASE_PROJECT_ID }}
+          channelId: live
+          entryPoint: ./deploy/prod

@@ -86,4 +86,15 @@ export const authOptions = {
     },
   },
   pages: { signIn: '/login', error: '/login' },
+  cookies: {
+    sessionToken: {
+      name: '__session',
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: true,
+      },
+    },
+  },
 } as NextAuthOptions

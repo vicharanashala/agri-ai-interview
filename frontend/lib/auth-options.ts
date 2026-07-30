@@ -16,6 +16,7 @@ async function getBackendCandidateByEmail(email: string) {
 
 export const authOptions = {
   secret: process.env.NEXTAUTH_SECRET,
+  useSecureCookies: false,
   // Firebase Hosting → Cloud Run rewrites the Host header before forwarding,
   // so NextAuth would otherwise reject requests as "untrusted host" and the
   // session cookie would never round-trip on the custom domain.

@@ -91,7 +91,10 @@ class SlotManager:
             )
             if latest_failed and latest_failed.get("completed_at"):
                 cooldown_days = get_cooldown_days()
-                deadline = latest_failed["completed_at"] + timedelta(days=cooldown_days)
+                completed_at = latest_failed["completed_at"]
+                if completed_at.tzinfo is None:
+                    completed_at = completed_at.replace(tzinfo=timezone.utc)
+                deadline = completed_at + timedelta(days=cooldown_days)
                 if _now() < deadline:
                     return {
                         "result": "cooldown",

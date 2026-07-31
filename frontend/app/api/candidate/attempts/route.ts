@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth-options'
 
 const BACKEND_URL = process.env.BACKEND_URL
 
@@ -14,25 +16,42 @@ function getToken(request: NextRequest): string | null {
 }
 
 export async function GET(request: NextRequest) {
+  const cacheHeaders = {
+    'Cache-Control': 'no-store, max-age=0, must-revalidate',
+  }
   try {
     const token = getToken(request)
-    if (!token) {
-      // Graceful degradation — return empty attempts so the dashboard still loads
-      console.warn('[candidate/attempts] No auth token found — returning empty attempts')
-      return NextResponse.json({ attempts: [], cooldownUntil: null, cooldownDays: 3 })
+    let url = `${BACKEND_URL}/api/candidate/attempts`
+    const headers: Record<string, string> = {}
+
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+      headers['Cookie'] = `candidate_session=${token}`
+    } else {
+      // Fallback: try NextAuth session to fetch by email
+      const session = await getServerSession(authOptions)
+      if (session?.user?.email) {
+        url = `${BACKEND_URL}/api/candidate/attempts?email=${encodeURIComponent(session.user.email)}`
+      } else {
+        console.warn('[candidate/attempts] No auth token or NextAuth session found — returning empty attempts')
+        return NextResponse.json({ attempts: [], cooldownUntil: null, cooldownDays: 3 }, { headers: cacheHeaders })
+      }
     }
 
-    const res = await fetch(`${BACKEND_URL}/api/candidate/attempts`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Cookie: `candidate_session=${token}`,
-      },
+    const res = await fetch(url, {
+      headers,
       credentials: 'include',
+      cache: 'no-store',
     })
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      return NextResponse.json(err, { status: res.status, headers: cacheHeaders })
+    }
 
     const data = await res.json()
     console.log('[attempts/route] BACKEND RESPONSE:', JSON.stringify(data))
-    return NextResponse.json(data, { status: res.status })
+    return NextResponse.json(data, { status: res.status, headers: cacheHeaders })
   } catch (error) {
     console.error('[candidate/attempts]', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

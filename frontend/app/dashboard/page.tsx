@@ -144,7 +144,7 @@ export default function DashboardPage() {
 
     const loadAttempts = async () => {
       try {
-        const res = await fetch('/api/candidate/attempts', { credentials: 'include' });
+        const res = await fetch('/api/candidate/attempts', { credentials: 'include', cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
           console.log('[loadAttempts] API response:', JSON.stringify(data));
@@ -195,6 +195,9 @@ export default function DashboardPage() {
     return () => clearInterval(id);
   }, [cooldownUntil]);
 
+  const hasPassed = attempts.some(a => a.result === 'PASS');
+  const hasAttemptsLeft = attempts.length < 3;
+
   // Compute phases dynamically based on state
   const phases: PhaseInfo[] = [
     {
@@ -207,7 +210,15 @@ export default function DashboardPage() {
       id: 2,
       name: 'Start Interview',
       description: 'Take your AI-powered interview session',
-      status: currentPhase > 2 ? 'completed' : currentPhase >= 2 ? 'current' : 'locked',
+      status: hasPassed
+        ? 'completed'
+        : (attempts.length > 0 && hasAttemptsLeft)
+        ? 'current'
+        : currentPhase > 2
+        ? 'completed'
+        : currentPhase >= 2
+        ? 'current'
+        : 'locked',
     },
     {
       id: 3,

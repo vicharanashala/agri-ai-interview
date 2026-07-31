@@ -67,7 +67,28 @@ export default function UploadDocumentsPage() {
   const [foundationCompleted, setFoundationCompleted] = useState(false);
 
   useEffect(() => {
-    setFoundationCompleted(localStorage.getItem('foundationCourseCompleted') === 'true');
+    const checkFoundation = async () => {
+      const stored = localStorage.getItem('foundationCourseCompleted');
+      const lsCompleted = stored === 'true' || stored === 'completed';
+      if (lsCompleted) {
+        setFoundationCompleted(true);
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/candidate');
+        if (res.ok) {
+          const candidate = await res.json();
+          if (candidate && candidate.foundationCourseCompleted) {
+            setFoundationCompleted(true);
+            localStorage.setItem('foundationCourseCompleted', 'completed');
+          }
+        }
+      } catch (err) {
+        console.error('Failed to verify foundation completion via profile API:', err);
+      }
+    };
+    checkFoundation();
   }, []);
 
   const requiredKeys = ALL_FIELDS.filter(f => f.required).map(f => f.key);

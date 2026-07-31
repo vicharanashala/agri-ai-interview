@@ -79,7 +79,7 @@ export default function DashboardPage() {
         // 2. Pull latest flag values from DB (authoritative) and localStorage (for in-flight updates)
         const dbSummaryVisited      = !!candidate.passedAndVisitedSummary;
         const lsSummaryVisited      = localStorage.getItem('passedAndVisitedSummary') === 'true';
-        const lsFoundationCompleted = localStorage.getItem('foundationCourseCompleted') === 'true';
+        const lsFoundationCompleted = localStorage.getItem('foundationCourseCompleted') === 'true' || localStorage.getItem('foundationCourseCompleted') === 'completed';
 
         const summaryVisited = dbSummaryVisited || lsSummaryVisited;
 
@@ -109,6 +109,12 @@ export default function DashboardPage() {
           localStorage.setItem('passedAndVisitedSummary', 'true');
         } else {
           localStorage.removeItem('passedAndVisitedSummary');
+        }
+
+        if (candidate.foundationCourseCompleted) {
+          localStorage.setItem('foundationCourseCompleted', 'completed');
+        } else if (!lsFoundationCompleted) {
+          localStorage.removeItem('foundationCourseCompleted');
         }
 
         // Persist candidate info in sessionStorage for downstream pages (offer letter, etc.)
@@ -217,7 +223,7 @@ export default function DashboardPage() {
     },
     {
       id: 4,
-      name: 'Foundation Course',
+      name: 'Foundation',
       description: 'Complete the foundation course to unlock document upload',
       status: currentPhase > 4 ? 'completed' : currentPhase >= 4 ? 'current' : 'locked',
     },

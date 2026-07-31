@@ -56,7 +56,11 @@ def _mark_completed(candidate_id: str) -> None:
     db = get_sync_db()
     db.candidates.update_one(
         {"_id": ObjectId(candidate_id)},
-        {"$set": {"foundation_course_completed": True, "updated_at": datetime.now(timezone.utc)}},
+        {"$set": {
+            "foundation_course_completed": True,
+            "foundation_course_status": "completed",
+            "updated_at": datetime.now(timezone.utc)
+        }},
     )
 
 
@@ -100,3 +104,29 @@ async def check_foundation_course_completion(request: Request):
         _mark_completed(candidate_id)
 
     return {"completed": completed}
+
+
+@router.post("/foundation-course/launch")
+async def launch_foundation_course(request: Request):
+    """Notify backend that candidate has clicked Launch Course."""
+    candidate_id = _get_candidate_id_from_request(request)
+    from app.db.mongodb import get_sync_db
+    from datetime import datetime, timezone
+    db = get_sync_db()
+    
+    # Only update status to in_progress if course is not already completed
+    cand = db.candidates.find_one({"_id": ObjectId(candidate_id)}, {"foundation_course_completed": 1, "foundation_course_status": 1})
+    if cand:
+        is_completed = cand.get("foundation_course_completed", False)
+        current_status = cand.get("foundation_course_status")
+        
+        if not is_completed and current_status != "completed" and current_status != "in_progress":
+            db.candidates.update_one(
+                {"_id": ObjectId(candidate_id)},
+                {"$set": {
+                    "foundation_course_status": "in_progress",
+                    "updated_at": datetime.now(timezone.utc)
+                }}
+            )
+            
+    return {"success": True}

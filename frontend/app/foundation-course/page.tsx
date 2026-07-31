@@ -23,8 +23,17 @@ export default function FoundationCoursePage() {
     }
   }, []);
 
-  const handleLaunchCourse = () => {
+  const handleLaunchCourse = async () => {
     window.open(VIBE_COURSE_URL, '_blank', 'noopener,noreferrer');
+    try {
+      const rt = sessionStorage.getItem('candidate_session_token');
+      await fetch('/api/foundation-course/launch', {
+        method: 'POST',
+        headers: rt ? { 'x-redis-token': rt } : {},
+      });
+    } catch (err) {
+      console.error('Failed to notify backend of course launch:', err);
+    }
   };
 
   const handleCheckCompletion = async () => {

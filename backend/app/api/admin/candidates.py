@@ -14,7 +14,7 @@ from app.api.admin.middleware import require_admin_auth
 
 router = APIRouter(prefix="/api/admin", tags=["admin-candidates"])
 
-PHASES = ["onboarding", "interview", "summary", "documents"]
+PHASES = ["onboarding", "interview", "summary", "foundation", "documents"]
 PHASE_ORDER = {p: i for i, p in enumerate(PHASES)}
 
 
@@ -43,6 +43,8 @@ class CandidateResponse(BaseModel):
     documentsSubmitted: bool = False
     attemptsDone: int = 0
     maxAttempts: int = 3
+    foundationCourseCompleted: bool = False
+    foundationCourseStatus: Optional[str] = "not_started"
 
 
 def _build_phases(current_phase: str) -> List[PhaseStatus]:
@@ -67,6 +69,9 @@ def _candidate_to_response(cand: dict, user_email: Optional[str]) -> CandidateRe
         "result": {"$in": ["PASS", "FAIL", "WITHDRAWN"]},
     })
 
+    foundation_completed = cand.get("foundation_course_completed", False)
+    foundation_status = cand.get("foundation_course_status", "completed" if foundation_completed else "not_started")
+
     return CandidateResponse(
         id=str(cand["_id"]),
         fullName=raw_full_name,
@@ -85,6 +90,8 @@ def _candidate_to_response(cand: dict, user_email: Optional[str]) -> CandidateRe
         documentsSubmitted=cand.get("documents_submitted", False),
         attemptsDone=attempts_done,
         maxAttempts=3,
+        foundationCourseCompleted=foundation_completed,
+        foundationCourseStatus=foundation_status,
     )
 
 
@@ -466,7 +473,7 @@ async def get_state_stats(state: str = Query(None), _admin=Depends(require_admin
         phase = row["_id"]["phase"] or "onboarding"
         if phase == "onboarding":
             state_data[s]["onboarding"] += row["count"]
-        elif phase in ("interview", "summary", "documents"):
+        elif phase in ("interview", "summary", "foundation", "documents"):
             state_data[s]["interviewed"] += row["count"]
 
     for s, data in state_data.items():
@@ -668,7 +675,7 @@ async def get_geo_stats(_admin=Depends(require_admin_auth)):
         phase = row["_id"]["phase"] or "onboarding"
         if phase == "onboarding":
             states_map[s]["pending"] += row["count"]
-        elif phase in ("interview", "summary", "documents"):
+        elif phase in ("interview", "summary", "foundation", "documents"):
             states_map[s]["interviewed"] += row["count"]
 
     # Get pass/fail per state — Python-side join
@@ -780,3 +787,38 @@ async def get_locations(state: str = Query(...), _admin=Depends(require_admin_au
 
     districts = [{"district": k, "count": v} for k, v in sorted(districts_map.items(), key=lambda x: x[1], reverse=True)]
     return {"districts": districts}
+
+
+# ── Bypass Foundation Course ─────────────────────────────────────────────────
+
+@router.post("/candidates/{candidate_id}/bypass-course")
+async def bypass_candidate_course(candidate_id: str, _admin=Depends(require_admin_auth)):
+    db = get_sync_db()
+    from datetime import datetime, timezone
+    
+    try:
+        from bson import ObjectId
+        query_id = ObjectId(candidate_id)
+    except Exception:
+        query_id = candidate_id
+        
+    cand = db.candidates.find_one({"_id": query_id})
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+        
+    now = datetime.now(timezone.utc)
+    current_phase = cand.get("current_phase", "onboarding")
+    new_phase = current_phase
+    if current_phase in ["onboarding", "interview", "summary", "foundation"]:
+        new_phase = "documents"
+        
+    db.candidates.update_one(
+        {"_id": query_id},
+        {"$set": {
+            "foundation_course_completed": True,
+            "foundation_course_status": "completed",
+            "current_phase": new_phase,
+            "updated_at": now
+        }}
+    )
+    return {"success": True, "message": "Candidate course bypassed successfully."}

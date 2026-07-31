@@ -8,6 +8,7 @@ import LiveTab from "../../../components/admin/LiveTab";
 import EvaluationsTab from "../../../components/admin/EvaluationsTab";
 import OfferLetterTab from "../../../components/admin/OfferLetterTab";
 import DocumentsTab from "../../../components/admin/DocumentsTab";
+import CourseCompletionTab from "../../../components/admin/CourseCompletionTab";
 
 // Types
 interface Candidate {
@@ -99,7 +100,7 @@ interface Guidelines {
 }
 
 // Tabs
-type Tab = "live" | "candidates" | "analytics" | "evaluations" | "anti-cheat" | "settings" | "documents";
+type Tab = "live" | "candidates" | "analytics" | "evaluations" | "course-completion" | "anti-cheat" | "settings" | "documents";
 type SettingsTab = "guidelines" | "criteria" | "interview-config" | "anti-cheat" | "offer-letter";
 
 // Chart colors
@@ -109,6 +110,7 @@ const PHASE_LABELS: Record<string, string> = {
   onboarding: "Onboarding",
   interview: "Interview",
   summary: "Summary",
+  foundation: "Foundation",
   documents: "Documents",
 };
 
@@ -264,6 +266,11 @@ export default function AdminDashboard() {
       } else if (target === "evaluations") {
         calls.push(
           loadStats().catch(err => console.error("loadStats error:", err)),
+        );
+      } else if (target === "course-completion") {
+        calls.push(
+          loadStats().catch(err => console.error("loadStats error:", err)),
+          loadCandidates().catch(err => console.error("loadCandidates error:", err)),
         );
       } else if (target === "anti-cheat") {
         calls.push(
@@ -797,6 +804,12 @@ export default function AdminDashboard() {
           onClick={() => setActiveTab("evaluations")}
         >
           📋 Evaluations
+        </button>
+        <button
+          className={`${styles.tab} ${activeTab === "course-completion" ? styles.activeTab : ""}`}
+          onClick={() => setActiveTab("course-completion")}
+        >
+          🎓 Course Completion
         </button>
         <button
           className={`${styles.tab} ${activeTab === "anti-cheat" ? styles.activeTab : ""}`}
@@ -1549,6 +1562,15 @@ export default function AdminDashboard() {
           <EvaluationsTab
             adminApiBase={ADMIN_API_BASE}
             getAdminToken={getAdminToken}
+          />
+        )}
+
+        {/* Course Completion Tab */}
+        {activeTab === "course-completion" && (
+          <CourseCompletionTab
+            adminToken={getAdminToken()}
+            adminApiBase={ADMIN_API_BASE}
+            onRefreshCandidates={loadCandidates}
           />
         )}
 

@@ -93,20 +93,15 @@ function PostLoginContent() {
           console.log('[post-login] No candidate.id or no email — skipping session creation');
         }
 
-        // Step 3: Navigate to appropriate page
-        // We MUST wait for session creation before navigating —
-        // otherwise /interview page loads before candidate_session_token is in sessionStorage
-        // callbackUrl takes priority (e.g. /interview from dashboard's Start Interview)
-        if (callbackUrl) {
+        if (phase === 'onboarding' || !phase) {
+          console.log('[post-login] Force navigating new candidate to /onboarding');
+          router.replace('/onboarding');
+        } else if (callbackUrl) {
           console.log('[post-login] Navigating to callbackUrl:', callbackUrl);
           router.replace(callbackUrl);
         } else {
-          console.log('[post-login] Navigating to:', phase && phase !== 'onboarding' ? '/dashboard' : '/onboarding');
-          if (phase && phase !== 'onboarding') {
-            router.replace('/dashboard');
-          } else {
-            router.replace('/onboarding');
-          }
+          console.log('[post-login] Navigating to /dashboard');
+          router.replace('/dashboard');
         }
       })
       .catch((err) => {

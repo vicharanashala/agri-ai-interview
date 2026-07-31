@@ -90,17 +90,17 @@ export default function SummaryPage() {
 
     if (justCompleted) {
       // ── First load after interview end ────────────────────────────────
-      // Clear flags
-      sessionStorage.removeItem('interviewJustCompleted');
-      localStorage.removeItem('interviewJustCompleted');
-      sessionStorage.removeItem('closingInterviewId');
-      localStorage.removeItem('closingInterviewId');
-
       // Get interview_id from localStorage (set by endInterviewAndClose)
       const closingId =
         localStorage.getItem('closingInterviewId') ||
         sessionStorage.getItem('closingInterviewId') ||
         '';
+
+      // Clear flags
+      sessionStorage.removeItem('interviewJustCompleted');
+      localStorage.removeItem('interviewJustCompleted');
+      sessionStorage.removeItem('closingInterviewId');
+      localStorage.removeItem('closingInterviewId');
 
       // Mark summary visited
       localStorage.setItem('summaryVisited', 'true');
@@ -114,6 +114,7 @@ export default function SummaryPage() {
           try {
             const res = await fetch('/api/candidate/attempts', {
               credentials: 'include',
+              cache: 'no-store',
               headers: {
                 Authorization: `Bearer ${sessionStorage.getItem('candidate_session_token') || ''}`,
               },
@@ -143,6 +144,7 @@ export default function SummaryPage() {
         try {
           const res = await fetch('/api/candidate/attempts', {
             credentials: 'include',
+            cache: 'no-store',
             headers: {
               Authorization: `Bearer ${sessionStorage.getItem('candidate_session_token') || ''}`,
             },
@@ -162,6 +164,7 @@ export default function SummaryPage() {
         try {
           const res = await fetch('/api/candidate/attempts', {
             credentials: 'include',
+            cache: 'no-store',
             headers: {
               Authorization: `Bearer ${sessionStorage.getItem('candidate_session_token') || ''}`,
             },

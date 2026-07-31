@@ -95,6 +95,12 @@ export default function DashboardPage() {
         if (foundationCompleted  && actualPhase < 4) actualPhase = 4;
         if (docsSubmitted        && actualPhase < 5) actualPhase = 5;
 
+        // If the candidate is still in the onboarding phase, redirect them immediately
+        if (actualPhase === 1) {
+          router.replace('/onboarding');
+          return;
+        }
+
         setCurrentPhase(actualPhase);
         setHasCompletedInterview(actualPhase >= 3);
 

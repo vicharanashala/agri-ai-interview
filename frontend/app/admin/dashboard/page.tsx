@@ -974,7 +974,7 @@ export default function AdminDashboard() {
                             <span style={{ color: "#999", fontSize: "12px" }}>—</span>
                           )}
                         </td>
-                        <td>{candidate.createdAt ? new Date(candidate.createdAt).toLocaleDateString() : "-"}</td>
+                        <td>{candidate.createdAt ? new Date(candidate.createdAt).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }) : "-"}</td>
                       </tr>
                     ))}
                   </tbody>

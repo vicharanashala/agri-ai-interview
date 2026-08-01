@@ -133,7 +133,7 @@ function ChatHistory({ messages }: { messages: ChatMessage[] }) {
           <p className={styles.msgText}>{msg.content}</p>
           {msg.timestamp && (
             <span className={styles.msgTime}>
-              {new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              {new Date(msg.timestamp).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" })}
             </span>
           )}
         </div>

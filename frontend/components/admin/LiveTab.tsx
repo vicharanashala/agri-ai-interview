@@ -139,7 +139,7 @@ export default function LiveTab({ interviews, selectedId, onSelect }: LiveTabPro
                   <span className={styles.msgRoleTag}>{msg.role === "assistant" ? "AI" : "Candidate"}</span>
                   <p className={styles.msgContent}>{msg.content}</p>
                   <span className={styles.msgTime}>
-                    {new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    {new Date(msg.timestamp).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" })}
                   </span>
                 </div>
               ))}

@@ -88,6 +88,8 @@ class CandidateProfileResponse(BaseModel):
     resumeId: Optional[str] = None
     resumeStatus: Optional[str] = None
     foundationCourseCompleted: Optional[bool] = False
+    passedAndVisitedSummary: Optional[bool] = False
+    documentsSubmitted: Optional[bool] = False
 
 
 class CandidatePatchRequest(BaseModel):
@@ -229,6 +231,8 @@ async def get_candidate_profile(email: Optional[str] = Query(None)):
         resumeId=resume_id,
         resumeStatus=resume_status,
         foundationCourseCompleted=cand.get("foundation_course_completed", False),
+        passedAndVisitedSummary=cand.get("passed_and_visited_summary", False),
+        documentsSubmitted=cand.get("documents_submitted", False),
     )
 
 

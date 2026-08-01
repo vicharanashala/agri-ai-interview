@@ -106,7 +106,7 @@
 
 .phaseCard.completed {
   background: rgba(8, 203, 0, 0.12);
-  cursor: default;
+  cursor: pointer;
 }
 
 .phaseCard.locked {
@@ -216,6 +216,27 @@
   border-radius: 20px;
   font-size: 14px;
   font-weight: 600;
+}
+
+.failedBadge {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 600;
+  border: 1px solid #ef4444;
+}
+
+.reattemptBadge {
+  background: rgba(245, 158, 11, 0.2);
+  color: #f59e0b;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 600;
+  border: 1px solid #f59e0b;
+  animation: pulse 2s infinite;
 }
 
 .actions {

@@ -212,10 +212,10 @@ export default function DashboardPage() {
       description: 'Take your AI-powered interview session',
       status: hasPassed
         ? 'completed'
+        : (attempts.length > 0 && !hasAttemptsLeft)
+        ? 'completed' // Failed all attempts
         : (attempts.length > 0 && hasAttemptsLeft)
-        ? 'current'
-        : currentPhase > 2
-        ? 'completed'
+        ? 'current'   // Re-attempt is active
         : currentPhase >= 2
         ? 'current'
         : 'locked',
@@ -224,19 +224,25 @@ export default function DashboardPage() {
       id: 3,
       name: 'Interview Summary',
       description: 'View your interview results and scores',
-      status: currentPhase > 3 ? 'completed' : currentPhase >= 3 ? 'current' : 'locked',
+      status: currentPhase > 3
+        ? 'completed'
+        : (attempts.length > 0 && !hasPassed && hasAttemptsLeft)
+        ? 'completed' // Unlocked but not active (re-attempt is active)
+        : currentPhase === 3
+        ? 'current'   // Active summary
+        : 'locked',
     },
     {
       id: 4,
       name: 'Foundation',
       description: 'Complete the foundation course to unlock document upload',
-      status: currentPhase > 4 ? 'completed' : currentPhase >= 4 ? 'current' : 'locked',
+      status: currentPhase > 4 ? 'completed' : currentPhase === 4 ? 'current' : 'locked',
     },
     {
       id: 5,
       name: 'Upload Documents',
       description: 'Submit required documents to complete the process',
-      status: documentsSubmitted ? 'completed' : currentPhase >= 5 ? 'current' : 'locked',
+      status: documentsSubmitted ? 'completed' : currentPhase === 5 ? 'current' : 'locked',
     },
   ];
 
@@ -289,8 +295,13 @@ export default function DashboardPage() {
     }
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
+  const getStatusIcon = (phase: PhaseInfo) => {
+    if (phase.id === 2) {
+      if (hasPassed) return '✓';
+      if (attempts.length >= 3 && !hasPassed) return '✗';
+      if (attempts.length > 0 && attempts.length < 3 && !hasPassed) return '▶';
+    }
+    switch (phase.status) {
       case 'completed':
         return '✓';
       case 'current':
@@ -298,6 +309,39 @@ export default function DashboardPage() {
       default:
         return '○';
     }
+  };
+
+  const renderPhaseStatus = (phase: PhaseInfo) => {
+    if (phase.id === 2) {
+      if (hasPassed) {
+        return <span className={styles.completedBadge}>Completed</span>;
+      }
+      if (attempts.length >= 3 && !hasPassed) {
+        return <span className={styles.failedBadge}>Failed</span>;
+      }
+      if (attempts.length > 0 && attempts.length < 3 && !hasPassed) {
+        return <span className={styles.reattemptBadge}>Re-attempt</span>;
+      }
+    }
+    
+    if (phase.id === 3) {
+      if (phase.status === 'completed' || phase.status === 'current') {
+        const isFilled = hasPassed || attempts.length >= 3;
+        if (isFilled) {
+          return <span className={styles.completedBadge}>View Summary</span>;
+        } else {
+          return <span className={styles.currentBadge} style={{ background: 'rgba(8, 203, 0, 0.08)', animation: 'none' }}>View Summary</span>;
+        }
+      }
+    }
+    
+    if (phase.status === 'completed') {
+      return <span className={styles.completedBadge}>Completed</span>;
+    }
+    if (phase.status === 'current') {
+      return <span className={styles.currentBadge}>In Progress</span>;
+    }
+    return <span className={styles.lockedBadge}>🔒 Locked</span>;
   };
 
   const handleAdvancePhase = (completedPhase: Phase) => {
@@ -517,15 +561,13 @@ export default function DashboardPage() {
             onClick={() => handlePhaseClick(phase)}
           >
             <div className={styles.phaseNumber}>{phase.id}</div>
-            <div className={styles.phaseIcon}>{getStatusIcon(phase.status)}</div>
+            <div className={styles.phaseIcon}>{getStatusIcon(phase)}</div>
             <div className={styles.phaseContent}>
               <h3 className={styles.phaseName}>{phase.name}</h3>
               <p className={styles.phaseDescription}>{phase.description}</p>
             </div>
             <div className={styles.phaseStatus}>
-              {phase.status === 'completed' && <span className={styles.completedBadge}>Completed</span>}
-              {phase.status === 'current' && <span className={styles.currentBadge}>In Progress</span>}
-              {phase.status === 'locked' && <span className={styles.lockedBadge}>🔒 Locked</span>}
+              {renderPhaseStatus(phase)}
             </div>
           </div>
         ))}

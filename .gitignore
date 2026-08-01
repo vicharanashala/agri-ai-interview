@@ -64,6 +64,8 @@ frontend/prisma/migrations/
 # Backup files
 *.bak
 
-# Uploaded resumes
+# Uploaded resumes and documents
 backend/uploads/resumes/
 backend/backend/uploads/candidates/
+backend/candidates/
+backend/uploads/

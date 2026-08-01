@@ -163,7 +163,16 @@ async def upload_documents(
         safe_filename = f"{uuid.uuid4()}_{file.filename}"
         storage_path = candidate_docs_path(candidate_id, field_name, safe_filename)
         content_type_str = _CONTENT_TYPES.get(file_type, "application/octet-stream")
-        await storage.write(storage_path, file_bytes, content_type=content_type_str)
+        try:
+            await storage.write(storage_path, file_bytes, content_type=content_type_str)
+        except Exception as e:
+            import traceback
+            tb = traceback.format_exc()
+            print(f"[DocumentUploadError] Failed to write file to {settings.STORAGE_BACKEND}: {str(e)}\n{tb}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Storage backend ({settings.STORAGE_BACKEND}) write failed for {file.filename}: {str(e)}. Bucket: '{settings.GCS_BUCKET_NAME}'."
+            )
 
         doc_id = str(uuid.uuid4())
         doc = {

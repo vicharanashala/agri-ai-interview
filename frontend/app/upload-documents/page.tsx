@@ -101,7 +101,7 @@ export default function UploadDocumentsPage() {
       try {
         const rt = sessionStorage.getItem('candidate_session_token');
         const headers: HeadersInit = rt ? { 'x-redis-token': rt } : {};
-        const res = await fetch('/api/candidate/documents', { headers });
+        const res = await fetch('/api/candidate/documents', { headers, credentials: 'include' });
         if (res.ok) {
           const data = await res.json();
           if (data.documents && data.documents.length > 0) {

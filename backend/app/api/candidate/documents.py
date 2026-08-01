@@ -211,7 +211,7 @@ async def list_documents(request: Request):
             fileName=doc.get("file_name", ""),
             fileType=doc.get("file_type", ""),
             storagePath=doc.get("storage_path", ""),
-            createdAt=doc.get("created_at", "").isoformat() if doc.get("created_at") else "",
+            createdAt=doc.get("created_at").isoformat() + "Z" if doc.get("created_at") else "",
         )
         for doc in cursor
     ])
@@ -261,7 +261,7 @@ async def download_document(field_name: str, request: Request):
                 "fileIndex": d.get("file_index"),
                 "fileName": d.get("file_name"),
                 "fileType": d.get("file_type"),
-                "createdAt": d.get("created_at", "").isoformat() if d.get("created_at") else "",
+                "createdAt": d.get("created_at").isoformat() + "Z" if d.get("created_at") else "",
             }
             for d in docs
         ],

@@ -6,7 +6,7 @@ from bson import ObjectId
 from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import uuid
 
 from app.db.mongodb import get_sync_db
@@ -86,7 +86,7 @@ def _candidate_to_response(cand: dict, user_email: Optional[str]) -> CandidateRe
         currentPhase=current_phase,
         status="active",
         phases=_build_phases(current_phase),
-        createdAt=cand.get("created_at", "").isoformat() if cand.get("created_at") else datetime.now(timezone.utc).isoformat(),
+        createdAt=cand.get("created_at").isoformat() + "Z" if cand.get("created_at") else datetime.now(timezone.utc).isoformat() + "Z",
         documentsSubmitted=cand.get("documents_submitted", False),
         attemptsDone=attempts_done,
         maxAttempts=3,
@@ -514,7 +514,7 @@ async def get_anti_cheat_violations(
             "eventType": event.get("event_type"),
             "severity": event.get("severity"),
             "message": event.get("message"),
-            "createdAt": event.get("created_at", "").isoformat() if event.get("created_at") else "",
+            "createdAt": event.get("created_at").isoformat() + "Z" if event.get("created_at") else "",
             "autoClosed": event.get("severity") == "critical",
         })
     return {"violations": violations, "total": len(violations)}
@@ -632,10 +632,10 @@ async def get_all_evaluations(
             "result": s.get("result"),
             "endReason": s.get("end_reason"),
             "score": score,
-            "startedAt": s.get("started_at", "").isoformat() if s.get("started_at") else None,
+            "startedAt": s.get("started_at").isoformat() + "Z" if s.get("started_at") else None,
             "completedAt": (
-                s.get("completed_at", "").isoformat() if s.get("completed_at") else
-                s.get("started_at", "").isoformat() if s.get("started_at") else
+                s.get("completed_at").isoformat() + "Z" if s.get("completed_at") else
+                s.get("started_at").isoformat() + "Z" if s.get("started_at") else
                 None
             ),
             "messages": messages,

@@ -2,7 +2,7 @@
 Interview Workflow - Simple conversational interview without real-time evaluation.
 """
 from typing import Dict, Any, List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app.llm.service import llm_service
 from app.services.settings_service import get_question_guidelines, get_interview_system, get_first_question, get_interview_settings
@@ -44,7 +44,7 @@ class InterviewState:
         entry: Dict[str, Any] = {
             "role": role,
             "content": content,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
         if topic:
             entry["topic"] = topic

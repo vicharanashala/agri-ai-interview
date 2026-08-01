@@ -244,7 +244,7 @@ async def create_signed_offer_letter(body: SignOfferLetterRequest, candidate_id:
         "id": record_id,
         "candidateId": candidate_id,
         "signatureName": body.signatureName,
-        "signedAt": signed_at.isoformat(),
+        "signedAt": signed_at.isoformat() + "Z",
         "message": "Offer letter signed and stored successfully",
     })
 

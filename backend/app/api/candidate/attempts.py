@@ -4,7 +4,7 @@ Candidate interview attempts + cooldown endpoint.
 from fastapi import APIRouter, HTTPException, Request, Query
 from app.db.mongodb import get_sync_db
 from app.core.session import session_store, _hash_token
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 router = APIRouter(prefix="/api/candidate", tags=["candidate-attempts"])
 
@@ -83,7 +83,7 @@ async def get_attempts(request: Request, email: str = Query(default=None)):
         if deadline_ms > datetime.now(timezone.utc).timestamp() * 1000:
             from datetime import timedelta  # noqa: F401
             deadline = datetime.fromtimestamp(deadline_ms / 1000, tz=timezone.utc)
-            cooldown_until = deadline.isoformat()
+            cooldown_until = deadline.isoformat() + "Z"
 
     attempts = [
         {
@@ -91,8 +91,8 @@ async def get_attempts(request: Request, email: str = Query(default=None)):
             "status": s.get("status"),
             "overall_score": s.get("overall_score"),
             "result": s.get("result"),
-            "completedAt": s.get("completed_at").isoformat() if s.get("completed_at") else None,
-            "startedAt": s.get("started_at").isoformat() if s.get("started_at") else None,
+            "completedAt": s.get("completed_at").isoformat() + "Z" if s.get("completed_at") else None,
+            "startedAt": s.get("started_at").isoformat() + "Z" if s.get("started_at") else None,
         }
         for s in sessions
     ]

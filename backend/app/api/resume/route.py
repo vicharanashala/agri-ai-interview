@@ -167,7 +167,7 @@ async def trigger_resume_parse(resume_id: str, background_tasks: BackgroundTasks
         rawText=resume.get("raw_text"),
         parsedData=None,
         status="parsing",
-        createdAt=resume.get("created_at", "").isoformat() if resume.get("created_at") else "",
+        createdAt=resume.get("created_at").isoformat() + "Z" if resume.get("created_at") else "",
     )
 
 
@@ -197,7 +197,7 @@ async def get_my_resume(request: Request):
         "fileName": resume.get("file_name", ""),
         "fileType": resume.get("file_type", ""),
         "status": resume.get("status", "unknown"),
-        "createdAt": resume.get("created_at", "").isoformat() if resume.get("created_at") else "",
+        "createdAt": resume.get("created_at").isoformat() + "Z" if resume.get("created_at") else "",
     }
 
 
@@ -223,7 +223,7 @@ async def list_candidate_resumes(candidateId: str):
             rawText=r.get("raw_text"),
             parsedData=parsed_data,
             status=r.get("status", "unknown"),
-            createdAt=r.get("created_at", "").isoformat() if r.get("created_at") else "",
+            createdAt=r.get("created_at").isoformat() + "Z" if r.get("created_at") else "",
         ))
     return result
 

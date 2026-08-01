@@ -44,7 +44,6 @@ class Settings(BaseSettings):
     STORAGE_LOCAL_PATH: str = "./uploads"
     GCS_BUCKET_NAME: str = ""
     GCS_BASE_PREFIX: str = ""  # e.g. "agri-interview-platform/staging"
-    GOOGLE_APPLICATION_CREDENTIALS: Optional[str] = None
 
     # ViBe integration (Foundation Course)
     VIBE_API_URL: str = "https://vibe.vicharanashala.ai"

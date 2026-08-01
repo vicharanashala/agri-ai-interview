@@ -85,8 +85,8 @@ def _get_candidate_id_from_session(interview_id: str) -> str:
     return ""
 
 
-def _save_chat_to_db(interview_id: str, messages: list, end_reason: str, evaluation: dict = None):
-    """Persist chat history + end_reason to MongoDB immediately."""
+def _save_chat_to_db(interview_id: str, messages: list, end_reason: str, qa_pairs: list = None, evaluation: dict = None):
+    """Persist chat history + end_reason + qa_pairs to MongoDB immediately."""
     db = get_sync_db()
     existing = db.interview_sessions.find_one({"_id": interview_id}) or {}
 
@@ -105,11 +105,37 @@ def _save_chat_to_db(interview_id: str, messages: list, end_reason: str, evaluat
             interview_data = {}
     interview_data["messages"] = messages
     interview_data["end_reason"] = end_reason
+    if qa_pairs is not None:
+        interview_data["qa_pairs"] = qa_pairs
     if evaluation:
         interview_data["evaluation"] = evaluation
 
     update["interview_data"] = interview_data
     db.interview_sessions.update_one({"_id": interview_id}, {"$set": update})
+
+
+def _update_active_chat_in_db(interview_id: str, messages: list, qa_pairs: list = None):
+    """Update active chat history and qa_pairs in MongoDB in real time."""
+    db = get_sync_db()
+    existing = db.interview_sessions.find_one({"_id": interview_id}) or {}
+    
+    interview_data = existing.get("interview_data") or {}
+    if isinstance(interview_data, str):
+        try:
+            interview_data = json.loads(interview_data)
+        except Exception:
+            interview_data = {}
+    interview_data["messages"] = messages
+    if qa_pairs is not None:
+        interview_data["qa_pairs"] = qa_pairs
+    
+    db.interview_sessions.update_one(
+        {"_id": interview_id},
+        {"$set": {
+            "interview_data": interview_data,
+            "updated_at": datetime.now(timezone.utc)
+        }}
+    )
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
@@ -163,6 +189,17 @@ async def send_message(request: MessageRequest):
             interview_id=request.interview_id,
             user_answer=request.message,
         )
+        
+        # Save active chat history to DB in real-time so admin can monitor live chat
+        try:
+            messages = interview_graph_manager.get_conversation_history(request.interview_id) or []
+            state = interview_graph_manager.workflow.get_completed_interview(request.interview_id) or interview_graph_manager.workflow._interviews.get(request.interview_id)
+            qa_pairs = getattr(state, "qa_pairs", []) if state else []
+            if messages:
+                _update_active_chat_in_db(request.interview_id, messages, qa_pairs)
+        except Exception as db_err:
+            logger.error(f"Failed to update active chat history in DB: {db_err}")
+
         return MessageResponse(
             response=result["response"],
             is_complete=result["is_complete"],
@@ -230,9 +267,11 @@ async def end_interview(interview_id: str, request: Optional[EndInterviewRequest
     # 1. Mark interview ended in workflow
     interview_graph_manager.end_interview(interview_id)
 
-    # 2. Persist chat to MongoDB NOW
+    # 2. Persist chat and qa_pairs to MongoDB NOW
     messages = interview_graph_manager.get_conversation_history(interview_id) or []
-    _save_chat_to_db(interview_id, messages, end_reason)
+    state = interview_graph_manager.workflow.get_completed_interview(interview_id)
+    qa_pairs = getattr(state, "qa_pairs", []) if state else []
+    _save_chat_to_db(interview_id, messages, end_reason, qa_pairs)
 
     # 3. Trigger background LLM evaluation
     interview_graph_manager.trigger_evaluation(interview_id)

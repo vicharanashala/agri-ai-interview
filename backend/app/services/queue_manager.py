@@ -182,13 +182,17 @@ class SlotManager:
                 resume_parsed=resume_parsed,
             )
 
-            # Update with first_question
+            # Get the initial messages from workflow (e.g. the first question message)
+            messages = interview_graph_manager.get_conversation_history(interview_id) or []
+
+            # Update with first_question and messages
             db.interview_sessions.update_one(
                 {"_id": interview_id},
                 {"$set": {
                     "interview_data": {
                         "candidate_data": candidate_data,
                         "first_question": first_question,
+                        "messages": messages,
                     },
                     "updated_at": _now(),
                 }}

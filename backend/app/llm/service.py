@@ -256,8 +256,25 @@ Questions MUST relate to agriculture, crops, soil, irrigation, or farming practi
         conversation_text = self._build_conversation_summary(conversation_history)
         candidate_context = self._build_candidate_context(candidate_data)
 
-        # Build Q&A text from qa_pairs if available
+        # Build Q&A text from qa_pairs if available, otherwise reconstruct from history
         qa_text = ""
+        if not qa_pairs and conversation_history:
+            reconstructed_qa = []
+            last_question = None
+            for msg in conversation_history:
+                role = msg.get("role")
+                content = msg.get("content", "")
+                if role == "assistant" or role == "ai":
+                    last_question = content
+                elif (role == "user" or role == "candidate") and last_question:
+                    reconstructed_qa.append({
+                        "question": last_question,
+                        "answer": content,
+                        "topic": "unknown"
+                    })
+                    last_question = None
+            qa_pairs = reconstructed_qa
+
         if qa_pairs:
             qa_lines = []
             for qa in qa_pairs:

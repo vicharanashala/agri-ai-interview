@@ -13,9 +13,17 @@ export async function POST(
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (authHeader) headers['Authorization'] = authHeader;
 
+    let body = undefined;
+    try {
+      body = await request.text();
+    } catch (e) {
+      // ignore or no body
+    }
+
     const response = await fetch(`${API_BASE_URL}/api/interview/end/${interviewId}`, {
       method: 'POST',
       headers,
+      body: body || undefined,
     });
 
     const data = await response.json();

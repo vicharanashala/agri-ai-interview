@@ -1,6 +1,5 @@
 import type { NextAuthOptions } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
-import GoogleProvider from 'next-auth/providers/google'
 import bcrypt from 'bcryptjs'
 
 const BACKEND_URL = process.env.BACKEND_URL ?? ''
@@ -24,11 +23,6 @@ export const authOptions = {
   // declared in the v4.24.14 types, hence the cast at the bottom of this file.
   trustHost: true,
   providers: [
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID ?? '',
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
-      checks: ['none'],
-    }),
     CredentialsProvider({
       name: 'Credentials',
       credentials: {
@@ -68,34 +62,6 @@ export const authOptions = {
           token.email = user.email
           const cand = await getBackendCandidateByEmail(user.email!)
           if (cand?.id) token.candidateId = cand.id
-        }
-        if (account?.provider === 'google') {
-          const email = user.email!
-          const name = user.name ?? email.split('@')[0]
-
-          let cand = await getBackendCandidateByEmail(email)
-          if (!cand) {
-            // Eagerly register Google OAuth user in the backend MongoDB
-            try {
-              const regRes = await fetch(`${BACKEND_URL}/api/auth/google-register`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, email }),
-              })
-              if (regRes.ok) {
-                const regData = await regRes.json()
-                token.candidateId = regData.candidate_id
-              }
-            } catch (err) {
-              console.error('[NextAuth JWT Callback] Google registration failed:', err)
-            }
-          } else {
-            token.candidateId = cand.id
-          }
-
-          token.sub = user.id ?? `google-${Buffer.from(email).toString('base64').slice(0, 12)}`
-          token.email = email
-          token.name = name
         }
       }
       return token

@@ -229,7 +229,12 @@ function ExpandedRow({
       if (res.ok) {
         const data = await res.json();
         console.log("[Re-evaluate] API response:", JSON.stringify(data, null, 2));
-        onReevaluate(evaluation.id, data.overall_score, data.result, data.evaluation);
+        onReevaluate(
+          evaluation.id,
+          data.overall_score !== undefined ? data.overall_score : data.new_score,
+          data.result !== undefined ? data.result : data.new_result,
+          data.evaluation
+        );
       } else {
         const err = await res.json().catch(() => ({}));
         alert(`Re-evaluation failed: ${err.detail || res.statusText}`);

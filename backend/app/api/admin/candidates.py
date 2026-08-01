@@ -279,10 +279,32 @@ async def get_active_interviews(_admin=Depends(require_admin_auth)):
             messages = []
 
         cid = s.get("candidate_id")
-        candidate = db.candidates.find_one({"_id": ObjectId(cid)}) if cid else None
-        user = db.users.find_one({"_id": ObjectId(candidate.get("user_id"))}) if candidate and candidate.get("user_id") else None
+        candidate = None
+        user = None
+        if cid:
+            try:
+                candidate = db.candidates.find_one({"_id": ObjectId(cid)})
+            except Exception:
+                try:
+                    candidate = db.candidates.find_one({"_id": cid})
+                except Exception:
+                    pass
+        
+        # Skip stale/mock sessions that don't have an associated candidate profile in the database
+        if not candidate:
+            continue
+        
+        if candidate.get("user_id"):
+            try:
+                user = db.users.find_one({"_id": ObjectId(candidate.get("user_id"))})
+            except Exception:
+                pass
 
-        candidate_name = (candidate.get("full_name") or user.get("name") or "").strip() if candidate else ""
+        candidate_name = ""
+        candidate_name = candidate.get("full_name") or ""
+        if not candidate_name and user:
+            candidate_name = user.get("name") or ""
+        candidate_name = candidate_name.strip()
 
         interviews.append({
             "id": s["_id"],
@@ -391,6 +413,8 @@ async def reevaluate_interview(interview_id: str, _admin=Depends(require_admin_a
         "success": True,
         "new_score": overall_score,
         "new_result": new_result,
+        "overall_score": overall_score,
+        "result": new_result,
         "evaluation": evaluation,
     }
 
@@ -590,13 +614,29 @@ async def get_all_evaluations(
                 interview_data = {}
 
         candidate_id = s.get("candidate_id")
-        # candidate_id stored as string; candidates._id is ObjectId
-        candidate = db.candidates.find_one({"_id": ObjectId(candidate_id)}) if candidate_id else None
-        user = db.users.find_one({"_id": ObjectId(candidate.get("user_id"))}) if candidate and candidate.get("user_id") else None
+        candidate = None
+        user = None
+        if candidate_id:
+            try:
+                candidate = db.candidates.find_one({"_id": ObjectId(candidate_id)})
+            except Exception:
+                try:
+                    candidate = db.candidates.find_one({"_id": candidate_id})
+                except Exception:
+                    pass
+
+        if candidate and candidate.get("user_id"):
+            try:
+                user = db.users.find_one({"_id": ObjectId(candidate.get("user_id"))})
+            except Exception:
+                pass
 
         if candidate:
-            candidate_name = (candidate.get("full_name") or user.get("name") or "").strip()
-            if not candidate_name:
+            candidate_name = candidate.get("full_name") or ""
+            if not candidate_name and user:
+                candidate_name = user.get("name") or ""
+            candidate_name = candidate_name.strip()
+            if not candidate_name and user:
                 candidate_name = user.get("email", "")
             candidate_email = user.get("email") if user else None
         else:

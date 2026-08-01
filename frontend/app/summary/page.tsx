@@ -54,6 +54,7 @@ export default function SummaryPage() {
           localStorage.setItem('interviewScore', String(data.overall_score ?? ''));
           if (data.evaluation) {
             localStorage.setItem('interviewEvaluation', JSON.stringify(data.evaluation));
+            console.log('[Evaluation Details]', data.evaluation);
           }
           await syncPhaseToDb(data.result === 'PASS' ? 4 : 3);  // PASS → phase 4 (foundation), FAIL → phase 3 (summary)
           setEvaluating(false);

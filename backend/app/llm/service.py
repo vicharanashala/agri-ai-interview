@@ -288,20 +288,24 @@ Questions MUST relate to agriculture, crops, soil, irrigation, or farming practi
             + "\nEvaluate the candidate's interview performance. Return a JSON object with:\n"
             + "- overall_score: integer 0-100\n"
             + '- topic_scores: {\n'
-            + '    "agricultural_concepts": {"score": 0-10, "details": "brief explanation"},\n'
-            + '    "crop_management_practices": {"score": 0-10, "details": "brief explanation"},\n'
-            + '    "pest_and_disease_management": {"score": 0-10, "details": "brief explanation"},\n'
-            + '    "nutrient_deficiencies": {"score": 0-10, "details": "brief explanation"},\n'
-            + '    "weather_related_advisories": {"score": 0-10, "details": "brief explanation"},\n'
-            + '    "field_level_technical_issues": {"score": 0-10, "details": "brief explanation"}\n'
+            + '    "agricultural_concepts": {"score": 0-10, "details": "extremely concise 1-2 sentence explanation"},\n'
+            + '    "crop_management_practices": {"score": 0-10, "details": "extremely concise 1-2 sentence explanation"},\n'
+            + '    "pest_and_disease_management": {"score": 0-10, "details": "extremely concise 1-2 sentence explanation"},\n'
+            + '    "nutrient_deficiencies": {"score": 0-10, "details": "extremely concise 1-2 sentence explanation"},\n'
+            + '    "weather_related_advisories": {"score": 0-10, "details": "extremely concise 1-2 sentence explanation"},\n'
+            + '    "field_level_technical_issues": {"score": 0-10, "details": "extremely concise 1-2 sentence explanation"}\n'
             + "},\n"
-            + '"summary": "2-3 paragraph comprehensive summary",\n'
+            + '"summary": "1-2 paragraphs concise summary",\n'
             + '"strengths": ["strength 1", "strength 2", "strength 3"],\n'
             + '"areas_for_improvement": ["area 1", "area 2"],\n'
             + '"recommendation": "pass/consider/reject with brief explanation"\n'
             + "}\n\n"
             + "Score each topic on a scale of 0-10. Topics with no questions get 0. "
-            + "Compute overall_score as: (sum of 6 topic scores / 6) * 10."
+            + "Compute overall_score as: (sum of 6 topic scores / 6) * 10.\n"
+            + "CRITICAL CONSTRAINTS:\n"
+            + "1. Keep all text descriptions (details, summary) extremely concise to prevent output truncation.\n"
+            + "2. Never use unescaped double quotes inside JSON string values. Use single quotes if necessary.\n"
+            + "3. Output ONLY the JSON block, starting with { and ending with }."
         )
 
         evaluation_prompt = f"""Evaluate this agricultural interview candidate comprehensively:
@@ -334,7 +338,7 @@ Return your evaluation as valid JSON only, no other text. Ensure all fields are 
                 messages=messages,
                 system_prompt=system_prompt,
                 temperature=0.0,
-                max_tokens=2000
+                max_tokens=4000
             )
 
             import json

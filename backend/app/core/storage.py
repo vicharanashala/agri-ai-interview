@@ -96,26 +96,53 @@ class LocalFileStorage(Storage):
 
     async def write(self, path: str, data: bytes, content_type: str = "application/octet-stream") -> UploadResult:
         full = self._full_path(path)
-        os.makedirs(os.path.dirname(full), exist_ok=True)
-        with open(full, "wb") as f:
-            f.write(data)
+        try:
+            os.makedirs(os.path.dirname(full), exist_ok=True)
+            with open(full, "wb") as f:
+                f.write(data)
+        except OSError:
+            # Fallback to writeable /tmp/uploads on serverless/read-only container environments
+            fallback_base = "/tmp/uploads"
+            safe = os.path.normpath(path).lstrip(os.sep)
+            fallback_full = os.path.join(fallback_base, safe)
+            
+            os.makedirs(os.path.dirname(fallback_full), exist_ok=True)
+            with open(fallback_full, "wb") as f:
+                f.write(data)
+            
+            # Update base path for consistency
+            self.base_path = fallback_base
+            full = fallback_full
+            
         return UploadResult(path=path, url=None)
 
     async def read(self, path: str) -> bytes:
         full = self._full_path(path)
         if not os.path.exists(full):
-            raise FileNotFoundError(f"File not found: {path}")
+            # Try /tmp/uploads fallback path
+            fallback_full = os.path.join("/tmp/uploads", os.path.normpath(path).lstrip(os.sep))
+            if os.path.exists(fallback_full):
+                full = fallback_full
+            else:
+                raise FileNotFoundError(f"File not found: {path}")
         with open(full, "rb") as f:
             return f.read()
 
     async def delete(self, path: str) -> None:
         full = self._full_path(path)
         if not os.path.exists(full):
-            raise FileNotFoundError(f"File not found: {path}")
+            fallback_full = os.path.join("/tmp/uploads", os.path.normpath(path).lstrip(os.sep))
+            if os.path.exists(fallback_full):
+                full = fallback_full
+            else:
+                raise FileNotFoundError(f"File not found: {path}")
         os.remove(full)
 
     async def exists(self, path: str) -> bool:
-        return os.path.exists(self._full_path(path))
+        if os.path.exists(self._full_path(path)):
+            return True
+        fallback_full = os.path.join("/tmp/uploads", os.path.normpath(path).lstrip(os.sep))
+        return os.path.exists(fallback_full)
 
     async def get_urls(
         self,

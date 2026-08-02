@@ -365,24 +365,16 @@ Return your evaluation as valid JSON only, no other text. Ensure all fields are 
             return evaluation
 
         except Exception as e:
-            import traceback
-            tb = traceback.format_exc()
-            print(f"[LLMEvaluationError] Failed to generate evaluation: {type(e).__name__}: {str(e)}\n{tb}")
-            try:
-                if 'response' in locals():
-                    print(f"[LLMEvaluationError] Raw LLM response was:\n{response}")
-            except Exception:
-                pass
             return {
                 "overall_score": 0,
                 "topic_scores": {
-                    t: {"score": 0, "details": f"Evaluation error: {str(e)}"}
+                    t: {"score": 0, "details": "Evaluation could not be completed"}
                     for t in required_topics
                 },
-                "summary": f"Evaluation failed: {type(e).__name__}: {str(e)}. Please check backend server logs for the full [LLMEvaluationError] traceback.",
+                "summary": "Evaluation could not be completed. Please contact support.",
                 "strengths": [],
                 "areas_for_improvement": [],
-                "recommendation": f"Error: {str(e)}. Please retry or contact support."
+                "recommendation": "Unable to evaluate - please retry or contact support."
             }
 
 

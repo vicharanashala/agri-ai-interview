@@ -104,8 +104,11 @@ async def upload_documents(
     candidate_id = _get_candidate_id_from_request(request)
     db = get_sync_db()
 
-    # Verify candidate exists — _id is ObjectId in MongoDB
-    cand = db.candidates.find_one({"_id": ObjectId(candidate_id)})
+    # Verify candidate exists — handle both ObjectId and string IDs consistently
+    try:
+        cand = db.candidates.find_one({"_id": ObjectId(candidate_id)})
+    except Exception:
+        cand = db.candidates.find_one({"_id": candidate_id})
     if not cand:
         raise HTTPException(status_code=404, detail="Candidate not found")
 

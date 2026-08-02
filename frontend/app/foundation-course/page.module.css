@@ -1,1 +1,354 @@
-/* Foundation Course page styles — matching app design system */
+.container {
+  min-height: 100vh;
+  background: #f4fbf7;
+  background-image:
+    radial-gradient(at 0% 100%, rgba(34, 197, 94, 0.08) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(15, 34, 56, 0.03) 0px, transparent 50%);
+  display: flex;
+  flex-direction: column;
+  font-family: inherit;
+}
+
+.topNavbar {
+  width: 100%;
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+  height: 70px;
+  display: flex;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.03);
+}
+
+.navbarContent {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.logoWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+}
+
+.logo {
+  display: block;
+  height: 28px;
+  width: 140px;
+  flex-shrink: 0;
+  background: linear-gradient(to right, #22c55e 0%, #22c55e 21%, #0f2238 21%, #0f2238 81%, #22c55e 81%, #22c55e 100%);
+  -webkit-mask-image: url('../../public/login/annam-logo-white.png');
+  mask-image: url('../../public/login/annam-logo-white.png');
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: left center;
+  mask-position: left center;
+}
+
+.brandSub {
+  font-size: 9px;
+  font-weight: 500;
+  color: #94a3b8;
+  margin: 0;
+}
+
+.headerButtons {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.faqHelpBtn,
+.signOutBtn {
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease-in-out;
+}
+
+.faqHelpBtn {
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.08);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+}
+
+.faqHelpBtn:hover {
+  background: rgba(34, 197, 94, 0.14);
+  border-color: rgba(34, 197, 94, 0.4);
+}
+
+.signOutBtn {
+  color: #64748b;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+}
+
+.signOutBtn:hover:not(:disabled) {
+  background: #f8fafc;
+  color: #334155;
+}
+
+.signOutBtn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.content {
+  width: 100%;
+  max-width: 740px;
+  margin: 0 auto;
+  padding: 40px 20px 80px;
+}
+
+.pageHeader {
+  margin-bottom: 28px;
+}
+
+.title {
+  font-size: 32px;
+  font-weight: 800;
+  color: #0f2238;
+  margin: 0 0 10px;
+}
+
+.subtitle {
+  color: #64748b;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.6;
+  margin: 0 0 18px;
+}
+
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.statusDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.statusCompleted {
+  color: #16a34a;
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.22);
+}
+
+.statusPending {
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #fef3c7;
+}
+
+.feedback {
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+
+.feedbackSuccess {
+  color: #15803d;
+  background: rgba(34, 197, 94, 0.08);
+  border: 1px solid rgba(34, 197, 94, 0.18);
+}
+
+.feedbackError {
+  color: #dc2626;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+}
+
+.card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 24px;
+  padding: 42px;
+  text-align: center;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.04), 0 0 1px 0 rgba(0, 0, 0, 0.1);
+}
+
+.cardIcon {
+  width: 58px;
+  height: 58px;
+  border-radius: 18px;
+  background: rgba(34, 197, 94, 0.09);
+  border: 1px solid rgba(34, 197, 94, 0.2);
+  color: #16a34a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 18px;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.cardTitle {
+  color: #0f2238;
+  font-size: 22px;
+  font-weight: 800;
+  margin: 0 0 10px;
+}
+
+.cardText {
+  color: #64748b;
+  font-size: 15px;
+  line-height: 1.7;
+  margin: 0 auto 26px;
+  max-width: 540px;
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.primaryButton,
+.secondaryButton,
+.backButton {
+  min-height: 46px;
+  border-radius: 10px;
+  padding: 0 24px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s ease-in-out;
+}
+
+.primaryButton {
+  color: #ffffff;
+  background: #22c55e;
+  border: none;
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.25);
+}
+
+.primaryButton:hover {
+  background: #16a34a;
+  box-shadow: 0 6px 16px rgba(34, 197, 94, 0.35);
+}
+
+.secondaryButton {
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.06);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 168px;
+}
+
+.secondaryButton:hover:not(:disabled) {
+  background: rgba(34, 197, 94, 0.12);
+  border-color: rgba(34, 197, 94, 0.4);
+}
+
+.secondaryButton:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.spinner {
+  width: 13px;
+  height: 13px;
+  border: 2px solid rgba(34, 197, 94, 0.28);
+  border-top-color: #22c55e;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+.backRow {
+  margin-top: 24px;
+}
+
+.backButton {
+  color: #64748b;
+  background: transparent;
+  border: none;
+  padding: 0;
+  min-height: auto;
+}
+
+.backButton:hover {
+  color: #0f2238;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 640px) {
+  .topNavbar {
+    height: auto;
+    min-height: 70px;
+  }
+
+  .navbarContent {
+    padding: 12px 16px;
+    gap: 12px;
+  }
+
+  .brandSub {
+    display: none;
+  }
+
+  .headerButtons {
+    gap: 8px;
+  }
+
+  .faqHelpBtn,
+  .signOutBtn {
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+
+  .content {
+    padding: 32px 16px 56px;
+  }
+
+  .title {
+    font-size: 28px;
+  }
+
+  .card {
+    padding: 30px 20px;
+    border-radius: 20px;
+  }
+
+  .actions {
+    flex-direction: column;
+  }
+
+  .primaryButton,
+  .secondaryButton {
+    width: 100%;
+  }
+}

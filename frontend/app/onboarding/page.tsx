@@ -7,6 +7,7 @@ import { syncPhaseToDb } from '@/lib/phaseSync';
 import { INDIA_STATES_DISTRICTS, INDIAN_STATES } from '@/data/india-states-districts';
 import SearchableSelect from '@/components/SearchableSelect';
 import { interceptAuthFetch } from '@/lib/auth-fetch';
+import { signOut } from 'next-auth/react';
 
 interface ResumeData {
   id?: string;
@@ -57,6 +58,26 @@ export default function OnboardingPage() {
   const [isFrozen, setIsFrozen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    try {
+      await signOut({ redirect: false });
+      sessionStorage.removeItem('currentPhase');
+      sessionStorage.removeItem('interviewStarted');
+      sessionStorage.removeItem('documentsSubmitted');
+      router.push('/login');
+    } catch (err) {
+      console.error('Error signing out:', err);
+    } finally {
+      setLoggingOut(false);
+    }
+  };
+
+  const handleFaqClick = () => {
+    router.push('/faq');
+  };
 
   // Check if onboarding is already completed on mount
   useEffect(() => {
@@ -392,6 +413,31 @@ export default function OnboardingPage() {
   if (isFrozen) {
     return (
       <main className={styles.container}>
+        {/* Top Navbar */}
+        <nav className={styles.topNavbar}>
+          <div className={styles.navbarContent}>
+            <div className={styles.logoWrapper}>
+              <div className={styles.logo} aria-label="ANNAM.AI" />
+              <p className={styles.brandSub}>Center of Excellence for AI in Agriculture, IIT Ropar</p>
+            </div>
+            <div className={styles.headerButtons}>
+              <button
+                onClick={handleFaqClick}
+                className={styles.faqHelpBtn}
+              >
+                💬 FAQ & Help
+              </button>
+              <button
+                onClick={handleLogout}
+                disabled={loggingOut}
+                className={styles.signOutBtn}
+              >
+                {loggingOut ? 'Signing out...' : 'Sign Out'}
+              </button>
+            </div>
+          </div>
+        </nav>
+
         <div className={styles.formBox}>
           <div className={styles.frozenBanner}>
             <span className={styles.frozenIcon}>🔒</span>
@@ -515,6 +561,31 @@ export default function OnboardingPage() {
 
   return (
     <main className={styles.container}>
+      {/* Top Navbar */}
+      <nav className={styles.topNavbar}>
+        <div className={styles.navbarContent}>
+          <div className={styles.logoWrapper}>
+            <div className={styles.logo} aria-label="ANNAM.AI" />
+            <p className={styles.brandSub}>Center of Excellence for AI in Agriculture, IIT Ropar</p>
+          </div>
+          <div className={styles.headerButtons}>
+            <button
+              onClick={handleFaqClick}
+              className={styles.faqHelpBtn}
+            >
+              💬 FAQ & Help
+            </button>
+            <button
+              onClick={handleLogout}
+              disabled={loggingOut}
+              className={styles.signOutBtn}
+            >
+              {loggingOut ? 'Signing out...' : 'Sign Out'}
+            </button>
+          </div>
+        </div>
+      </nav>
+
       <div className={styles.formBox}>
         <h1 className={styles.title}>Complete Your Profile</h1>
         <p className={styles.subtitle}>Tell us about yourself for your AI interview preparation</p>

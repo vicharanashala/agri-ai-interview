@@ -386,48 +386,39 @@ export default function DashboardPage() {
 
   return (
     <main className={styles.container}>
-      <div className={styles.header}>
-        <h1 className={styles.title}>Interview Progress Dashboard</h1>
-        <p className={styles.subtitle}>Track your journey through the hiring process</p>
-        <div className={styles.headerButtons}>
-          <button
-            onClick={handleFaqClick}
-            style={{
-              padding: '8px 16px',
-              fontSize: '14px',
-              fontWeight: 500,
-              color: '#08CB00',
-              background: 'rgba(8, 203, 0, 0.08)',
-              border: '1px solid rgba(8, 203, 0, 0.3)',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            💬 FAQ & Help
-          </button>
-          <button
-            onClick={handleLogout}
-            disabled={loggingOut}
-            style={{
-              padding: '8px 16px',
-              fontSize: '14px',
-              fontWeight: 500,
-              color: '#6b7280',
-              background: 'white',
-              border: '1px solid #d1d5db',
-              borderRadius: '8px',
-              cursor: loggingOut ? 'not-allowed' : 'pointer',
-              opacity: loggingOut ? 0.6 : 1,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {loggingOut ? 'Signing out...' : 'Sign Out'}
-          </button>
+      {/* Top Navbar */}
+      <nav className={styles.topNavbar}>
+        <div className={styles.navbarContent}>
+          <div className={styles.logoWrapper}>
+            <div className={styles.logo} aria-label="ANNAM.AI" />
+            <p className={styles.brandSub}>Center of Excellence for AI in Agriculture, IIT Ropar</p>
+          </div>
+          <div className={styles.headerButtons}>
+            <button
+              onClick={handleFaqClick}
+              className={styles.faqHelpBtn}
+            >
+              💬 FAQ & Help
+            </button>
+            <button
+              onClick={handleLogout}
+              disabled={loggingOut}
+              className={styles.signOutBtn}
+            >
+              {loggingOut ? 'Signing out...' : 'Sign Out'}
+            </button>
+          </div>
         </div>
-      </div>
+      </nav>
 
-      <div className={styles.progressContainer}>
+      {/* Main Dashboard Content */}
+      <div className={styles.contentContainer}>
+        <div className={styles.pageHeader}>
+          <h1 className={styles.dashboardTitle}>Interview Progress Dashboard</h1>
+          <p className={styles.dashboardSubtitle}>Track your journey through the hiring process</p>
+        </div>
+
+        <div className={styles.progressContainer}>
         <div className={styles.progressBar}>
           <div 
             className={styles.progressFill} 
@@ -440,54 +431,29 @@ export default function DashboardPage() {
       </div>
 
       {/* How to Use / Tutorial Video */}
-      <div style={{ maxWidth: 700, margin: '0 auto 12px' }}>
+      <div className={styles.tutorialWrapper}>
         <div
           onClick={() => setShowVideoModal(true)}
-          style={{
-            background: 'linear-gradient(135deg, rgba(8,203,0,0.12) 0%, rgba(139,92,246,0.12) 100%)',
-            border: '1px solid rgba(8,203,0,0.25)',
-            borderRadius: 12,
-            padding: '16px 20px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 16,
-            cursor: 'pointer',
-            transition: 'all 0.3s ease',
-          }}
-          onMouseEnter={e => {
-            (e.currentTarget as HTMLElement).style.borderColor = 'rgba(8,203,0,0.5)';
-            (e.currentTarget as HTMLElement).style.transform = 'translateY(-1px)';
-          }}
-          onMouseLeave={e => {
-            (e.currentTarget as HTMLElement).style.borderColor = 'rgba(8,203,0,0.25)';
-            (e.currentTarget as HTMLElement).style.transform = 'translateY(0)';
-          }}
+          className={styles.tutorialCard}
         >
-          <div style={{
-            width: 52, height: 52,
-            borderRadius: '50%',
-            background: 'rgba(8,203,0,0.2)',
-            border: '2px solid rgba(8,203,0,0.5)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 22, color: '#08CB00', flexShrink: 0,
-          }}>
+          <div className={styles.tutorialPlayIcon}>
             ▶
           </div>
-          <div>
-            <p style={{ color: 'rgba(255,255,255,0.9)', fontSize: '15px', fontWeight: 700, margin: 0, padding: 0 }}>
+          <div className={styles.tutorialContent}>
+            <p className={styles.tutorialTitle}>
               🎥 Watch: How to Use This App & Take the Interview
             </p>
-            <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '13px', margin: '4px 0 0 0', padding: 0 }}>
+            <p className={styles.tutorialSub}>
               Click to watch the tutorial video before proceeding
             </p>
           </div>
-          <span style={{ marginLeft: 'auto', color: 'rgba(8,203,0,0.7)', fontSize: 20 }}>→</span>
+          <span className={styles.tutorialArrow}>→</span>
         </div>
       </div>
 
-      <div style={{ maxWidth: 700, margin: '0 auto 12px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '16px 20px', fontFamily: 'system-ui, sans-serif' }}>
-        <p style={{ color: 'rgba(255,200,0,0.9)', fontSize: '13px', fontWeight: 700, margin: '0 0 8px 0', padding: 0 }}>Important Instructions</p>
-        <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: '13px', lineHeight: 1.8, margin: 0, padding: 0 }}>
+      <div className={styles.instructionsCard}>
+        <p className={styles.instructionsTitle}>Important Instructions</p>
+        <p className={styles.instructionsText}>
           1. The candidate will be allowed maximum 3 attempts.<br/>
           2. On failing the interview there will be a cooldown period after which candidate is allowed next attempt.<br/>
           3. Please read the interview instructions carefully, failing which may lead to interview closure.
@@ -653,6 +619,7 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
+      </div>
     </main>
   );
 }

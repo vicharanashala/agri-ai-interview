@@ -1,6 +1,12 @@
 import './globals.css';
 import Providers from '@/components/Providers';
 import IdleTimerWrapper from '@/components/IdleTimerWrapper';
+import { Inter } from 'next/font/google';
+
+const inter = Inter({
+  subsets: ['latin'],
+  display: 'swap',
+});
 
 export const metadata = {
   title: 'AI Interview Platform',
@@ -14,7 +20,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>
+      <body className={inter.className}>
         <Providers>
           <IdleTimerWrapper>{children}</IdleTimerWrapper>
         </Providers>

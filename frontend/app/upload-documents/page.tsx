@@ -2,7 +2,9 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { signOut } from 'next-auth/react';
 import { syncPhaseToDb } from '@/lib/phaseSync';
+import styles from './page.module.css';
 
 const ALLOWED_TYPES = [
   'application/pdf',
@@ -14,33 +16,33 @@ const SECTIONS = [
   {
     title: 'Identity',
     fields: [
-      { key: 'aadhaar',       label: 'Aadhaar Card (Front and Back side)',    required: true,  maxSizeMB: 5,  multi: true  },
-      { key: 'pan',           label: 'PAN Card (Front and Back side)',        required: true,  maxSizeMB: 5,  multi: true  },
-      { key: 'bank_details',  label: 'Bank Account Details',                 required: true,  maxSizeMB: 5,  multi: false },
+      { key: 'aadhaar', label: 'Aadhaar Card (Front and Back side)', required: true, maxSizeMB: 5, multi: true },
+      { key: 'pan', label: 'PAN Card (Front and Back side)', required: true, maxSizeMB: 5, multi: true },
+      { key: 'bank_details', label: 'Bank Account Details', required: true, maxSizeMB: 5, multi: false },
     ],
   },
   {
     title: 'Education',
     fields: [
-      { key: 'updated_resume',   label: 'Updated Resume',                                                                             required: true,  maxSizeMB: 5,  multi: false },
-      { key: 'marksheet_10',     label: '10th Class Marksheet',                                                                     required: true,  maxSizeMB: 10, multi: false },
-      { key: 'marksheet_12',     label: '12th Class Marksheet',                                                                     required: true,  maxSizeMB: 10, multi: false },
-      { key: 'grad_marksheets',  label: 'Graduation mark sheets (all semesters) and Degree Certificate',                               required: false, maxSizeMB: 10, multi: true  },
-      { key: 'pg_marksheets',    label: 'Post-Graduation mark sheets (all semesters) and Degree Certificate (if applicable)',           required: false, maxSizeMB: 10, multi: true  },
-      { key: 'noc',             label: 'NOC (No Objection Certificate) from the institute, if currently pursuing studies',              required: false, maxSizeMB: 5,  multi: false },
+      { key: 'updated_resume', label: 'Updated Resume', required: true, maxSizeMB: 5, multi: false },
+      { key: 'marksheet_10', label: '10th Class Marksheet', required: true, maxSizeMB: 10, multi: false },
+      { key: 'marksheet_12', label: '12th Class Marksheet', required: true, maxSizeMB: 10, multi: false },
+      { key: 'grad_marksheets', label: 'Graduation mark sheets (all semesters) and Degree Certificate', required: false, maxSizeMB: 10, multi: true },
+      { key: 'pg_marksheets', label: 'Post-Graduation mark sheets (all semesters) and Degree Certificate (if applicable)', required: false, maxSizeMB: 10, multi: true },
+      { key: 'noc', label: 'NOC from the institute, if currently pursuing studies', required: false, maxSizeMB: 5, multi: false },
     ],
   },
   {
     title: 'Experience',
     fields: [
       { key: 'experience_letter', label: 'Offer Letter / Experience Letter from previous organization (if applicable)', required: false, maxSizeMB: 5, multi: false },
-      { key: 'salary_slips',      label: "Last three months' salary slips (if applicable)",                                                 required: false, maxSizeMB: 5, multi: true  },
-      { key: 'other_docs',        label: 'Any other supporting documents mentioned in the resume',                                        required: false, maxSizeMB: 5, multi: true  },
+      { key: 'salary_slips', label: "Last three months' salary slips (if applicable)", required: false, maxSizeMB: 5, multi: true },
+      { key: 'other_docs', label: 'Any other supporting documents mentioned in the resume', required: false, maxSizeMB: 5, multi: true },
     ],
   },
 ];
 
-const ALL_FIELDS = SECTIONS.flatMap(s => s.fields);
+const ALL_FIELDS = SECTIONS.flatMap((section) => section.fields);
 
 interface UploadedFile {
   name: string;
@@ -54,17 +56,16 @@ type FileMap = Record<string, UploadedFile[]>;
 
 export default function UploadDocumentsPage() {
   const [files, setFiles] = useState<FileMap>(
-    Object.fromEntries(ALL_FIELDS.map(f => [f.key, []]))
+    Object.fromEntries(ALL_FIELDS.map((field) => [field.key, []]))
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [alreadySubmitted, setAlreadySubmitted] = useState(false);
+  const [foundationCompleted, setFoundationCompleted] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const router = useRouter();
-
-  // Foundation course must be completed before this step is accessible
-  const [foundationCompleted, setFoundationCompleted] = useState(false);
 
   useEffect(() => {
     const checkFoundation = async () => {
@@ -88,13 +89,9 @@ export default function UploadDocumentsPage() {
         console.error('Failed to verify foundation completion via profile API:', err);
       }
     };
+
     checkFoundation();
   }, []);
-
-  const requiredKeys = ALL_FIELDS.filter(f => f.required).map(f => f.key);
-  const allRequiredUploaded = requiredKeys.every(
-    key => files[key] && files[key].length > 0
-  );
 
   useEffect(() => {
     const checkSubmitted = async () => {
@@ -110,12 +107,17 @@ export default function UploadDocumentsPage() {
         }
       } catch (_) {}
     };
+
     checkSubmitted();
   }, []);
 
+  const requiredKeys = ALL_FIELDS.filter((field) => field.required).map((field) => field.key);
+  const allRequiredUploaded = requiredKeys.every((key) => files[key] && files[key].length > 0);
+
   const validateFile = (file: File, fieldKey: string): string | null => {
-    const field = ALL_FIELDS.find(f => f.key === fieldKey);
+    const field = ALL_FIELDS.find((item) => item.key === fieldKey);
     if (!field) return null;
+
     if (
       !ALLOWED_TYPES.includes(file.type) &&
       !file.name.toLowerCase().endsWith('.pdf') &&
@@ -124,9 +126,11 @@ export default function UploadDocumentsPage() {
     ) {
       return 'Only PDF and DOCX files allowed';
     }
+
     if (file.size > field.maxSizeMB * 1024 * 1024) {
       return `Exceeds ${field.maxSizeMB}MB limit`;
     }
+
     return null;
   };
 
@@ -149,10 +153,10 @@ export default function UploadDocumentsPage() {
     const file = fileList?.[0];
     if (!file) return;
 
-    const field = ALL_FIELDS.find(f => f.key === fieldKey)!;
+    const field = ALL_FIELDS.find((item) => item.key === fieldKey)!;
     const error = validateFile(file, fieldKey);
     if (error) {
-      setErrors(prev => ({ ...prev, [fieldKey]: error }));
+      setErrors((prev) => ({ ...prev, [fieldKey]: error }));
       return;
     }
 
@@ -169,18 +173,23 @@ export default function UploadDocumentsPage() {
       file,
     };
 
-    setFiles(prev =>
+    setFiles((prev) =>
       field.multi
         ? { ...prev, [fieldKey]: [...prev[fieldKey], uploaded] }
         : { ...prev, [fieldKey]: [uploaded] }
     );
-    setErrors(prev => { const n = { ...prev }; delete n[fieldKey]; return n; });
+    setErrors((prev) => {
+      const next = { ...prev };
+      delete next[fieldKey];
+      delete next._form;
+      return next;
+    });
   };
 
   const handleRemove = (fieldKey: string, index: number) => {
-    setFiles(prev => ({
+    setFiles((prev) => ({
       ...prev,
-      [fieldKey]: prev[fieldKey].filter((_, i) => i !== index),
+      [fieldKey]: prev[fieldKey].filter((_, itemIndex) => itemIndex !== index),
     }));
   };
 
@@ -198,6 +207,7 @@ export default function UploadDocumentsPage() {
           formData.append(field.key, uploaded.file);
         }
       }
+
       const rt = sessionStorage.getItem('candidate_session_token');
       const headers: HeadersInit = rt ? { 'x-redis-token': rt } : {};
       const res = await fetch('/api/candidate/documents', {
@@ -206,10 +216,12 @@ export default function UploadDocumentsPage() {
         credentials: 'include',
         headers,
       });
+
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.detail || 'Upload failed.');
       }
+
       await syncPhaseToDb(5, { documentsSubmitted: true });
       setSubmitSuccess(true);
     } catch (err: unknown) {
@@ -220,114 +232,153 @@ export default function UploadDocumentsPage() {
     }
   };
 
-  // Locked state: foundation course must be completed first
-  if (!foundationCompleted) {
-    return (
-      <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, fontFamily: 'system-ui, sans-serif' }}>
-        <div style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: 32, maxWidth: 440, width: '100%', color: '#fff', textAlign: 'center' }}>
-          <div style={{ fontSize: 40, marginBottom: 16 }}>🔒</div>
-          <h1 style={{ color: 'rgba(255,255,255,0.9)', fontSize: 20, margin: '0 0 12px' }}>Foundation Course Required</h1>
-          <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, lineHeight: 1.6, margin: '0 0 24px' }}>
-            You must complete the Foundation Course before uploading documents.
-          </p>
-          <button
-            onClick={() => router.push('/foundation-course')}
-            style={{ background: '#08CB00', color: '#000', border: 'none', borderRadius: 8, padding: '10px 24px', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'system-ui' }}
-          >
-            Go to Foundation Course
+  const handleFaqClick = () => {
+    router.push('/faq');
+  };
+
+  const handleLogout = async () => {
+    setLoggingOut(true);
+
+    const redisToken = sessionStorage.getItem('candidate_session_token');
+    if (redisToken) {
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL;
+      fetch(`${backendUrl}/api/candidate/session/logout`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${redisToken}` },
+      }).catch(() => {});
+    }
+
+    sessionStorage.clear();
+    localStorage.clear();
+    await signOut({ redirect: false });
+    router.push('/login');
+  };
+
+  const renderHeader = () => (
+    <nav className={styles.topNavbar}>
+      <div className={styles.navbarContent}>
+        <div className={styles.logoWrapper}>
+          <div className={styles.logo} aria-label="ANNAM.AI" />
+          <p className={styles.brandSub}>Center of Excellence for AI in Agriculture, IIT Ropar</p>
+        </div>
+        <div className={styles.headerButtons}>
+          <button onClick={handleFaqClick} className={styles.faqHelpBtn}>
+            FAQ & Help
+          </button>
+          <button onClick={handleLogout} disabled={loggingOut} className={styles.signOutBtn}>
+            {loggingOut ? 'Signing out...' : 'Sign Out'}
           </button>
         </div>
       </div>
+    </nav>
+  );
+
+  const renderCenteredState = (
+    title: string,
+    message: string,
+    actionLabel: string,
+    onAction: () => void,
+    eyebrow?: string
+  ) => (
+    <main className={styles.container}>
+      {renderHeader()}
+      <div className={styles.stateWrap}>
+        <div className={styles.stateCard}>
+          {eyebrow && <div className={styles.stateEyebrow}>{eyebrow}</div>}
+          <h1 className={styles.stateTitle}>{title}</h1>
+          <p className={styles.stateText}>{message}</p>
+          <button onClick={onAction} className={styles.primaryButton}>
+            {actionLabel}
+          </button>
+        </div>
+      </div>
+    </main>
+  );
+
+  if (!foundationCompleted) {
+    return renderCenteredState(
+      'Foundation Course Required',
+      'You must complete the Foundation Course before uploading documents.',
+      'Go to Foundation Course',
+      () => router.push('/foundation-course'),
+      'Locked'
     );
   }
 
   if (submitSuccess) {
-    return (
-      <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, fontFamily: 'system-ui, sans-serif' }}>
-        <div style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: 32, maxWidth: 440, width: '100%', color: '#fff' }}>
-          <h1 style={{ color: '#08CB00', fontSize: 22, margin: '0 0 12px' }}>Documents Submitted!</h1>
-          <p style={{ color: 'rgba(255,255,255,0.7)', margin: '0 0 24px', fontSize: 14, lineHeight: 1.6 }}>
-            Your documents have been uploaded. The hiring team will review them and get back to you shortly.
-          </p>
-          <button onClick={() => router.push('/dashboard')} style={{ background: '#08CB00', color: '#000', border: 'none', borderRadius: 8, padding: '10px 24px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
-            Go to Dashboard
-          </button>
-        </div>
-      </div>
+    return renderCenteredState(
+      'Documents Submitted!',
+      'Your documents have been uploaded. The hiring team will review them and get back to you shortly.',
+      'Go to Dashboard',
+      () => router.push('/dashboard'),
+      'Submitted'
     );
   }
 
   if (alreadySubmitted) {
-    return (
-      <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, fontFamily: 'system-ui, sans-serif' }}>
-        <div style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: 32, maxWidth: 440, width: '100%', color: '#fff' }}>
-          <h1 style={{ color: '#08CB00', fontSize: 22, margin: '0 0 12px' }}>Documents Already Submitted</h1>
-          <p style={{ color: 'rgba(255,255,255,0.7)', margin: '0 0 24px', fontSize: 14, lineHeight: 1.6 }}>
-            You have already submitted your documents. The hiring team is reviewing your application.
-          </p>
-          <button onClick={() => router.push('/dashboard')} style={{ background: '#08CB00', color: '#000', border: 'none', borderRadius: 8, padding: '10px 24px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
-            Go to Dashboard
-          </button>
-        </div>
-      </div>
+    return renderCenteredState(
+      'Documents Already Submitted',
+      'You have already submitted your documents. The hiring team is reviewing your application.',
+      'Go to Dashboard',
+      () => router.push('/dashboard'),
+      'Complete'
     );
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0f172a', padding: '40px 20px', fontFamily: 'system-ui, sans-serif' }}>
-      <div style={{ maxWidth: 720, margin: '0 auto', color: '#fff' }}>
+    <main className={styles.container}>
+      {renderHeader()}
 
-        <h1 style={{ color: '#08CB00', fontSize: 22, margin: '0 0 6px' }}>Congratulations on Passing!</h1>
-        <p style={{ color: 'rgba(255,255,255,0.6)', margin: '0 0 28px', fontSize: 14 }}>
-          Upload the following documents to complete your application.
-        </p>
+      <div className={styles.content}>
+        <div className={styles.pageHeader}>
+          <h1 className={styles.title}>Upload Documents</h1>
+          <p className={styles.subtitle}>
+            Upload the following documents to complete your application.
+          </p>
+        </div>
 
         {errors._form && (
-          <div style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5', padding: '10px 14px', borderRadius: 8, fontSize: 13, marginBottom: 20 }}>
+          <div className={styles.formError}>
             {errors._form}
           </div>
         )}
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 24, marginBottom: 28 }}>
-          <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 4 }}>
-            <span style={{ fontSize: 12, color: 'rgba(255,200,0,0.85)', background: 'rgba(255,200,0,0.08)', border: '1px solid rgba(255,200,0,0.2)', borderRadius: 6, padding: '5px 12px' }}>
-              Please upload all documents only in .pdf, .doc, or .docx format
-            </span>
-          </div>
-          {SECTIONS.map(section => (
-            <div key={section.title}>
-              <div style={{ fontSize: 18, fontWeight: 700, color: '#fff', marginBottom: 10, paddingBottom: 6, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-                {section.title}
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {section.fields.map(field => {
+        <div className={styles.notice}>
+          Please upload all documents only in .pdf, .doc, or .docx format
+        </div>
+
+        <div className={styles.sections}>
+          {SECTIONS.map((section) => (
+            <section key={section.title} className={styles.section}>
+              <h2 className={styles.sectionTitle}>{section.title}</h2>
+              <div className={styles.fieldList}>
+                {section.fields.map((field) => {
                   const fieldFiles = files[field.key] || [];
+
                   return (
-                    <div key={field.key} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '14px 16px' }}>
-                      {/* Header row */}
-                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: fieldFiles.length > 0 ? 10 : 0 }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.9)', lineHeight: 1.4 }}>{field.label}</span>
-                            {field.required && <span style={{ color: '#ef4444', fontSize: 13 }}>*</span>}
+                    <div key={field.key} className={styles.uploadRow}>
+                      <div className={styles.rowTop}>
+                        <div className={styles.rowText}>
+                          <div className={styles.fieldLabel}>
+                            {field.label}
+                            {field.required && <span className={styles.required}>*</span>}
                           </div>
-                          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>
-                            {field.multi ? 'Multiple files' : 'Single file'} · max {field.maxSizeMB}MB
+                          <div className={styles.fieldHint}>
+                            {field.multi ? 'Multiple files' : 'Single file'} - max {field.maxSizeMB}MB
                           </div>
                         </div>
 
-                        {/* Add file button — always visible, separate from label */}
-                        <label style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.06)', border: '1px dashed rgba(255,255,255,0.2)', borderRadius: 7, padding: '7px 14px', fontSize: 13, color: 'rgba(255,255,255,0.6)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                          <span>+</span>
+                        <label className={styles.chooseButton}>
                           <span>{fieldFiles.length === 0 ? 'Choose file' : field.multi ? 'Add more' : 'Replace'}</span>
                           <input
                             type="file"
                             accept=".pdf,.doc,.docx"
-                            ref={el => { fileInputRefs.current[field.key] = el; }}
-                            style={{ display: 'none' }}
-                            onChange={e => {
-                              handleFileChange(field.key, e.target.files);
-                              // Reset so same file can be re-selected after removal
+                            ref={(el) => {
+                              fileInputRefs.current[field.key] = el;
+                            }}
+                            className={styles.fileInput}
+                            onChange={(event) => {
+                              handleFileChange(field.key, event.target.files);
                               if (fileInputRefs.current[field.key]) {
                                 fileInputRefs.current[field.key]!.value = '';
                               }
@@ -336,18 +387,18 @@ export default function UploadDocumentsPage() {
                         </label>
                       </div>
 
-                      {/* File list */}
                       {fieldFiles.length > 0 && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
-                          {fieldFiles.map((f, idx) => (
-                            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(8,203,0,0.08)', border: '1px solid rgba(8,203,0,0.2)', borderRadius: 6, padding: '7px 10px' }}>
-                              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={f.name}>
-                                {f.name}
+                        <div className={styles.fileList}>
+                          {fieldFiles.map((file, index) => (
+                            <div key={`${file.name}-${index}`} className={styles.fileItem}>
+                              <span className={styles.fileName} title={file.name}>
+                                {file.name}
                               </span>
-                              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', flexShrink: 0 }}>{f.size}</span>
+                              <span className={styles.fileSize}>{file.size}</span>
                               <button
-                                onClick={() => handleRemove(field.key, idx)}
-                                style={{ background: 'rgba(239,68,68,0.2)', border: 'none', color: '#fca5a5', fontSize: 11, width: 20, height: 20, borderRadius: '50%', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'system-ui' }}
+                                onClick={() => handleRemove(field.key, index)}
+                                className={styles.removeButton}
+                                aria-label={`Remove ${file.name}`}
                               >
                                 x
                               </button>
@@ -357,32 +408,29 @@ export default function UploadDocumentsPage() {
                       )}
 
                       {errors[field.key] && (
-                        <p style={{ color: '#f87171', fontSize: 12, margin: '6px 0 0' }}>{errors[field.key]}</p>
+                        <p className={styles.fieldError}>{errors[field.key]}</p>
                       )}
                     </div>
                   );
                 })}
               </div>
-            </div>
+            </section>
           ))}
         </div>
 
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
-          <button
-            onClick={() => router.push('/dashboard')}
-            style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.7)', borderRadius: 8, padding: '10px 20px', fontSize: 14, cursor: 'pointer', fontFamily: 'system-ui' }}
-          >
+        <div className={styles.actions}>
+          <button onClick={() => router.push('/dashboard')} className={styles.cancelButton}>
             Back
           </button>
           <button
             onClick={handleSubmit}
             disabled={isLoading || !allRequiredUploaded}
-            style={{ background: '#08CB00', border: 'none', color: '#000', borderRadius: 8, padding: '10px 24px', fontSize: 14, fontWeight: 600, cursor: isLoading || !allRequiredUploaded ? 'not-allowed' : 'pointer', opacity: isLoading || !allRequiredUploaded ? 0.4 : 1, fontFamily: 'system-ui' }}
+            className={styles.primaryButton}
           >
             {isLoading ? 'Submitting...' : 'Submit Documents'}
           </button>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

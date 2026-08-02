@@ -1,325 +1,303 @@
 .container {
   min-height: 100vh;
-  padding: 40px 20px;
-  background: linear-gradient(135deg, #0f172a 0%, #020617 100%);
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-}
-
-.header {
+  background: #f4fbf7; /* Very soft mint/green-wash background */
+  background-image: 
+    radial-gradient(at 0% 100%, rgba(34, 197, 94, 0.08) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(15, 34, 56, 0.03) 0px, transparent 50%);
+  font-family: inherit;
   display: flex;
   flex-direction: column;
+}
+
+/* ─── Top Navbar ────────────────────────────────────────────── */
+.topNavbar {
+  width: 100%;
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+  height: 70px;
+  display: flex;
   align-items: center;
-  margin-bottom: 40px;
-  position: relative;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.03);
 }
 
-.title {
-  font-size: 36px;
-  font-weight: 700;
-  margin: 0 0 10px 0;
-  color: white;
-  text-align: center;
+.navbarContent {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
-.subtitle {
-  font-size: 18px;
-  opacity: 0.9;
+.logoWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+}
+
+.logo {
+  display: block;
+  height: 28px;
+  width: 140px;
+  flex-shrink: 0;
+  background: linear-gradient(to right,
+    #22c55e 0%,    /* Green icon */
+    #22c55e 21%,
+    #0f2238 21%,   /* Navy text 'annam' */
+    #0f2238 81%,
+    #22c55e 81%,   /* Green text '.ai' */
+    #22c55e 100%
+  );
+  -webkit-mask-image: url('../../public/login/annam-logo-white.png');
+  mask-image: url('../../public/login/annam-logo-white.png');
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: left center;
+  mask-position: left center;
+}
+
+.brandSub {
+  font-size: 9px;
+  font-weight: 500;
+  color: #94a3b8;
   margin: 0;
-  color: white;
-  text-align: center;
 }
 
 .headerButtons {
-  position: absolute;
-  right: 0;
-  top: 0;
   display: flex;
-  gap: 8px;
+  gap: 10px;
   align-items: center;
 }
 
+.contentContainer {
+  width: 100%;
+  max-width: 740px;
+  margin: 0 auto;
+  padding: 40px 20px 80px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 20px;
+  box-sizing: border-box;
+}
+
+.pageHeader {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.dashboardTitle {
+  font-size: 32px;
+  font-weight: 800;
+  margin: 0 0 10px 0;
+  color: #0f2238; /* Deep navy */
+  text-align: center;
+}
+
+.dashboardSubtitle {
+  font-size: 15px;
+  color: #64748b; /* Slate-500 */
+  text-align: center;
+  margin: 0;
+  font-weight: 500;
+}
+
+.faqHelpBtn {
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.08);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease-in-out;
+}
+
+.faqHelpBtn:hover {
+  background: rgba(34, 197, 94, 0.14);
+  border-color: rgba(34, 197, 94, 0.4);
+}
+
+.signOutBtn {
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #64748b;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease-in-out;
+}
+
+.signOutBtn:hover {
+  background: #f8fafc;
+  color: #334155;
+  border-color: #cbd5e1;
+}
+
 .progressContainer {
+  width: 100%;
   max-width: 700px;
-  margin: 0 auto 12px;
-  background: rgba(255, 255, 255, 0.08);
-  padding: 20px;
-  border-radius: 12px;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  margin: 0 auto;
+  background: #dcfce7; /* Solid soft green background matching completed phase */
+  padding: 24px;
+  border-radius: 16px;
+  border: 1px solid #bbf7d0; /* Soft green border matching completed phase */
+  box-shadow: 0 4px 20px -2px rgba(34, 197, 94, 0.05);
+  box-sizing: border-box;
 }
 
 .progressBar {
-  height: 12px;
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 6px;
+  height: 10px;
+  background: #eff6ff;
+  border-radius: 5px;
   overflow: hidden;
   margin-bottom: 10px;
 }
 
 .progressFill {
   height: 100%;
-  background: linear-gradient(90deg, #08CB00 0%, #22c55e 100%);
-  border-radius: 6px;
+  background: linear-gradient(90deg, #22c55e 0%, #4ade80 100%);
+  border-radius: 5px;
   transition: width 0.5s ease;
 }
 
 .progressPercent {
   display: block;
   text-align: center;
-  color: rgba(255, 255, 255, 0.8);
-  font-weight: 600;
-  font-size: 14px;
+  color: #0f2238;
+  font-weight: 700;
+  font-size: 13px;
 }
 
-.phasesList {
+/* ─── Tutorial Video Card ────────────────────────────────────── */
+.tutorialWrapper {
+  width: 100%;
   max-width: 700px;
-  margin: 12px auto 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  margin: 0 auto;
+  box-sizing: border-box;
 }
 
-.phaseCard {
-  background: rgba(255, 255, 255, 0.07);
-  border-radius: 12px;
-  padding: 20px 24px;
+.tutorialCard {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.05) 0%, rgba(2, 132, 199, 0.05) 100%);
+  border: 1px solid rgba(34, 197, 94, 0.15);
+  border-radius: 16px;
+  padding: 16px 20px;
   display: flex;
   align-items: center;
-  gap: 20px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-  transition: all 0.3s ease;
+  gap: 16px;
   cursor: pointer;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(8px);
+  transition: all 0.2s ease-in-out;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.02);
 }
 
-.phaseCard:hover {
-  transform: translateY(-2px);
-  background: rgba(255, 255, 255, 0.1);
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+.tutorialCard:hover {
+  border-color: #22c55e;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px -3px rgba(34, 197, 94, 0.08);
 }
 
-.phaseCard.current {
-  border-color: #08CB00;
-  background: rgba(8, 203, 0, 0.08);
-}
-
-.phaseCard.completed {
-  background: rgba(8, 203, 0, 0.12);
-  cursor: pointer;
-}
-
-.phaseCard.locked {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.phaseCard.locked:hover {
-  transform: none;
-  background: rgba(255, 255, 255, 0.07);
-}
-
-.phaseNumber {
-  width: 48px;
-  height: 48px;
+.tutorialPlayIcon {
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
-  background: rgba(8, 203, 0, 0.2);
-  border: 2px solid #08CB00;
-  color: #08CB00;
+  background: rgba(34, 197, 94, 0.08);
+  border: 2px solid rgba(34, 197, 94, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
-  font-weight: 700;
+  font-size: 16px;
+  color: #22c55e;
   flex-shrink: 0;
 }
 
-.phaseCard.completed .phaseNumber {
-  background: #08CB00;
-  color: white;
-}
-
-.phaseCard.locked .phaseNumber {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.2);
-  color: rgba(255, 255, 255, 0.4);
-}
-
-.phaseIcon {
-  font-size: 24px;
-  width: 40px;
-  text-align: center;
-}
-
-.phaseCard.completed .phaseIcon {
-  color: #08CB00;
-}
-
-.phaseCard.current .phaseIcon {
-  color: #08CB00;
-}
-
-.phaseCard.locked .phaseIcon {
-  color: rgba(255, 255, 255, 0.3);
-}
-
-.phaseContent {
+.tutorialContent {
   flex: 1;
 }
 
-.phaseName {
-  font-size: 20px;
-  font-weight: 600;
-  color: white;
-  margin: 0 0 4px 0;
-}
-
-.phaseDescription {
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.55);
-  margin: 0;
-}
-
-.phaseStatus {
-  flex-shrink: 0;
-}
-
-.completedBadge {
-  background: #08CB00;
-  color: white;
-  padding: 6px 16px;
-  border-radius: 20px;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.currentBadge {
-  background: rgba(8, 203, 0, 0.2);
-  color: #08CB00;
-  padding: 6px 16px;
-  border-radius: 20px;
-  font-size: 14px;
-  font-weight: 600;
-  border: 1px solid #08CB00;
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
-}
-
-.lockedBadge {
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.4);
-  padding: 6px 16px;
-  border-radius: 20px;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.failedBadge {
-  background: rgba(239, 68, 68, 0.2);
-  color: #ef4444;
-  padding: 6px 16px;
-  border-radius: 20px;
-  font-size: 14px;
-  font-weight: 600;
-  border: 1px solid #ef4444;
-}
-
-.reattemptBadge {
-  background: rgba(245, 158, 11, 0.2);
-  color: #f59e0b;
-  padding: 6px 16px;
-  border-radius: 20px;
-  font-size: 14px;
-  font-weight: 600;
-  border: 1px solid #f59e0b;
-  animation: pulse 2s infinite;
-}
-
-.actions {
-  max-width: 700px;
-  margin: 40px auto 0;
-  text-align: center;
-}
-
-.demoNote {
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 14px;
-  margin-bottom: 20px;
-}
-
-.advanceButton {
-  background: linear-gradient(135deg, #08CB00 0%, #059669 100%);
-  color: white;
-  border: none;
-  padding: 16px 32px;
-  font-size: 18px;
-  font-weight: 600;
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 15px rgba(8, 203, 0, 0.3);
-}
-
-.advanceButton:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(8, 203, 0, 0.4);
-}
-
-.resetButton {
-  margin-top: 20px;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.6);
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  padding: 10px 20px;
-  font-size: 14px;
-  font-weight: 500;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.resetButton:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.4);
-}
-
-.completedMessage {
-  background: linear-gradient(135deg, #08CB00 0%, #059669 100%);
-  color: white;
-  padding: 20px 32px;
-  font-size: 20px;
+.tutorialTitle {
+  color: #0f2238;
+  font-size: 14.5px;
   font-weight: 700;
-  border-radius: 12px;
-  display: inline-block;
-  box-shadow: 0 4px 15px rgba(8, 203, 0, 0.3);
+  margin: 0;
+  padding: 0;
 }
 
-.loading {
-  color: white;
-  font-size: 24px;
-  text-align: center;
-  padding: 100px 0;
+.tutorialSub {
+  color: #64748b;
+  font-size: 12.5px;
+  margin: 4px 0 0 0;
+  padding: 0;
+  font-weight: 500;
 }
 
-/* Interview Attempts Card */
-.attemptsCard {
+.tutorialArrow {
+  margin-left: auto;
+  color: #22c55e;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+/* ─── Instructions Card ───────────────────────────────────────── */
+.instructionsCard {
+  width: 100%;
   max-width: 700px;
-  margin: 0 auto 12px;
-  background: rgba(255, 255, 255, 0.07);
+  margin: 0 auto;
+  background: #fffbeb;
+  border: 1px solid #fef3c7;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.01);
+  box-sizing: border-box;
+}
+
+.instructionsTitle {
+  color: #b45309; /* Amber-700 */
+  font-size: 13px;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+  padding: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.instructionsText {
+  color: #d97706; /* Amber-600 */
+  font-size: 13px;
+  line-height: 1.8;
+  margin: 0;
+  padding: 0;
+  font-weight: 500;
+}
+
+/* ─── Interview Attempts Card ─────────────────────────────────── */
+.attemptsCard {
+  width: 100%;
+  max-width: 700px;
+  margin: 0 auto;
+  background: #ffffff;
   border-radius: 16px;
   padding: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(8px);
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.03);
+  box-sizing: border-box;
 }
 
 .attemptsTitle {
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 700;
-  color: white;
+  color: #0f2238;
   margin: 0 0 16px 0;
 }
 
@@ -334,240 +312,278 @@
   align-items: center;
   gap: 12px;
   padding: 10px 14px;
-  background: rgba(255, 255, 255, 0.05);
+  background: #f8fafc;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid #e2e8f0;
 }
 
 .attemptNumber {
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 14px;
+  color: #64748b;
+  font-size: 13px;
   font-weight: 600;
   min-width: 28px;
 }
 
 .attemptDate {
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 14px;
+  color: #94a3b8;
+  font-size: 13px;
   margin-left: auto;
+  font-weight: 500;
 }
 
 .attemptScore {
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 14px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .badgePass {
-  background: rgba(8, 203, 0, 0.2);
-  color: #08CB00;
-  border: 1px solid rgba(8, 203, 0, 0.4);
+  background: rgba(34, 197, 94, 0.08);
+  color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.2);
   padding: 3px 10px;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.5px;
 }
 
 .badgeFail {
-  background: rgba(239, 68, 68, 0.2);
+  background: rgba(239, 68, 68, 0.08);
   color: #ef4444;
-  border: 1px solid rgba(239, 68, 68, 0.4);
+  border: 1px solid rgba(239, 68, 68, 0.2);
   padding: 3px 10px;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.5px;
 }
 
 .badgeWithdrawn {
-  background: rgba(245, 158, 11, 0.2);
+  background: rgba(245, 158, 11, 0.08);
   color: #f59e0b;
-  border: 1px solid rgba(245, 158, 11, 0.4);
+  border: 1px solid rgba(245, 158, 11, 0.2);
   padding: 3px 10px;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.5px;
 }
 
 .badgeAntiCheat {
-  background: rgba(168, 85, 247, 0.2);
+  background: rgba(168, 85, 247, 0.08);
   color: #a855f7;
-  border: 1px solid rgba(168, 85, 247, 0.4);
+  border: 1px solid rgba(168, 85, 247, 0.2);
   padding: 3px 10px;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.5px;
 }
 
 .badgeCompleted {
-  background: rgba(100, 116, 139, 0.2);
-  color: #94a3b8;
-  border: 1px solid rgba(100, 116, 139, 0.4);
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #cbd5e1;
   padding: 3px 10px;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.5px;
 }
 
-/* Interview Status Card */
-.interviewStatusCard {
+/* ─── Phases List & Cards ─────────────────────────────────────── */
+.phasesList {
+  width: 100%;
   max-width: 700px;
-  margin: 0 auto 30px;
-  background: rgba(255, 255, 255, 0.07);
-  border-radius: 16px;
-  padding: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(8px);
-}
-
-.statusHeader {
-  text-align: center;
-  margin-bottom: 20px;
-}
-
-.statusHeader h2 {
-  font-size: 24px;
-  font-weight: 700;
-  color: white;
-  margin: 0;
-}
-
-.scoreSection {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 24px;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-}
-
-.scoreCircle {
-  width: 100px;
-  height: 100px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #08CB00 0%, #059669 100%);
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
+  gap: 12px;
+  box-sizing: border-box;
+}
+
+.phaseCard {
+  width: 100%;
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02), 0 0 1px 0 rgba(0, 0, 0, 0.08);
+  border: 1px solid #e2e8f0;
+  transition: all 0.2s ease-in-out;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.phaseCard:hover {
+  transform: translateY(-2px);
+  border-color: #22c55e;
+  box-shadow: 0 10px 20px -3px rgba(34, 197, 94, 0.08), 0 4px 6px -2px rgba(34, 197, 94, 0.04);
+}
+
+.phaseCard.current {
+  border-color: #22c55e;
+  background: rgba(34, 197, 94, 0.03);
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.05);
+}
+
+.phaseCard.completed {
+  background: #dcfce7; /* Solid soft green background */
+  border-color: #bbf7d0; /* Soft green border */
+  cursor: pointer;
+}
+
+.phaseCard.completed:hover {
+  background: #bbf7d0;
+  border-color: #22c55e;
+}
+
+.phaseCard.locked {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.phaseCard.locked:hover {
+  transform: none;
+  border-color: #e2e8f0;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02);
+}
+
+.phaseNumber {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(34, 197, 94, 0.08);
+  border: 2px solid #22c55e;
+  color: #22c55e;
+  display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
-  box-shadow: 0 4px 15px rgba(8, 203, 0, 0.3);
-}
-
-.scoreValue {
-  font-size: 32px;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.scoreMax {
-  font-size: 14px;
-  opacity: 0.8;
-}
-
-.passFailBadge {
-  padding: 12px 24px;
-  border-radius: 12px;
   font-size: 18px;
   font-weight: 700;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  flex-shrink: 0;
 }
 
-.resultInfo {
+.phaseCard.completed .phaseNumber {
+  background: #22c55e;
+  color: white;
+  border-color: #22c55e;
+}
+
+.phaseCard.locked .phaseNumber {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #94a3b8;
+}
+
+.phaseIcon {
+  font-size: 20px;
+  width: 36px;
   text-align: center;
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 16px;
-  margin-bottom: 20px;
 }
 
-.resultInfo strong {
+.phaseCard.completed .phaseIcon,
+.phaseCard.current .phaseIcon {
+  color: #22c55e;
+}
+
+.phaseCard.locked .phaseIcon {
+  color: #cbd5e1;
+}
+
+.phaseContent {
+  flex: 1;
+}
+
+.phaseName {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f2238;
+  margin: 0 0 4px 0;
+}
+
+.phaseDescription {
+  font-size: 13.5px;
+  color: #64748b;
+  margin: 0;
+  font-weight: 500;
+}
+
+.phaseStatus {
+  flex-shrink: 0;
+}
+
+.completedBadge {
+  background: #22c55e;
   color: white;
-}
-
-.actionButtons {
-  display: flex;
-  justify-content: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.viewSummaryButton {
-  background: linear-gradient(135deg, #08CB00 0%, #059669 100%);
-  color: white;
-  border: none;
-  padding: 12px 24px;
-  font-size: 16px;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 13px;
   font-weight: 600;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 15px rgba(8, 203, 0, 0.3);
 }
 
-.viewSummaryButton:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(8, 203, 0, 0.4);
-}
-
-.retakeButton {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-  color: white;
-  border: none;
-  padding: 12px 24px;
-  font-size: 16px;
+.currentBadge {
+  background: rgba(34, 197, 94, 0.08);
+  color: #22c55e;
+  padding: 5px 15px;
+  border-radius: 20px;
+  font-size: 13px;
   font-weight: 600;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);
+  border: 1px solid #22c55e;
+  animation: pulse 2s infinite;
 }
 
-.retakeButton:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(245, 158, 11, 0.4);
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.75; }
 }
 
-.offerButton {
-  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
-  color: white;
-  border: none;
-  padding: 12px 24px;
-  font-size: 16px;
+.lockedBadge {
+  background: #f1f5f9;
+  color: #94a3b8;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 13px;
   font-weight: 600;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 15px rgba(34, 197, 94, 0.3);
 }
 
-.offerButton:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(34, 197, 94, 0.4);
+.failedBadge {
+  background: rgba(239, 68, 68, 0.08);
+  color: #ef4444;
+  padding: 5px 15px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid #ef4444;
 }
 
-.noResult {
-  text-align: center;
-  color: rgba(255, 255, 255, 0.5);
-  padding: 20px;
+.reattemptBadge {
+  background: rgba(245, 158, 11, 0.08);
+  color: #f59e0b;
+  padding: 5px 15px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid #f59e0b;
+  animation: pulse 2s infinite;
 }
 
-.noResult p {
-  margin-bottom: 16px;
-}
-
-/* Popup Dialog */
+/* ─── Popup Overlay / dialogs ───────────────────────────────── */
 .popupOverlay {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  animation: fadeIn 0.2s ease;
+  animation: fadeIn 0.25s ease;
 }
 
 @keyframes fadeIn {
@@ -577,12 +593,12 @@
 
 .popupDialog {
   background: white;
-  border-radius: 16px;
-  padding: 32px 40px;
-  max-width: 400px;
+  border-radius: 24px;
+  padding: 36px 40px;
+  max-width: 440px;
   width: 90%;
   text-align: center;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 20px 25px -5px rgba(0,0,0,0.05), 0 10px 10px -5px rgba(0,0,0,0.04), 0 0 1px 0 rgba(0,0,0,0.1);
   animation: slideUp 0.3s ease;
 }
 
@@ -592,29 +608,31 @@
 }
 
 .popupIcon {
-  width: 64px; height: 64px;
+  width: 56px; height: 56px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #08CB00 0%, #059669 100%);
+  background: rgba(34, 197, 94, 0.08);
+  border: 1px solid rgba(34, 197, 94, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
   margin: 0 auto 20px;
-  font-size: 32px;
-  color: white;
+  font-size: 24px;
+  color: #22c55e;
 }
 
 .popupTitle {
-  font-size: 24px;
-  font-weight: 700;
-  color: #1e293b;
-  margin: 0 0 12px 0;
+  font-size: 22px;
+  font-weight: 800;
+  color: #0f2238;
+  margin: 0 0 10px 0;
 }
 
 .popupMessage {
-  font-size: 16px;
+  font-size: 14.5px;
   color: #64748b;
   margin: 0 0 28px 0;
-  line-height: 1.5;
+  line-height: 1.55;
+  font-weight: 500;
 }
 
 .popupButtons {
@@ -624,27 +642,28 @@
 }
 
 .popupPrimaryButton {
-  background: linear-gradient(135deg, #08CB00 0%, #059669 100%);
+  background: #22c55e;
   color: white;
   border: none;
-  padding: 14px 32px;
-  font-size: 16px;
+  padding: 12px 24px;
+  font-size: 15px;
   font-weight: 600;
   border-radius: 10px;
   cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 15px rgba(8, 203, 0, 0.3);
+  transition: all 0.2s ease-in-out;
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.25);
 }
 
 .popupPrimaryButton:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(8, 203, 0, 0.4);
+  background: #16a34a;
+  box-shadow: 0 6px 16px rgba(34, 197, 94, 0.35);
+  transform: translateY(-1px);
 }
 
 .popupSecondaryButton {
-  background: transparent;
+  background: #f8fafc;
   color: #64748b;
-  border: 2px solid #e2e8f0;
+  border: 1px solid #cbd5e1;
   padding: 12px 24px;
   font-size: 14px;
   font-weight: 500;
@@ -655,7 +674,28 @@
 
 .popupSecondaryButton:hover {
   background: #f1f5f9;
-  border-color: #cbd5e1;
+  color: #334155;
+}
+
+.loading {
+  color: #0f2238;
+  font-size: 20px;
+  text-align: center;
+  padding: 100px 0;
+  font-weight: 600;
+}
+
+/* ─── Responsive ──────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .header {
+    padding-top: 40px;
+  }
+  .headerButtons {
+    position: static;
+    margin-top: 20px;
+    justify-content: center;
+    width: 100%;
+  }
 }
 
 @media (max-width: 600px) {
@@ -666,12 +706,12 @@
   .phaseContent {
     order: 3;
     width: 100%;
-    padding-left: 68px;
+    padding-left: 64px;
   }
   .phaseStatus {
     margin-left: auto;
   }
   .phaseName {
-    font-size: 18px;
+    font-size: 17px;
   }
 }

@@ -76,7 +76,7 @@ export default function OnboardingPage() {
   };
 
   const handleFaqClick = () => {
-    window.open('https://coex-agri.iitrpr.ac.in/', '_blank');
+    router.push('/faq');
   };
 
   // Check if onboarding is already completed on mount

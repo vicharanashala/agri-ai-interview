@@ -440,8 +440,9 @@ async def get_evaluation(interview_id: str):
 @router.get("/evaluation/{interview_id}")
 async def get_interview_evaluation(interview_id: str):
     """
-    Poll for evaluation results. Reads directly from MongoDB — no in-memory cache.
-    Returns: pending | ready | error
+    Poll for evaluation results. Reads directly from MongoDB.
+    If not evaluated yet (or evaluation failed with 0 fallback), generates it on-the-fly synchronously
+    to guarantee GCP Cloud Run CPU allocation.
     """
     db = get_sync_db()
     session = db.interview_sessions.find_one({"_id": interview_id})
@@ -459,7 +460,8 @@ async def get_interview_evaluation(interview_id: str):
     end_reason_db = interview_data.get("end_reason")
     score = session.get("overall_score")
 
-    if evaluation and score is not None:
+    # If already evaluated successfully (score > 0), return instantly
+    if evaluation and score is not None and score > 0:
         threshold = get_evaluation_settings()["pass_threshold"]
         result = session.get("result") or ("PASS" if score >= threshold else "FAIL")
         logger.info(f"[evaluation/{interview_id}] status=ready, score={score}, result={result}")
@@ -471,4 +473,59 @@ async def get_interview_evaluation(interview_id: str):
             "evaluation": evaluation,
         }
 
-    return {"status": "pending", "result": None, "overall_score": None, "evaluation": None}
+    # Otherwise, generate/regenerate on-the-fly within this active HTTP request
+    try:
+        from bson import ObjectId
+        candidate_id = session.get("candidate_id")
+        candidate_data = {}
+        if candidate_id:
+            try:
+                candidate = db.candidates.find_one({"_id": ObjectId(candidate_id)})
+            except Exception:
+                candidate = db.candidates.find_one({"_id": candidate_id})
+            if candidate:
+                candidate_data = candidate
+
+        messages = interview_data.get("messages") or []
+        qa_pairs = interview_data.get("qa_pairs") or []
+        conversation_history = [
+            {"role": m.get("role"), "content": m.get("content")}
+            for m in messages
+            if m.get("role") and m.get("content")
+        ]
+
+        logger.info(f"[evaluation/{interview_id}] Triggering on-the-fly evaluation to prevent Cloud Run CPU throttling")
+        from app.llm.service import llm_service
+        evaluation = await llm_service.generate_interview_evaluation(
+            candidate_data=candidate_data,
+            conversation_history=conversation_history,
+            qa_pairs=qa_pairs,
+        )
+
+        if evaluation:
+            score = evaluation.get("overall_score", 0)
+            threshold = get_evaluation_settings()["pass_threshold"]
+            result = "PASS" if score >= threshold else "FAIL"
+
+            # Persist to database
+            interview_data["evaluation"] = evaluation
+            update = {
+                "interview_data": interview_data,
+                "overall_score": score,
+                "result": result,
+            }
+            db.interview_sessions.update_one({"_id": interview_id}, {"$set": update})
+            logger.info(f"[evaluation/{interview_id}] On-the-fly evaluation succeeded: score={score}, result={result}")
+
+            return {
+                "status": "ready",
+                "result": result,
+                "overall_score": score,
+                "end_reason": end_reason_db,
+                "evaluation": evaluation,
+            }
+    except Exception as e:
+        logger.error(f"[evaluation/{interview_id}] On-the-fly evaluation failed: {e}")
+
+    # Fallback if evaluation cannot be completed
+    return {"status": "error", "result": "FAIL", "overall_score": 0, "evaluation": None}

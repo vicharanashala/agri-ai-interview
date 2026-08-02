@@ -527,7 +527,7 @@ export default function InterviewPage() {
         setMessages(prev => [...prev, { role: 'ai', content: data.response }]);
         setShowEvaluation(true);
 
-        setTimeout(() => { router.push('/summary'); }, 2000);
+        setTimeout(() => { router.push('/summary'); }, 20000);
       } else {
         setMessages(prev => [...prev, { 
           role: 'ai', 

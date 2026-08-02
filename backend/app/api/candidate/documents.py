@@ -10,6 +10,7 @@ import uuid
 from app.db.mongodb import get_sync_db
 from app.api.candidate.route import _get_candidate_id_from_request
 from bson import ObjectId
+from app.core.config import settings
 
 router = APIRouter(prefix="/api/candidate", tags=["candidate-documents"])
 

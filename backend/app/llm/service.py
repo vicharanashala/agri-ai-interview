@@ -368,11 +368,9 @@ Return your evaluation as valid JSON only, no other text. Ensure all fields are 
             import traceback
             tb = traceback.format_exc()
             print(f"[LLMEvaluationError] Failed to generate evaluation: {type(e).__name__}: {str(e)}\n{tb}")
-            raw_response_preview = ""
             try:
-                if 'response' in locals() and response:
+                if 'response' in locals():
                     print(f"[LLMEvaluationError] Raw LLM response was:\n{response}")
-                    raw_response_preview = f"\n\n[Raw LLM Response Preview]:\n{response[:1000]}"
             except Exception:
                 pass
             return {
@@ -381,7 +379,7 @@ Return your evaluation as valid JSON only, no other text. Ensure all fields are 
                     t: {"score": 0, "details": f"Evaluation error: {str(e)}"}
                     for t in required_topics
                 },
-                "summary": f"Evaluation failed: {type(e).__name__}: {str(e)}.{raw_response_preview}",
+                "summary": f"Evaluation failed: {type(e).__name__}: {str(e)}. Please check backend server logs for the full [LLMEvaluationError] traceback.",
                 "strengths": [],
                 "areas_for_improvement": [],
                 "recommendation": f"Error: {str(e)}. Please retry or contact support."

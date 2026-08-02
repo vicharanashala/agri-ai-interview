@@ -472,7 +472,7 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
                       <td>
                         {evaluation.score != null ? (
                           <div className={styles.scoreCell}>
-                            <span className={styles.scoreNum} style={{ color: scoreColor(evaluation.score) }}>
+                            <span className={styles.scoreNum} style={{ color: evaluation.result === 'PASS' ? '#4ade80' : '#f87171' }}>
                               {evaluation.score}
                             </span>
                             <span className={styles.scoreMax}>/100</span>

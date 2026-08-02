@@ -40,6 +40,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ── Global Exception Handler ──────────────────────────────────────────────────
+from fastapi.responses import JSONResponse
+import traceback
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    tb = traceback.format_exc()
+    print(f"[GlobalError] Unhandled exception: {exc}\n{tb}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": f"Unhandled Server Error: {type(exc).__name__}: {str(exc)}",
+            "traceback": tb.split("\n")
+        }
+    )
+
 # ── Startup ───────────────────────────────────────────────────────────────────
 @app.on_event("startup")
 async def startup_event():

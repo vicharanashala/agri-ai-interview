@@ -87,7 +87,7 @@ FAQ_KB: List[Dict[str, Any]] = [
         "id": "f13",
         "category": "Support",
         "question": "Who should I contact if I face technical issues or need support?",
-        "answer": "If you experience any technical issues during registration, application, or the interview, please contact our support team at hr@annam.ai. Our team will assist you as soon as possible.",
+        "answer": "If you experience any technical issues during registration, application, or the interview, please contact our support team at ajrasakha.annam@gmail.com. Our team will assist you as soon as possible.",
     },
 ]
 

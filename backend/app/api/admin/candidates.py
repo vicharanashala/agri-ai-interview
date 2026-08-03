@@ -33,7 +33,7 @@ class CandidateResponse(BaseModel):
     state: Optional[str] = None
     district: Optional[str] = None
     currentRole: Optional[str] = None
-    yearsOfExperience: Optional[int] = None
+    yearsOfExperience: Optional[float] = None
     farmingBackground: Optional[str] = None
     primaryExpertise: Optional[str] = None
     currentPhase: str

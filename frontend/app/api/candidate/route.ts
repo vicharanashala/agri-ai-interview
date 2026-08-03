@@ -51,12 +51,18 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const token = getCandidateToken(request)
+    const email = session?.user?.email
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'Cookie': token ? `candidate_session=${token}` : '',
     }
-    if (token) headers['Authorization'] = `Bearer ${token}`
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    } else if (email) {
+      // New user without candidate session yet — pass email for email-based auth fallback
+      headers['X-User-Email'] = email
+    }
 
     const res = await fetch(`${BACKEND_URL}/api/candidate`, {
       method: 'POST',

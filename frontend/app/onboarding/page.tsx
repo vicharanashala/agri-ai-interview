@@ -339,7 +339,11 @@ export default function OnboardingPage() {
       // When "Others" is selected, use the custom district name instead
       const districtToSubmit =
         formData.district === 'Others' ? formData.districtCustom?.trim() : formData.district;
-      const payload = { ...formData, district: districtToSubmit || formData.district };
+      const payload = {
+        ...formData,
+        yearsOfExperience: formData.yearsOfExperience ? parseFloat(formData.yearsOfExperience) : undefined,
+        district: districtToSubmit || formData.district,
+      };
 
       // Save candidate profile to database via API
       const response = await fetch('/api/candidate', {
@@ -350,8 +354,12 @@ export default function OnboardingPage() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to save profile');
+        let msg = `HTTP ${response.status}`;
+        try {
+          const errorData = await response.json();
+          msg = errorData.error || msg;
+        } catch {}
+        throw new Error(msg);
       }
 
       const candidate = await response.json();
@@ -396,7 +404,9 @@ export default function OnboardingPage() {
       // Redirect to dashboard
       window.location.href = '/dashboard';
     } catch (err) {
-      setError('Failed to save profile. Please try again.');
+      const msg = err instanceof Error ? err.message : 'Failed to save profile. Please try again.';
+      console.error('[onboarding] save error:', msg);
+      setError(msg);
       setIsLoading(false);
     }
   };

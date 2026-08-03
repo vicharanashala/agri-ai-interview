@@ -46,6 +46,44 @@ def _get_candidate_id_from_request(request: Request) -> str:
     return candidate_id
 
 
+def _get_candidate_id_with_email_fallback(request: Request) -> str:
+    """
+    Returns candidate_id from candidate session token if present.
+    For new users without a session token, falls back to X-User-Email header
+    to look up the user + candidate in MongoDB directly.
+    """
+    auth = request.headers.get("authorization", "")
+    token = auth[7:] if auth.startswith("Bearer ") else request.cookies.get("candidate_session")
+    if token:
+        store = get_session_store()
+        session = store.find_by_token_hash(_hash_token(token))
+        if session:
+            candidate_id = session.get("candidate_id")
+            if candidate_id:
+                return candidate_id
+    # Fallback: new user without candidate session — use X-User-Email header
+    email = request.headers.get("x-user-email")
+    if not email:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    db = get_sync_db()
+    user = db.users.find_one({"email": email})
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    user_id_str = str(user["_id"])
+    candidate = db.candidates.find_one({"user_id": user_id_str})
+    if not candidate:
+        # New user — create candidate record first
+        from bson import ObjectId
+        result = db.candidates.insert_one({
+            "user_id": user_id_str,
+            "current_phase": "onboarding",
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc),
+        })
+        return str(result.inserted_id)
+    return str(candidate["_id"])
+
+
 # ── Request/Response models ───────────────────────────────────────────────────
 
 class OnboardingRequest(BaseModel):
@@ -56,7 +94,7 @@ class OnboardingRequest(BaseModel):
     pincode: str
     address: str
     currentRole: str
-    yearsOfExperience: Optional[int] = None
+    yearsOfExperience: Optional[float] = None
     highestEducation: str
     institution: str
     farmingBackground: Optional[str] = None
@@ -75,7 +113,7 @@ class CandidateProfileResponse(BaseModel):
     pincode: Optional[str] = None
     address: Optional[str] = None
     currentRole: Optional[str] = None
-    yearsOfExperience: Optional[int] = None
+    yearsOfExperience: Optional[float] = None
     highestEducation: Optional[str] = None
     institution: Optional[str] = None
     farmingBackground: Optional[str] = None
@@ -135,9 +173,10 @@ async def verify_password(request: Request, body: dict):
 async def upsert_candidate(request: Request, body: OnboardingRequest):
     """
     Create or update candidate onboarding data.
-    Authenticated via candidate_session cookie or Bearer token.
+    Authenticated via candidate_session cookie/Bearer token, or X-User-Email header
+    (for new users who haven't completed onboarding yet and have no candidate session).
     """
-    candidate_id = _get_candidate_id_from_request(request)
+    candidate_id = _get_candidate_id_with_email_fallback(request)
 
     from app.db.mongodb import get_sync_db
     db = get_sync_db()

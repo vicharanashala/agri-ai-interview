@@ -42,17 +42,9 @@
 .logo {
   display: block;
   height: 28px;
-  width: 140px;
+  width: 140px;      
+  object-fit: contain;
   flex-shrink: 0;
-  background: linear-gradient(to right, #22c55e 0%, #22c55e 21%, #0f2238 21%, #0f2238 81%, #22c55e 81%, #22c55e 100%);
-  -webkit-mask-image: url('../../public/login/annam-logo-white.png');
-  mask-image: url('../../public/login/annam-logo-white.png');
-  -webkit-mask-size: contain;
-  mask-size: contain;
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-mask-position: left center;
-  mask-position: left center;
 }
 
 .brandSub {

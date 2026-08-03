@@ -156,15 +156,15 @@ function LoginPageInner() {
 
         <div className={styles.footerBullets}>
           <span className={styles.bulletItem}>
-            <span className={styles.checkIcon}>✓</span> Powered by IIT Ropar
+            <span className={styles.checkIcon}>✓</span> Developed at IIT Ropar
           </span>
           <span className={styles.bulletDivider}>|</span>
           <span className={styles.bulletItem}>
-            <span className={styles.checkIcon}>✓</span> Secure Authentication
+            <span className={styles.checkIcon}>✓</span> Adaptive AI Interviews
           </span>
           <span className={styles.bulletDivider}>|</span>
           <span className={styles.bulletItem}>
-            <span className={styles.checkIcon}>✓</span> AI-Powered Evaluation
+            <span className={styles.checkIcon}>✓</span> Secure & Fair Evaluation
           </span>
         </div>
       </div>

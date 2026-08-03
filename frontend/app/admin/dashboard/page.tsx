@@ -110,7 +110,7 @@ const PHASE_LABELS: Record<string, string> = {
   onboarding: "Onboarding",
   interview: "Interview",
   summary: "Summary",
-  foundation: "Foundation",
+  foundation: "Foundation Course",
   documents: "Documents",
 };
 

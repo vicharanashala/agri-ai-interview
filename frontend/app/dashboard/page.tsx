@@ -234,7 +234,7 @@ export default function DashboardPage() {
     },
     {
       id: 4,
-      name: 'Foundation',
+      name: 'Foundation Course',
       description: 'Complete the foundation course to unlock document upload',
       status: currentPhase > 4 ? 'completed' : currentPhase === 4 ? 'current' : 'locked',
     },

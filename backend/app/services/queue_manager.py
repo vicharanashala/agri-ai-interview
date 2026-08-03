@@ -1,7 +1,7 @@
 """
 Slot Manager — MongoDB-backed interview slot management.
 
-No queue, no positions, no wait times. Just a max-concurrent threshold.
+No queue, no positions, no wait times, and no max-concurrent threshold.
 """
 import json
 import uuid
@@ -12,9 +12,6 @@ from app.db.mongodb import get_sync_db
 from app.services.settings_service import get_cooldown_days
 
 # ── Config ────────────────────────────────────────────────────────────────────
-MAX_CONCURRENT_INTERVIEWS = 20
-
-
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -50,11 +47,11 @@ class SlotManager:
 
     @property
     def has_open_slot(self) -> bool:
-        return self._active_count < MAX_CONCURRENT_INTERVIEWS
+        return True
 
     @property
-    def slots_available(self) -> int:
-        return max(0, MAX_CONCURRENT_INTERVIEWS - self._active_count)
+    def slots_available(self):
+        return None
 
     def _sync_active_count(self) -> None:
         db = get_sync_db()
@@ -112,15 +109,6 @@ class SlotManager:
                 return {
                     "result": "already_active",
                     "interview_id": existing["_id"],
-                }
-
-            # 4. Slot check
-            if not self.has_open_slot:
-                return {
-                    "result": "no_slot",
-                    "message": "All slots are full, please try after sometime",
-                    "active_interview_count": self._active_count,
-                    "max_concurrent": MAX_CONCURRENT_INTERVIEWS,
                 }
 
             # ── Create new interview ─────────────────────────────────────────
@@ -413,8 +401,8 @@ class SlotManager:
         self._sync_active_count()
         return {
             "active_interview_count": self._active_count,
-            "max_concurrent": MAX_CONCURRENT_INTERVIEWS,
-            "slots_available": max(0, MAX_CONCURRENT_INTERVIEWS - self._active_count),
+            "max_concurrent": None,
+            "slots_available": None,
         }
 
 

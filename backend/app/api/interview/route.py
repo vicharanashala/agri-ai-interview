@@ -149,13 +149,6 @@ async def start_interview(request: StartInterviewRequest):
 
         result = await slot_manager.start_interview(candidate_id, request.candidate_data)
 
-        if result["result"] == "no_slot":
-            raise HTTPException(status_code=503, detail={
-                "message": result["message"],
-                "active_interview_count": result["active_interview_count"],
-                "max_concurrent": result["max_concurrent"],
-            })
-
         if result["result"] == "attempts_exhausted":
             raise HTTPException(status_code=403, detail={
                 "message": "You have exhausted all 3 interview attempts. No more interviews available.",

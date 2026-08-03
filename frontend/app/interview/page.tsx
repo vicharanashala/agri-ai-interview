@@ -341,13 +341,6 @@ export default function InterviewPage() {
       });
       const queueData = await queueRes.json();
 
-      if (queueData.result === 'no_slot') {
-        setShowStarting(false);
-        setShowInstructions(true);
-        setError('All slots are full, please try after sometime.');
-        return;
-      }
-
       if (queueData.result === 'attempts_exhausted') {
         setShowStarting(false);
         setShowInstructions(true);
@@ -388,6 +381,13 @@ export default function InterviewPage() {
         } catch {
           setMessages([{ role: 'ai', content: 'Welcome back! Please continue from where you left off.' }]);
         }
+        return;
+      }
+
+      if (queueData.result !== 'started') {
+        setShowStarting(false);
+        setShowInstructions(true);
+        setError(queueData.message || 'Could not start the interview. Please try again.');
         return;
       }
 

@@ -1,15 +1,14 @@
 """
-Interview Queue API — Simplified slot manager — MongoDB.
+Interview Queue API — Simplified interview starter — MongoDB.
 
-No queue, no positions, no wait times.
-Candidates either get a slot immediately or are told to try later.
+No queue, no positions, no wait times, and no slot threshold.
 """
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from typing import Optional
 
 from app.db.mongodb import get_sync_db
-from app.services.queue_manager import slot_manager, MAX_CONCURRENT_INTERVIEWS
+from app.services.queue_manager import slot_manager
 
 router = APIRouter(prefix="/api/interview/queue", tags=["interview-queue"])
 
@@ -57,8 +56,8 @@ class StartResponse(BaseModel):
 
 class StatsResponse(BaseModel):
     active_interview_count: int
-    max_concurrent: int
-    slots_available: int
+    max_concurrent: Optional[int] = None
+    slots_available: Optional[int] = None
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
@@ -68,8 +67,7 @@ async def queue_request(request: SlotRequest):
     """
     Candidate requests an interview slot.
 
-    If a slot is available (active < MAX_CONCURRENT), the interview starts
-    immediately. Otherwise returns "All slots are full, please try after sometime".
+    Starts immediately unless attempts or cooldown rules block the candidate.
     """
     candidate_data = _fetch_candidate_data(request.candidate_id)
     result = await slot_manager.start_interview(

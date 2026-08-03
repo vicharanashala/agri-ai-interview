@@ -49,5 +49,18 @@ class Settings(BaseSettings):
     VIBE_API_URL: str = "https://vibe.vicharanashala.ai"
     VIBE_COURSE_ID: str = "6a2be954ca990e71be4e3751"
 
+    # SMTP / Email settings
+    EMAIL_SMTP_HOST: str = "smtp.zoho.in"
+    EMAIL_SMTP_PORT: int = 465
+    EMAIL_SMTP_USER: str = ""
+    EMAIL_SMTP_PASSWORD: str = ""
+    EMAIL_FROM_ADDRESS: str = "noreply@annam.com"
+    EMAIL_FROM_NAME: str = "Annam AgriTech"
+    EMAIL_PROVIDER: str = "zoho"  # console | zoho | sendgrid | ses
+
+    # OTP settings
+    OTP_EXPIRY_MINUTES: int = 5
+    OTP_RATE_LIMIT_SECONDS: int = 60
+
 
 settings = Settings()

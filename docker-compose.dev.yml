@@ -9,6 +9,8 @@ services:
       - "${BACKEND_PORT:-8003}:8000"
     volumes:
       - ./backend:/app
+    env_file:
+      - .env
     environment:
       MONGO_URI: ${MONGO_URI}
       MONGO_DB_NAME: ${MONGO_DB_NAME}

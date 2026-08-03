@@ -310,7 +310,23 @@ export default function DashboardPage() {
         return '○';
     }
   };
+ const getCompletionPercentage = () => {
+  if (documentsSubmitted) return 100;
 
+  if (currentPhase === 5) return 75;
+
+  if (currentPhase === 4) return 50;
+
+  if (currentPhase === 3) {
+    return hasPassed ? 50 : 25;
+  }
+
+  if (currentPhase === 2) return 25;
+
+  return 0;
+};
+
+const completionPercentage = getCompletionPercentage();
   const renderPhaseStatus = (phase: PhaseInfo) => {
     if (phase.id === 2) {
       if (hasPassed) {
@@ -426,11 +442,13 @@ export default function DashboardPage() {
         <div className={styles.progressBar}>
           <div 
             className={styles.progressFill} 
-            style={{ width: `${documentsSubmitted ? 100 : Math.round(((currentPhase - 1) / 4) * 100)}%` }}
+           style={{
+              width: `${completionPercentage}%`
+            }}
           />
         </div>
         <span className={styles.progressPercent}>
-          {documentsSubmitted ? 100 : Math.round(((currentPhase - 1) / 4) * 100)}% Complete
+          {completionPercentage}% Complete
         </span>
       </div>
 

@@ -543,7 +543,7 @@ export default function DashboardPage() {
 
       {/* Video Modal */}
       {showVideoModal && (
-        <HowToUseModal onClose={() => setShowVideoModal(false)} videoUrl="https://youtu.be/Z3j6sWvPoGM" />
+        <HowToUseModal onClose={() => setShowVideoModal(false)} videoUrl="https://youtu.be/6S5uX1-eSFw?si=nbXryz-rZeB86rCK" />
       )}
 
       {/* Interview Already Done Popup */}

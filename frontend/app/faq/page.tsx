@@ -123,7 +123,11 @@ export default function FAQPage() {
       <nav className={styles.topNavbar}>
         <div className={styles.navbarContent}>
           <div className={styles.logoWrapper}>
-            <div className={styles.logo} aria-label="ANNAM.AI" />
+            <img
+          src="/annam-logo.png"
+          alt="ANNAM.AI"
+          className={styles.logo}
+        />
             <p className={styles.brandSub}>Center of Excellence for AI in Agriculture, IIT Ropar</p>
           </div>
           <div className={styles.headerButtons}>

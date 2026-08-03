@@ -4,6 +4,7 @@ import { useState, Suspense } from 'react';
 import { signIn } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import styles from './page.module.css';
+import Image from 'next/image';
 
 export default function LoginPage() {
   return (
@@ -110,7 +111,7 @@ function LoginPageInner() {
       <div className={styles.leftPane}>
         <div className={styles.leftContent}>
           <header className={styles.topBar}>
-            <div className={styles.logo} aria-label="ANNAM.AI" />
+           <img src="/annam-logo.png" alt="ANNAM.AI" className={styles.logo} />
             <p className={styles.brandSub}>Center of Excellence for AI in Agriculture, IIT Ropar</p>
           </header>
 

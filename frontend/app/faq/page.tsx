@@ -204,7 +204,7 @@ export default function FAQPage() {
                       <span className={styles.faqTop}>
                         <span className={styles.faqNumber}>{faq.globalIndex}</span>
                         <span className={styles.faqQuestion}>{faq.question}</span>
-                        <span className={styles.faqChevron}>{isExpanded ? "Up" : "Down"}</span>
+                        <span className={styles.faqChevron}>{isExpanded ? "▲" : "▼"}</span>
                       </span>
                       {isExpanded && (
                         <span className={styles.faqAnswer}>{faq.answer}</span>

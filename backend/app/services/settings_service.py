@@ -223,6 +223,7 @@ def get_interview_settings() -> dict:
         "max_duration_minutes": 30,
         "cooldown_days": 3,
         "pass_threshold": 60,
+        "max_concurrent_interviews": 20,
     }
     try:
         db = get_sync_db()
@@ -230,6 +231,7 @@ def get_interview_settings() -> dict:
         d_val = _get_setting(db, "interview_max_duration_minutes")
         c_val = _get_setting(db, "interview_cooldown_days")
         t_val = _get_setting(db, "evaluation_pass_threshold")
+        mc_val = _get_setting(db, "interview_max_concurrent_interviews")
         if q_val:
             defaults["max_questions"] = int(q_val)
         if d_val:
@@ -238,6 +240,8 @@ def get_interview_settings() -> dict:
             defaults["cooldown_days"] = int(c_val)
         if t_val:
             defaults["pass_threshold"] = int(t_val)
+        if mc_val:
+            defaults["max_concurrent_interviews"] = int(mc_val)
     except Exception:
         pass
     return defaults

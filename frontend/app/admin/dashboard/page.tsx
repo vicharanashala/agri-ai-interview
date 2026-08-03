@@ -167,11 +167,12 @@ export default function AdminDashboard() {
   const [guidelineContent, setGuidelineContent] = useState("");
   const [editingCriteria, setEditingCriteria] = useState<string | null>(null);
   const [criteriaForm, setCriteriaForm] = useState<Partial<EvaluationCriteria>>({});
-  const [interviewConfig, setInterviewConfig] = useState<{ max_questions: number; max_duration_minutes: number; cooldown_days: number; pass_threshold: number }>({ max_questions: 10, max_duration_minutes: 30, cooldown_days: 3, pass_threshold: 60 });
+  const [interviewConfig, setInterviewConfig] = useState<{ max_questions: number; max_duration_minutes: number; cooldown_days: number; pass_threshold: number; max_concurrent_interviews: number }>({ max_questions: 10, max_duration_minutes: 30, cooldown_days: 3, pass_threshold: 60, max_concurrent_interviews: 20 });
   const [maxQuestionsInput, setMaxQuestionsInput] = useState<number>(10);
   const [maxDurationInput, setMaxDurationInput] = useState<number>(30);
   const [cooldownDaysInput, setCooldownDaysInput] = useState<number>(3);
   const [passThresholdInput, setPassThresholdInput] = useState<number>(60);
+  const [maxConcurrentInput, setMaxConcurrentInput] = useState<number>(20);
   const [savingConfig, setSavingConfig] = useState(false);
   const [antiCheatConfig, setAntiCheatConfig] = useState<{ idle_threshold_ms: number; platform_idle_ms: number }>({ idle_threshold_ms: 15_000, platform_idle_ms: 15 * 60_000 });
   const [idleThresholdInput, setIdleThresholdInput] = useState<number>(15);
@@ -603,11 +604,13 @@ export default function AdminDashboard() {
           max_duration_minutes: data.max_duration_minutes,
           cooldown_days: data.cooldown_days,
           pass_threshold: data.pass_threshold ?? 60,
+          max_concurrent_interviews: data.max_concurrent_interviews ?? 20,
         });
         setMaxQuestionsInput(data.max_questions);
         setMaxDurationInput(data.max_duration_minutes ?? 30);
         setCooldownDaysInput(data.cooldown_days ?? 3);
         setPassThresholdInput(data.pass_threshold ?? 60);
+        setMaxConcurrentInput(data.max_concurrent_interviews ?? 20);
       }
     } catch (err) {
       console.error("Failed to load interview config:", err);
@@ -663,6 +666,7 @@ export default function AdminDashboard() {
         max_duration_minutes: maxDurationInput,
         cooldown_days: cooldownDaysInput,
         pass_threshold: passThresholdInput,
+        max_concurrent_interviews: maxConcurrentInput,
       }),
       });
       if (res.ok) {
@@ -672,11 +676,13 @@ export default function AdminDashboard() {
           max_duration_minutes: data.max_duration_minutes ?? 30,
           cooldown_days: data.cooldown_days ?? 3,
           pass_threshold: data.pass_threshold ?? 60,
+          max_concurrent_interviews: data.max_concurrent_interviews ?? 20,
         });
         setMaxQuestionsInput(data.max_questions ?? 10);
         setMaxDurationInput(data.max_duration_minutes ?? 30);
         setCooldownDaysInput(data.cooldown_days ?? 3);
         setPassThresholdInput(data.pass_threshold ?? 60);
+        setMaxConcurrentInput(data.max_concurrent_interviews ?? 20);
       }
     } catch (err) {
       console.error("Failed to save interview config:", err);
@@ -1898,6 +1904,31 @@ export default function AdminDashboard() {
                   </div>
                   <p className={styles.interviewConfigHint}>
                     Current: <strong>{interviewConfig.pass_threshold ?? 60}</strong>. Candidates scoring below this are marked FAIL.
+                  </p>
+                </div>
+
+                {/* Max Concurrent Interviews */}
+                <div className={styles.interviewConfigCard} style={{ marginTop: "1rem" }}>
+                  <label className={styles.interviewConfigLabel}>Maximum Concurrent Interview Slots</label>
+                  <div className={styles.interviewConfigRow}>
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={maxConcurrentInput}
+                      onChange={(e) => setMaxConcurrentInput(Number(e.target.value))}
+                      className={styles.interviewConfigInput}
+                    />
+                    <button
+                      onClick={handleSaveInterviewConfig}
+                      disabled={savingConfig || maxConcurrentInput === (interviewConfig.max_concurrent_interviews ?? 20)}
+                      className={styles.saveBtn}
+                    >
+                      {savingConfig ? "Saving…" : "Save"}
+                    </button>
+                  </div>
+                  <p className={styles.interviewConfigHint}>
+                    Current: <strong>{interviewConfig.max_concurrent_interviews ?? 20}</strong> simultaneous interview slots. Candidates are denied when this limit is reached.
                   </p>
                 </div>
               </div>

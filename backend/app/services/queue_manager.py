@@ -9,9 +9,30 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from app.db.mongodb import get_sync_db
-from app.services.settings_service import get_cooldown_days
+from app.services.settings_service import get_cooldown_days, get_interview_settings
 
 # ── Config ────────────────────────────────────────────────────────────────────
+# Cached value; refreshed once when the module loads.
+_MAX_CONCURRENT_INTERVIEWS: int | None = None
+
+
+def _get_max_concurrent() -> int:
+    global _MAX_CONCURRENT_INTERVIEWS
+    if _MAX_CONCURRENT_INTERVIEWS is None:
+        settings = get_interview_settings()
+        _MAX_CONCURRENT_INTERVIEWS = settings.get("max_concurrent_interviews", 20)
+    return _MAX_CONCURRENT_INTERVIEWS
+
+
+def _reload_max_concurrent() -> None:
+    """Called by the settings API after an admin updates the value."""
+    global _MAX_CONCURRENT_INTERVIEWS
+    settings = get_interview_settings()
+    _MAX_CONCURRENT_INTERVIEWS = settings.get("max_concurrent_interviews", 20)
+
+
+# Backwards-compatible alias — individual SlotManager instances re-resolve via
+# the property, so this constant is only used for initial sanity-checks / imports.
 MAX_CONCURRENT_INTERVIEWS = 20
 
 
@@ -50,11 +71,11 @@ class SlotManager:
 
     @property
     def has_open_slot(self) -> bool:
-        return self._active_count < MAX_CONCURRENT_INTERVIEWS
+        return self._active_count < _get_max_concurrent()
 
     @property
     def slots_available(self) -> int:
-        return max(0, MAX_CONCURRENT_INTERVIEWS - self._active_count)
+        return max(0, _get_max_concurrent() - self._active_count)
 
     def _sync_active_count(self) -> None:
         db = get_sync_db()
@@ -120,7 +141,7 @@ class SlotManager:
                     "result": "no_slot",
                     "message": "All slots are full, please try after sometime",
                     "active_interview_count": self._active_count,
-                    "max_concurrent": MAX_CONCURRENT_INTERVIEWS,
+                    "max_concurrent": _get_max_concurrent(),
                 }
 
             # ── Create new interview ─────────────────────────────────────────
@@ -413,8 +434,8 @@ class SlotManager:
         self._sync_active_count()
         return {
             "active_interview_count": self._active_count,
-            "max_concurrent": MAX_CONCURRENT_INTERVIEWS,
-            "slots_available": max(0, MAX_CONCURRENT_INTERVIEWS - self._active_count),
+            "max_concurrent": _get_max_concurrent(),
+            "slots_available": max(0, _get_max_concurrent() - self._active_count),
         }
 
 

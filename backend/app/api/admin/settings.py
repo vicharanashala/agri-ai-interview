@@ -16,6 +16,7 @@ from app.services.settings_service import (
     get_offer_letter_config,
     save_offer_letter_config,
 )
+from app.services.queue_manager import _reload_max_concurrent
 
 router = APIRouter(prefix="/api/admin/settings", tags=["admin-settings"])
 
@@ -78,6 +79,10 @@ async def update_interview_config(request: Dict[str, Any], _admin=Depends(requir
         _set_setting(db, "interview_cooldown_days", str(request["cooldown_days"]), "interview")
     if "pass_threshold" in request:
         _set_setting(db, "evaluation_pass_threshold", str(request["pass_threshold"]), "evaluation")
+    if "max_concurrent_interviews" in request:
+        _set_setting(db, "interview_max_concurrent_interviews", str(request["max_concurrent_interviews"]), "interview")
+    # Reload the in-process cache used by the slot manager
+    _reload_max_concurrent()
     # Return the full saved config so the frontend can update its state
     return get_interview_settings()
 

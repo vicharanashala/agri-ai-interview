@@ -115,12 +115,12 @@ jobs:
             INTERNAL_SERVICE_TOKEN=${{ secrets.INTERNAL_SERVICE_TOKEN_PROD }}
             GCS_BUCKET_NAME=${{ vars.GCS_BUCKET_NAME }}
             STORAGE_BACKEND=${{ vars.STORAGE_BACKEND }}
-            EMAIL_SMTP_HOST=${{ vars.EMAILHOST }}
-            EMAIL_SMTP_PORT=${{ vars.EMAILPORT }}
+            EMAIL_SMTP_HOST=smtp.zoho.in
+            EMAIL_SMTP_PORT=465
             EMAIL_SMTP_USER=${{ secrets.EMAIL_SMTP_USER }}
             EMAIL_SMTP_PASSWORD=${{ secrets.EMAIL_SMTP_PASSWORD }}
-            EMAIL_FROM_ADDRESS=${{ vars.EMAILFROMADDRESS }}
-            EMAIL_FROM_NAME=${{ vars.EMAILFROMNAME }}
+            EMAIL_FROM_ADDRESS=abiramk@annam.ai
+            EMAIL_FROM_NAME=Annam AgriTech
             GCS_BASE_PREFIX=${{ vars.GCS_BASE_PREFIX_PROD }}
 
   deploy_frontend:

@@ -60,7 +60,17 @@ function LoginPageInner() {
       const data = await res.json();
 
       if (!res.ok) {
-        setRegError(data.detail ?? data.error ?? 'Failed to send verification code.');
+        // 409 → email already registered → switch to sign-in with email pre-filled
+        if (res.status === 409) {
+          setView('signin');
+          setSignInEmail(regEmail);
+          setSignInError(
+            (data.detail ?? data.error ?? '').replace('Please sign in instead.', '') +
+            ' You can sign in below.'
+          );
+        } else {
+          setRegError(data.detail ?? data.error ?? 'Failed to send verification code.');
+        }
         setRegLoading(false);
         return;
       }

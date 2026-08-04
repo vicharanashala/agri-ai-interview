@@ -87,7 +87,19 @@ class InterviewGraphManager:
                 logger.error(f"[InterviewGraph] {interview_id}: background evaluation returned None")
 
             # Persist to DB so it survives restarts
-            self._persist_evaluation_sync(interview_id, evaluation)
+            candidate_id = self._persist_evaluation_sync(interview_id, evaluation)
+            if candidate_id:
+                # Update candidate phase so phase 4 unlocks on the dashboard
+                try:
+                    from app.db.mongodb import get_sync_db
+                    db = get_sync_db()
+                    db.candidates.update_one(
+                        {"_id": candidate_id},
+                        {"$set": {"current_phase": "summary"}}
+                    )
+                    logger.info(f"[InterviewGraph] {interview_id}: candidate current_phase set to summary")
+                except Exception as e:
+                    logger.error(f"[InterviewGraph] {interview_id}: failed to update candidate phase: {e}")
 
         asyncio.create_task(_run())
 
@@ -129,7 +141,7 @@ class InterviewGraphManager:
             logger.error(f"[InterviewGraph] {interview_id}: LLM evaluation failed: {type(e).__name__}: {e}")
             return None
 
-    def _persist_evaluation_sync(self, interview_id: str, evaluation: Optional[Dict[str, Any]]) -> None:
+    def _persist_evaluation_sync(self, interview_id: str, evaluation: Optional[Dict[str, Any]]) -> Optional[str]:
         """Persist evaluation to MongoDB interview_sessions — interview_data + score/result columns.
 
         Runs synchronously (no await needed) using the sync MongoDB driver.
@@ -138,6 +150,8 @@ class InterviewGraphManager:
             from app.db.mongodb import get_sync_db
             from app.services.settings_service import get_evaluation_settings
             db = get_sync_db()
+            candidate_id = None
+            update = None
             try:
                 session = db.interview_sessions.find_one({"_id": interview_id})
                 if session:
@@ -159,14 +173,17 @@ class InterviewGraphManager:
                         update["result"] = "PASS" if score >= threshold else "FAIL"
                         logger.info(f"[InterviewGraph] {interview_id}: writing result={update['result']} score={score} (threshold={threshold})")
 
-                    db.interview_sessions.update_one({"_id": interview_id}, {"$set": update})
-                    logger.info(f"[InterviewGraph] {interview_id}: evaluation persisted to MongoDB (score={evaluation.get('overall_score') if evaluation else None})")
+                    candidate_id = session.get("candidate_id")
                 else:
                     logger.warning(f"[InterviewGraph] {interview_id}: session not found in MongoDB for persistence")
             finally:
-                pass
+                if update is not None:
+                    db.interview_sessions.update_one({"_id": interview_id}, {"$set": update})
+                    logger.info(f"[InterviewGraph] {interview_id}: evaluation persisted to MongoDB (score={evaluation.get('overall_score') if evaluation else None})")
+                return candidate_id
         except Exception as e:
             logger.error(f"[InterviewGraph] {interview_id}: failed to persist evaluation: {e}")
+            return None
 
     # ── Convenience: get full evaluation (from cache, DB, or LLM) ────────
 

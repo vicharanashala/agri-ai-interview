@@ -1,35 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const BACKEND_URL = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || ''
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL ?? ''
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { email, name } = body
+    const { email } = body
 
-    if (!email || !email.trim()) {
-      return NextResponse.json({ error: 'Email is required.' }, { status: 400 })
+    if (!email) {
+      return NextResponse.json({ error: 'Email is required' }, { status: 400 })
     }
 
-    const res = await fetch(`${BACKEND_URL}/api/auth/send-otp`, {
+    const res = await fetch(`${BACKEND_URL}/api/auth/resend-otp`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: email.trim(), name: name ?? '' }),
+      body: JSON.stringify({ email }),
     })
 
     const data = await res.json()
 
     if (!res.ok) {
-      // Forward the actual error from the backend
       return NextResponse.json(
-        { error: data.detail ?? data.error ?? 'Failed to send OTP' },
+        { error: data.detail ?? data.error ?? 'Failed to resend OTP' },
         { status: res.status }
       )
     }
 
     return NextResponse.json(data, { status: 200 })
   } catch (error) {
-    console.error('[auth/send-otp]', error)
+    console.error('[auth/otp/resend]', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

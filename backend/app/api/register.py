@@ -1,26 +1,26 @@
 """
 Candidate Registration — MongoDB.
 
-POST /api/auth/register  — complete signup for verified email
+POST /api/auth/register  — complete account creation for email+password users
   Request body: { name, email, password }
-  The email must already be verified (isVerified=true on the user document).
+
+Pre-condition: user record must exist AND be isVerified == True.
+  (The stub user is created by /send-otp; verification sets isVerified.)
+  This prevents completing registration without first verifying the email.
 
 Logic:
-  1. Find user by email — must exist and isVerified must be True.
-  2. Password must not already be set (prevents re-registration).
+  1. Find user by email — must exist and must be verified.
+  2. Name + password are required.
   3. Hash and store password; set name.
-  4. Create candidate record.
+  4. Create candidate record if not present.
   5. Return success.
 
-Why a separate register call?
-  The OTP verification step creates an unverified stub user (no password).
-  After email is verified, the client calls /register with the password.
-  This keeps the OTP flow stateless and resumable.
+Google Sign-In users bypass OTP entirely (isVerified=True is set at account creation
+by the OAuth callback), so this endpoint works for them too.
 """
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
-from typing import Optional
 import bcrypt
 from datetime import datetime, timezone
 from bson import ObjectId
@@ -39,10 +39,10 @@ class RegisterRequest(BaseModel):
 @router.post("/register")
 async def register(request: Request, body: RegisterRequest):
     """
-    Complete user registration for a verified email address.
+    Complete candidate account creation.
 
-    Email must already be verified via OTP before calling this endpoint.
-    Creates the candidate record and sets the password.
+    Users must first verify their email via OTP (/send-otp → /verify-otp)
+    before they can call this endpoint.
     """
     if len(body.password) < 6:
         raise HTTPException(
@@ -59,30 +59,26 @@ async def register(request: Request, body: RegisterRequest):
     db = get_sync_db()
     now = datetime.now(timezone.utc)
 
-    # 1. Find existing user
+    # 1. User must exist and must be verified
     user = db.users.find_one({"email": email})
+
     if not user:
         raise HTTPException(
             status_code=404,
-            detail="No verified account found for this email. Please sign up first.",
+            detail="No verified account found for this email. "
+                   "Please verify your email first.",
         )
 
-    # 2. Must be verified
     if not user.get("isVerified", False):
         raise HTTPException(
             status_code=403,
-            detail="Your email has not been verified yet. Please verify your email before signing up.",
+            detail="Please verify your email before completing registration. "
+                   "Check your inbox for the verification code.",
         )
 
-    # 3. Password must not already be set (already registered)
-    if user.get("password") and user["password"].startswith("$2"):
-        raise HTTPException(
-            status_code=409,
-            detail="An account with this email already exists. Please sign in instead.",
-        )
-
-    # 4. Hash password and update user
+    # 2. Update existing verified stub (or overwrite for Google users re-using email)
     password_hash = bcrypt.hashpw(body.password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
     db.users.update_one(
         {"_id": user["_id"]},
         {
@@ -93,14 +89,14 @@ async def register(request: Request, body: RegisterRequest):
             }
         },
     )
+    user_id = user["_id"]
 
-    # 5. Create candidate record (if not already present)
-    existing_candidate = db.candidates.find_one({"user_id": user["_id"]})
+    # 3. Create candidate record (if not already present)
+    existing_candidate = db.candidates.find_one({"user_id": user_id})
     if not existing_candidate:
-        candidate_id = ObjectId()
         db.candidates.insert_one({
-            "_id": candidate_id,
-            "user_id": user["_id"],
+            "_id": ObjectId(),
+            "user_id": user_id,
             "email": email,
             "current_phase": "onboarding",
             "created_at": now,
@@ -108,13 +104,8 @@ async def register(request: Request, body: RegisterRequest):
         })
 
     return {
-        "id": user["_id"],
+        "id": str(user_id),
         "name": name,
         "email": email,
         "message": "Account created successfully",
     }
-
-
-def get_sync_db():
-    from app.db.mongodb import get_sync_db as _g
-    return _g()

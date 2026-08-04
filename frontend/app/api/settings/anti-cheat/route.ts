@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const BACKEND_URL = process.env.BACKEND_URL
+const BACKEND_URL = process.env.BACKEND_URL ?? 'http://agri-interview-backend:8000'
 
 // Internal service token — allows server-side routes to call admin endpoints
 const INTERNAL_SERVICE_TOKEN = process.env.INTERNAL_SERVICE_TOKEN ?? ''

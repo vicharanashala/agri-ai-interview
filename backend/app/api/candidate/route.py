@@ -151,7 +151,11 @@ class CandidatePatchResponse(BaseModel):
 async def verify_password(request: Request, body: dict):
     """
     Used by NextAuth credentials provider to verify email+password.
-    Returns user dict (id, email, name) on success, 401 on failure.
+    Returns user dict (id, email, name) on success.
+
+    Unverified users (email+password flow) are rejected with a clear message
+    directing them to verify their email first.
+    Google Sign-In users have isVerified=True set at account creation.
     """
     email = body.get("email")
     password = body.get("password")
@@ -162,6 +166,14 @@ async def verify_password(request: Request, body: dict):
     user = db.users.find_one({"email": email})
     if not user or not user.get("password"):
         raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    # Reject unverified email+password users — they must verify email first
+    if not user.get("isVerified", False):
+        raise HTTPException(
+            status_code=403,
+            detail="Please verify your email before signing in. "
+                   "Check your inbox for the verification code, or request a new one.",
+        )
 
     if not bcrypt.checkpw(password.encode("utf-8"), user["password"].encode("utf-8")):
         raise HTTPException(status_code=401, detail="Invalid credentials")

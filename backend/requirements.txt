@@ -3,8 +3,9 @@ python-multipart
 uvicorn[standard]
 pymongo
 motor
-pydantic
+pydantic[email]
 pydantic-settings
+email-validator
 reportlab
 python-dotenv
 langgraph

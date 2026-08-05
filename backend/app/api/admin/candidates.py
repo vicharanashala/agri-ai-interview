@@ -47,6 +47,18 @@ class CandidateResponse(BaseModel):
     foundationCourseStatus: Optional[str] = "not_started"
 
 
+def _get_id_variants(val: Any) -> List[Any]:
+    if not val:
+        return []
+    variants = [val, str(val)]
+    try:
+        if isinstance(val, str):
+            variants.append(ObjectId(val))
+    except Exception:
+        pass
+    return list(set(variants))
+
+
 def _build_phases(current_phase: str) -> List[PhaseStatus]:
     current_idx = PHASE_ORDER.get(current_phase, 0)
     return [
@@ -64,7 +76,7 @@ def _candidate_to_response(cand: dict, user_email: Optional[str]) -> CandidateRe
 
     db = get_sync_db()
     attempts_done = db.interview_sessions.count_documents({
-        "candidate_id": cand["_id"],
+        "candidate_id": {"$in": _get_id_variants(cand["_id"])},
         "status": "completed",
         "result": {"$in": ["PASS", "FAIL", "WITHDRAWN"]},
     })
@@ -143,7 +155,7 @@ async def get_candidates(
 @router.get("/candidates/{candidate_id}")
 async def get_candidate(candidate_id: str, _admin=Depends(require_admin_auth)):
     db = get_sync_db()
-    cand = db.candidates.find_one({"_id": candidate_id})
+    cand = db.candidates.find_one({"_id": {"$in": _get_id_variants(candidate_id)}})
     if not cand:
         raise HTTPException(status_code=404, detail="Candidate not found")
 
@@ -164,7 +176,7 @@ async def update_candidate_phase(candidate_id: str, phase: str, _admin=Depends(r
 
     db = get_sync_db()
     result = db.candidates.update_one(
-        {"_id": candidate_id},
+        {"_id": {"$in": _get_id_variants(candidate_id)}},
         {"$set": {"current_phase": phase, "updated_at": datetime.now(timezone.utc)}}
     )
     if result.matched_count == 0:
@@ -227,20 +239,20 @@ async def reset_candidate_cooldown(candidate_id: str, _admin=Depends(require_adm
 
     # Clear completedAt on latest FAIL session
     db.interview_sessions.find_one_and_update(
-        {"candidate_id": candidate_id, "status": "completed", "result": "FAIL"},
+        {"candidate_id": {"$in": _get_id_variants(candidate_id)}, "status": "completed", "result": "FAIL"},
         {"$set": {"completed_at": None}},
         sort=[("started_at", -1)],
     )
 
     # Clear cooldownUntil on queue entry
     db.queue_entries.update_one(
-        {"candidate_id": candidate_id},
+        {"candidate_id": {"$in": _get_id_variants(candidate_id)}},
         {"$set": {"cooldown_until": None, "updated_at": now}},
     )
 
     # Move candidate back to interview phase, reset flags
     db.candidates.update_one(
-        {"_id": ObjectId(candidate_id)},
+        {"_id": {"$in": _get_id_variants(candidate_id)}},
         {"$set": {
             "current_phase": "interview",
             "passed_and_visited_summary": False,
@@ -557,7 +569,7 @@ async def update_candidate(
     updates["updated_at"] = datetime.now(timezone.utc)
 
     # Map snake_case keys to MongoDB snake_case (already snake_case from body)
-    result = db.candidates.update_one({"_id": candidate_id}, {"$set": updates})
+    result = db.candidates.update_one({"_id": {"$in": _get_id_variants(candidate_id)}}, {"$set": updates})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Candidate not found")
 
@@ -836,13 +848,7 @@ async def bypass_candidate_course(candidate_id: str, _admin=Depends(require_admi
     db = get_sync_db()
     from datetime import datetime, timezone
     
-    try:
-        from bson import ObjectId
-        query_id = ObjectId(candidate_id)
-    except Exception:
-        query_id = candidate_id
-        
-    cand = db.candidates.find_one({"_id": query_id})
+    cand = db.candidates.find_one({"_id": {"$in": _get_id_variants(candidate_id)}})
     if not cand:
         raise HTTPException(status_code=404, detail="Candidate not found")
         
@@ -853,7 +859,7 @@ async def bypass_candidate_course(candidate_id: str, _admin=Depends(require_admi
         new_phase = "documents"
         
     db.candidates.update_one(
-        {"_id": query_id},
+        {"_id": {"$in": _get_id_variants(candidate_id)}},
         {"$set": {
             "foundation_course_completed": True,
             "foundation_course_status": "completed",

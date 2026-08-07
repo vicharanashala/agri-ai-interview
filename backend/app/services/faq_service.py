@@ -57,7 +57,7 @@ FAQ_KB: List[Dict[str, Any]] = [
         "id": "f8",
         "category": "Process",
         "question": "What are the anti-cheat guidelines?",
-        "answer": "To ensure a fair evaluation for all candidates, the interview must be taken in fullscreen mode and without any of the following actions: switching tabs or leaving the interview window, exiting fullscreen, copying or pasting content, using right-click, selecting text, using multiple monitors, or remaining idle for an extended period. The first occurrence of any of these triggers results in a warning. A second occurrence of the same trigger immediately ends the interview. Each trigger is tracked independently — triggering two different violations counts as two separate warnings.",
+        "answer": "To ensure a fair evaluation for all candidates, the interview must be taken in fullscreen mode and without any of the following actions: switching tabs or leaving the interview window, exiting fullscreen, copying or pasting content, using right-click, selecting text, using multiple monitors, or remaining idle for an extended period. Violations of any trigger result in warnings. A 5th occurrence of the same trigger immediately ends the interview. Each trigger is tracked independently.",
     },
     {
         "id": "f9",

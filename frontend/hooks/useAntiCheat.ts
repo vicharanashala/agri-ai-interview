@@ -26,15 +26,15 @@ interface OffenseCount {
 const DEFAULT_IDLE_THRESHOLD_MS = 15_000  // 15 seconds
 
 export function useAntiCheat({ onViolation, onTerminate, onLogEvent, enabled = true, idleThresholdMs = DEFAULT_IDLE_THRESHOLD_MS }: AntiCheatConfig) {
-  const offenseCount = useRef<OffenseCount>({})
+  const totalViolations = useRef<number>(0)
   const prevScreen = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
   const lastActivityTime = useRef<number>(Date.now())
   const lastContextMenuTime = useRef<number>(0)
-  // Per-type cooldown to prevent double-fire from browser chaining events
-  const lastViolationTime = useRef<Record<string, number>>({})
+  // Global cooldown to prevent double-fire from browser chaining events (e.g., blur + tab switch)
+  const lastViolationTime = useRef<number>(0)
   const idleTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const COOLDOWN_MS = 500
+  const COOLDOWN_MS = 1000
 
   // Only access window/screen after mount (browser-only)
   useEffect(() => {
@@ -46,18 +46,18 @@ export function useAntiCheat({ onViolation, onTerminate, onLogEvent, enabled = t
     (type: ViolationType) => {
       if (!enabled) return
       const now = Date.now()
-      // Ignore if same type fired within COOLDOWN_MS (browser event chaining)
-      if (lastViolationTime.current[type] && now - lastViolationTime.current[type] < COOLDOWN_MS) {
-        console.log('[AntiCheat] DROPPED (cooldown)', type, 'since last event was', now - lastViolationTime.current[type], 'ms ago')
+      // Ignore if any violation fired within COOLDOWN_MS (browser event chaining)
+      if (now - lastViolationTime.current < COOLDOWN_MS) {
+        console.log('[AntiCheat] DROPPED (cooldown)', type, 'since last event was', now - lastViolationTime.current, 'ms ago')
         return
       }
-      lastViolationTime.current[type] = now
-      offenseCount.current[type] = (offenseCount.current[type] || 0) + 1
-      const count = offenseCount.current[type]
-      console.log('[AntiCheat] checkAndRecord', { type, count, allCounts: { ...offenseCount.current } })
+      lastViolationTime.current = now
+      totalViolations.current += 1
+      const count = totalViolations.current
+      console.log('[AntiCheat] checkAndRecord', { type, count })
       // Fire-and-forget backend log — don't block the UI
       onLogEvent?.(type)
-      if (count >= 2) {
+      if (count >= 5) {
         console.log('[AntiCheat] TERMINATE triggered for', type)
         onTerminate(type)
       } else {
@@ -169,7 +169,7 @@ export function useAntiCheat({ onViolation, onTerminate, onLogEvent, enabled = t
   }, [enabled, checkAndRecord, recordActivity])
 
   const reset = useCallback(() => {
-    offenseCount.current = {}
+    totalViolations.current = 0
     lastActivityTime.current = Date.now()
   }, [])
 

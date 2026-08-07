@@ -726,7 +726,7 @@ export default function InterviewPage() {
               </ul>
 
               <h3 className={styles.antiCheatTitle}>⚠️ Anti-Cheating Rules</h3>
-              <p className={styles.antiCheatSubtitle}>The following actions are monitored and will result in interview termination after 2 violations:</p>
+              <p className={styles.antiCheatSubtitle}>The following actions are monitored and will result in interview termination after 5 violations:</p>
               <ul className={styles.antiCheatList}>
                 <li>🚫 <strong>Tab Switching</strong> — Do not switch to other browser tabs or windows</li>
                 <li>🚫 <strong>Leaving the Window</strong> — Do not click outside or Alt+Tab away from this window</li>

@@ -73,7 +73,7 @@ export default function AntiCheatOverlay({
         <p className={styles.message}>{message}</p>
         <div className={styles.offense}>
           <span className={styles.dot} />
-          Warning {offenseCount} of 2
+          Warning {offenseCount} of 5
         </div>
         <p className={styles.hint}>If you do this again, the interview will end automatically.</p>
         <button className={styles.okayButton} onClick={handleDone}>

@@ -39,6 +39,30 @@ export interface InterviewEvaluation {
   messages: ChatMessage[];
   evaluation?: Evaluation;
   attempt: number;       // 1-indexed
+  reEvaluationRequested?: boolean;
+  reEvaluationReason?: string;
+  reEvaluationRequestedAt?: string;
+}
+
+export interface ReEvaluationItem {
+  id: string;
+  interviewId: string;
+  candidateId: string;
+  candidateName: string;
+  email?: string;
+  result?: string;
+  endReason?: string;
+  score?: number;
+  attempt: number;
+  requestedAt?: string;
+  completedAt?: string;
+  reason: string;
+  status: string;        // pending | completed
+  scoreAfter?: number;
+  resultAfter?: string;
+  reEvalCompletedAt?: string;
+  messages: ChatMessage[];
+  evaluation?: Evaluation;
 }
 
 interface EvaluationsTabProps {
@@ -50,14 +74,21 @@ interface EvaluationsTabProps {
 
 function formatDate(iso?: string | null): string {
   if (!iso) return "—";
-  return new Date(iso).toLocaleString("en-IN", {
-    timeZone: "Asia/Kolkata",
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  try {
+    const cleaned = iso.replace(/\+00:00Z$/, "+00:00").replace(/\+00:00$/, "Z");
+    const d = new Date(cleaned);
+    if (isNaN(d.getTime())) return "—";
+    return d.toLocaleString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "—";
+  }
 }
 
 function resultBadge(result?: string): string {
@@ -147,95 +178,110 @@ function ChatHistory({ messages }: { messages: ChatMessage[] }) {
 function EvaluationDetail({ eval_ }: { eval_: Evaluation }) {
   return (
     <div className={styles.detailGrid}>
-      {/* Summary card */}
-      <div className={styles.detailCard} style={{ gridColumn: "1 / -1" }}>
-        <div className={styles.detailCardHeader}>📋 LLM Evaluation Summary</div>
-        {eval_.summary && <p className={styles.evalSummary}>"{eval_.summary}"</p>}
-        {eval_.recommendation && (
-          <p className={styles.evalRec}>
-            <strong>Recommendation:</strong> {eval_.recommendation}
-          </p>
-        )}
-      </div>
+      {eval_.summary && (
+        <div className={styles.card}>
+          <div className={styles.cardTitle}>Executive Summary</div>
+          <p className={styles.cardText}>{eval_.summary}</p>
+        </div>
+      )}
 
-      {/* Metrics */}
       {eval_.metrics && Object.keys(eval_.metrics).length > 0 && (
-        <div className={styles.detailCard}>
-          <div className={styles.detailCardHeader}>📊 Scoring Criteria</div>
-          {Object.entries(eval_.metrics).map(([name, metric]) => (
-            <MetricRow key={name} name={name} metric={metric} />
+        <div className={styles.card}>
+          <div className={styles.cardTitle}>Competency Breakdown</div>
+          {Object.entries(eval_.metrics).map(([key, metric]) => (
+            <MetricRow key={key} name={key} metric={metric} />
           ))}
         </div>
       )}
 
-      {/* Topic scores */}
       {eval_.topic_scores && Object.keys(eval_.topic_scores).length > 0 && (
-        <div className={styles.detailCard}>
-          <div className={styles.detailCardHeader}>🗂️ Topic Scores</div>
-          {Object.entries(eval_.topic_scores).map(([name, metric]) => (
-            <MetricRow key={name} name={name} metric={metric} />
+        <div className={styles.card}>
+          <div className={styles.cardTitle}>Topic Performance</div>
+          {Object.entries(eval_.topic_scores).map(([key, metric]) => (
+            <MetricRow key={key} name={key} metric={metric} />
           ))}
         </div>
       )}
 
-      {/* Strengths */}
       {eval_.strengths && eval_.strengths.length > 0 && (
-        <div className={styles.detailCard}>
-          <div className={styles.detailCardHeader}>💪 Strengths</div>
-          <ul className={styles.bulletList}>
-            {eval_.strengths.map((s, i) => <li key={i}>{s}</li>)}
+        <div className={styles.card}>
+          <div className={styles.cardTitle}>Key Strengths</div>
+          <ul className={styles.list}>
+            {eval_.strengths.map((s, i) => (
+              <li key={i}>{s}</li>
+            ))}
           </ul>
         </div>
       )}
 
-      {/* Areas for improvement */}
       {eval_.areas_for_improvement && eval_.areas_for_improvement.length > 0 && (
-        <div className={styles.detailCard}>
-          <div className={styles.detailCardHeader}>📚 Areas for Improvement</div>
-          <ul className={styles.bulletList}>
-            {eval_.areas_for_improvement.map((s, i) => <li key={i}>{s}</li>)}
+        <div className={styles.card}>
+          <div className={styles.cardTitle}>Areas for Improvement</div>
+          <ul className={styles.list}>
+            {eval_.areas_for_improvement.map((a, i) => (
+              <li key={i}>{a}</li>
+            ))}
           </ul>
+        </div>
+      )}
+
+      {eval_.recommendation && (
+        <div className={styles.card}>
+          <div className={styles.cardTitle}>Recommendation</div>
+          <p className={styles.cardText}>{eval_.recommendation}</p>
         </div>
       )}
     </div>
   );
 }
 
-// ─── Expanded Row ────────────────────────────────────────────────────
+// ─── Unified Expanded Row (Reused for both tables) ───────────────────
 
 function ExpandedRow({
+  interviewId,
+  candidateId,
+  candidateName,
+  result,
+  messages,
   evaluation,
   adminApiBase,
   getAdminToken,
   onReevaluate,
+  reEvaluationReason,
+  colSpan = 7,
 }: {
-  evaluation: InterviewEvaluation;
+  interviewId: string;
+  candidateId: string;
+  candidateName: string;
+  result?: string;
+  messages: ChatMessage[];
+  evaluation?: Evaluation;
   adminApiBase: string;
   getAdminToken: () => string | null;
   onReevaluate: (id: string, newScore: number, newResult: string, evaluation?: Evaluation) => void;
+  reEvaluationReason?: string;
+  colSpan?: number;
 }) {
   const [reevaluating, setReevaluating] = useState(false);
   const [resettingCooldown, setResettingCooldown] = useState(false);
 
-  const handleReevaluate = async () => {
-    if (!confirm(`Re-evaluate interview for ${evaluation.candidateName}? This will update their score and result.`)) return;
+  const handleReevaluate = async (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!confirm(`Re-evaluate interview for ${candidateName}? This will update their score and result.`)) return;
     setReevaluating(true);
     try {
       const token = getAdminToken();
-      const res = await fetch(`${adminApiBase}/api/admin/interviews/${evaluation.id}/reevaluate`, {
+      const res = await fetch(`${adminApiBase}/api/admin/interviews/${interviewId}/reevaluate`, {
         method: "POST",
         headers: token ? { "X-Admin-Token": token } : {},
         credentials: "include",
       });
       if (res.ok) {
         const data = await res.json();
-        console.log("[Re-evaluate] API response:", JSON.stringify(data, null, 2));
-        onReevaluate(
-          evaluation.id,
-          data.overall_score !== undefined ? data.overall_score : data.new_score,
-          data.result !== undefined ? data.result : data.new_result,
-          data.evaluation
-        );
+        const finalScore = data.overall_score !== undefined ? data.overall_score : (data.new_score ?? data.score);
+        const finalResult = data.result !== undefined ? data.result : (data.new_result ?? data.result);
+        onReevaluate(interviewId, finalScore, finalResult, data.evaluation);
+        alert(`Re-evaluation completed successfully! New Score: ${finalScore}/100 (${finalResult})`);
       } else {
         const err = await res.json().catch(() => ({}));
         alert(`Re-evaluation failed: ${err.detail || res.statusText}`);
@@ -248,17 +294,17 @@ function ExpandedRow({
   };
 
   const handleResetCooldown = async () => {
-    if (!confirm(`Reset cooldown for ${evaluation.candidateName}? They will be able to start a new interview immediately.`)) return;
+    if (!confirm(`Reset cooldown for ${candidateName}? They will be able to start a new interview immediately.`)) return;
     setResettingCooldown(true);
     try {
       const token = getAdminToken();
-      const res = await fetch(`${adminApiBase}/api/admin/candidates/${evaluation.candidateId}/reset-cooldown`, {
+      const res = await fetch(`${adminApiBase}/api/admin/candidates/${candidateId}/reset-cooldown`, {
         method: "POST",
         headers: token ? { "X-Admin-Token": token } : {},
         credentials: "include",
       });
       if (res.ok) {
-        alert(`Cooldown reset for ${evaluation.candidateName}. They can now start a new interview.`);
+        alert(`Cooldown reset for ${candidateName}. They can now start a new interview.`);
       } else {
         const err = await res.json().catch(() => ({}));
         alert(`Failed to reset cooldown: ${err.detail || res.statusText}`);
@@ -272,57 +318,70 @@ function ExpandedRow({
 
   return (
     <tr className={styles.expandedRow}>
-      <td colSpan={7} className={styles.expandedCell}>
-        {/* Action buttons bar */}
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginBottom: "12px" }}>
-          {evaluation.result === "FAIL" && (
+      <td colSpan={colSpan} className={styles.expandedCell}>
+        {reEvaluationReason ? (
+          <div
+            style={{
+              background: "#fef3c7",
+              borderBottom: "1px solid #fde68a",
+              padding: "12px 24px",
+            }}
+          >
+            <span style={{ fontWeight: 700, color: "#92400e", fontSize: "13px" }}>
+              💬 Candidate Reason for Re-evaluation:
+            </span>
+            <p style={{ margin: "4px 0 0", color: "#78350f", fontSize: "13px", fontStyle: "italic" }}>
+              &quot;{reEvaluationReason}&quot;
+            </p>
+          </div>
+        ) : (
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginBottom: "12px", padding: "12px 24px 0" }}>
+            {result === "FAIL" && (
+              <button
+                onClick={handleResetCooldown}
+                disabled={resettingCooldown}
+                style={{
+                  padding: "6px 16px",
+                  fontSize: "13px",
+                  background: resettingCooldown ? "#9ca3af" : "#10b981",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: resettingCooldown ? "not-allowed" : "pointer",
+                  fontWeight: 500,
+                }}
+              >
+                {resettingCooldown ? "Resetting…" : "🔄 Reset Cooldown"}
+              </button>
+            )}
             <button
-              onClick={handleResetCooldown}
-              disabled={resettingCooldown}
+              onClick={handleReevaluate}
+              disabled={reevaluating}
               style={{
                 padding: "6px 16px",
                 fontSize: "13px",
-                background: resettingCooldown ? "#9ca3af" : "#10b981",
+                background: reevaluating ? "#9ca3af" : "#f59e0b",
                 color: "white",
                 border: "none",
                 borderRadius: "6px",
-                cursor: resettingCooldown ? "not-allowed" : "pointer",
+                cursor: reevaluating ? "not-allowed" : "pointer",
                 fontWeight: 500,
               }}
             >
-              {resettingCooldown ? "Resetting…" : "🔄 Reset Cooldown"}
+              {reevaluating ? "Re-evaluating…" : "🔄 Re-evaluate"}
             </button>
-          )}
-          <button
-            onClick={handleReevaluate}
-            disabled={reevaluating}
-            style={{
-              padding: "6px 16px",
-              fontSize: "13px",
-              background: reevaluating ? "#9ca3af" : "#f59e0b",
-              color: "white",
-              border: "none",
-              borderRadius: "6px",
-              cursor: reevaluating ? "not-allowed" : "pointer",
-              fontWeight: 500,
-            }}
-          >
-            {reevaluating ? "Re-evaluating…" : "🔄 Re-evaluate"}
-          </button>
-        </div>
+          </div>
+        )}
 
         <div className={styles.expandedContent}>
-          {/* Left: chat history */}
           <div className={styles.expandedLeft}>
             <div className={styles.sectionHeader}>💬 Interview Chat History</div>
-            <ChatHistory messages={evaluation.messages} />
+            <ChatHistory messages={messages} />
           </div>
-
-          {/* Right: evaluation */}
           <div className={styles.expandedRight}>
             <div className={styles.sectionHeader}>📊 Evaluation Report</div>
-            {evaluation.evaluation ? (
-              <EvaluationDetail eval_={evaluation.evaluation} />
+            {evaluation ? (
+              <EvaluationDetail eval_={evaluation} />
             ) : (
               <p className={styles.noEval}>No evaluation data available.</p>
             )}
@@ -336,6 +395,7 @@ function ExpandedRow({
 // ─── Main Component ──────────────────────────────────────────────────
 
 export default function EvaluationsTab({ adminApiBase, getAdminToken }: EvaluationsTabProps) {
+  const [activeSubTab, setActiveSubTab] = useState<'evaluations' | 're-evaluations'>('evaluations');
   const [evaluations, setEvaluations] = useState<InterviewEvaluation[]>([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
@@ -344,6 +404,12 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const LIMIT = 20;
+
+  // Re-evaluations state
+  const [reEvaluations, setReEvaluations] = useState<ReEvaluationItem[]>([]);
+  const [reEvalLoading, setReEvalLoading] = useState(false);
+  const [reEvalTotal, setReEvalTotal] = useState(0);
+  const [pendingCount, setPendingCount] = useState(0);
 
   const fetchEvaluations = async (resetPage = false) => {
     setLoading(true);
@@ -369,12 +435,46 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
     }
   };
 
+  const fetchReEvaluations = async () => {
+    setReEvalLoading(true);
+    try {
+      const token = getAdminToken();
+      const params = new URLSearchParams({ limit: "50", offset: "0" });
+      if (searchQuery.trim()) params.set("search", searchQuery.trim());
+
+      const res = await fetch(`${adminApiBase}/api/admin/re-evaluations?${params}`, {
+        headers: token ? { "X-Admin-Token": token } : {},
+        credentials: "include",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const items = data.reEvaluations || [];
+        setReEvaluations(items);
+        setReEvalTotal(data.total || 0);
+        setPendingCount(
+          data.pendingCount !== undefined
+            ? data.pendingCount
+            : items.filter((r: ReEvaluationItem) => r.status === "pending").length
+        );
+      }
+    } catch (err) {
+      console.error("Failed to load re-evaluations:", err);
+    } finally {
+      setReEvalLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchEvaluations(true);
+    fetchReEvaluations();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resultFilter]);
 
-  const handleSearch = () => fetchEvaluations(true);
+  const handleSearch = () => {
+    fetchEvaluations(true);
+    fetchReEvaluations();
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => { if (e.key === "Enter") handleSearch(); };
 
   const handleLoadMore = () => {
@@ -389,16 +489,66 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
   const handleReevaluate = (id: string, newScore: number, newResult: string, evaluation?: Evaluation) => {
     setEvaluations(prev =>
       prev.map(e =>
-        e.id === id ? { ...e, score: newScore, result: newResult, evaluation: evaluation ?? e.evaluation } : e
+        e.id === id ? { ...e, score: newScore, result: newResult, reEvaluationRequested: false, evaluation: evaluation ?? e.evaluation } : e
+      )
+    );
+    setPendingCount(prev => Math.max(0, prev - 1));
+  };
+
+  const handleReevaluateReEvalItem = (interviewId: string, newScore: number, newResult: string, evaluation?: Evaluation) => {
+    setReEvaluations(prev =>
+      prev.map(e =>
+        e.interviewId === interviewId ? {
+          ...e,
+          status: 'completed',
+          scoreAfter: newScore,
+          resultAfter: newResult,
+          evaluation: evaluation ?? e.evaluation
+        } : e
+      )
+    );
+    setPendingCount(prev => Math.max(0, prev - 1));
+    setEvaluations(prev =>
+      prev.map(e =>
+        e.id === interviewId ? {
+          ...e,
+          score: newScore,
+          result: newResult,
+          reEvaluationRequested: false,
+          evaluation: evaluation ?? e.evaluation
+        } : e
       )
     );
   };
 
-  const filtered = evaluations; // filtering is server-side; client-side search is supplemental
+  const handleReevaluateDirect = async (interviewId: string, candidateName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm(`Re-evaluate interview for ${candidateName}? This will run AI evaluation and update their score.`)) return;
+    try {
+      const token = getAdminToken();
+      const res = await fetch(`${adminApiBase}/api/admin/interviews/${interviewId}/reevaluate`, {
+        method: "POST",
+        headers: token ? { "X-Admin-Token": token } : {},
+        credentials: "include",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const finalScore = data.overall_score !== undefined ? data.overall_score : (data.new_score ?? data.score);
+        const finalResult = data.result !== undefined ? data.result : (data.new_result ?? data.result);
+        handleReevaluateReEvalItem(interviewId, finalScore, finalResult, data.evaluation);
+        alert(`Re-evaluation completed successfully! Score: ${finalScore}/100 (${finalResult})`);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(`Re-evaluation failed: ${err.detail || "Server error"}`);
+      }
+    } catch {
+      alert("Network error during re-evaluation.");
+    }
+  };
 
   return (
     <div className={styles.container}>
-      {/* Filters */}
+      {/* Filters & Navigation Bar */}
       <div className={styles.filters}>
         <input
           type="text"
@@ -408,108 +558,273 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
           onKeyDown={handleKeyDown}
           className={styles.searchInput}
         />
-        <select
-          value={resultFilter}
-          onChange={e => setResultFilter(e.target.value)}
-          className={styles.filterSelect}
-        >
-          <option value="">All Results</option>
-          <option value="PASS">PASS</option>
-          <option value="FAIL">FAIL</option>
-        </select>
+        {activeSubTab === 'evaluations' && (
+          <select
+            value={resultFilter}
+            onChange={e => setResultFilter(e.target.value)}
+            className={styles.filterSelect}
+          >
+            <option value="">All Results</option>
+            <option value="PASS">PASS</option>
+            <option value="FAIL">FAIL</option>
+            <option value="RE_EVALUATION_REQUESTED">Re-evaluation Requested</option>
+          </select>
+        )}
         <button onClick={handleSearch} className={styles.searchBtn}>Search</button>
-        <span className={styles.totalCount}>{total} total</span>
+
+        {/* Sub-tab navigation before total count */}
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "8px" }}>
+          <button
+            className={`${styles.subTabBtn} ${activeSubTab === 'evaluations' ? styles.activeSubTabBtn : ''}`}
+            onClick={() => setActiveSubTab('evaluations')}
+          >
+            📋 All Evaluations
+          </button>
+          <button
+            className={`${styles.subTabBtn} ${activeSubTab === 're-evaluations' ? styles.activeSubTabBtn : ''}`}
+            onClick={() => setActiveSubTab('re-evaluations')}
+          >
+            🔄 Re-evaluation Requests ({pendingCount})
+          </button>
+          <span className={styles.totalCount}>
+            {activeSubTab === 'evaluations' ? `${total} total` : `${reEvalTotal} requests`}
+          </span>
+        </div>
       </div>
 
-      {/* Table */}
-      {loading && evaluations.length === 0 ? (
-        <div className={styles.loading}>Loading evaluations…</div>
-      ) : evaluations.length === 0 ? (
-        <div className={styles.empty}>
-          <div className={styles.emptyIcon}>📋</div>
-          <h3>No Evaluations Yet</h3>
-          <p>Completed interview evaluations will appear here</p>
-        </div>
-      ) : (
+      {/* Main Evaluations Table */}
+      {activeSubTab === 'evaluations' && (
         <>
-          <div className={styles.tableWrapper}>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th style={{ width: 32 }}></th>
-                  <th>Candidate</th>
-                  <th>Result</th>
-                  <th>Score</th>
-                  <th>End Reason</th>
-                  <th>Attempt</th>
-                  <th>Completed</th>
-                </tr>
-              </thead>
-              <tbody>
-                {evaluations.map(evaluation => (
-                  <React.Fragment key={evaluation.id}>
-                    <tr
-                      className={`${styles.row} ${expandedId === evaluation.id ? styles.rowExpanded : ""}`}
-                      onClick={() => toggleExpand(evaluation.id)}
-                    >
-                      <td>
-                        <span className={styles.expandIcon}>
-                          {expandedId === evaluation.id ? "▼" : "▶"}
-                        </span>
-                      </td>
-                      <td>
-                        <div className={styles.candidateCell}>
-                          <span className={styles.candidateName}>{evaluation.candidateName}</span>
-                          {evaluation.email && (
-                            <span className={styles.candidateEmail}>{evaluation.email}</span>
-                          )}
-                        </div>
-                      </td>
-                      <td>
-                        <span className={`${styles.resultBadge} ${resultClass(evaluation.result)}`}>
-                          {resultBadge(evaluation.result)}
-                        </span>
-                      </td>
-                      <td>
-                        {evaluation.score != null ? (
-                          <div className={styles.scoreCell}>
-                            <span className={styles.scoreNum} style={{ color: evaluation.result === 'PASS' ? '#4ade80' : '#f87171' }}>
-                              {evaluation.score}
-                            </span>
-                            <span className={styles.scoreMax}>/100</span>
-                          </div>
-                        ) : "—"}
-                      </td>
-                      <td>
-                        <span className={styles.endReasonBadge}>{endReasonLabel(evaluation.endReason)}</span>
-                      </td>
-                      <td>
-                        <span className={styles.attemptBadge}>{evaluation.attempt}/{3}</span>
-                      </td>
-                      <td>
-                        <span className={styles.dateCell}>{formatDate(evaluation.completedAt)}</span>
-                      </td>
+          {loading && evaluations.length === 0 ? (
+            <div className={styles.loading}>Loading evaluations…</div>
+          ) : evaluations.length === 0 ? (
+            <div className={styles.empty}>
+              <div className={styles.emptyIcon}>📋</div>
+              <h3>No Evaluations Yet</h3>
+              <p>Completed interview evaluations will appear here</p>
+            </div>
+          ) : (
+            <>
+              <div className={styles.tableWrapper}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th style={{ width: 32 }}></th>
+                      <th>Candidate</th>
+                      <th>Result</th>
+                      <th>Score</th>
+                      <th>End Reason</th>
+                      <th>Attempt</th>
+                      <th>Completed</th>
                     </tr>
-                    {expandedId === evaluation.id && (
-                      <ExpandedRow
-                        evaluation={evaluation}
-                        adminApiBase={adminApiBase}
-                        getAdminToken={getAdminToken}
-                        onReevaluate={handleReevaluate}
-                      />
-                    )}
-                  </React.Fragment>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                  </thead>
+                  <tbody>
+                    {evaluations.map(evaluation => (
+                      <React.Fragment key={evaluation.id}>
+                        <tr
+                          className={`${styles.row} ${expandedId === evaluation.id ? styles.rowExpanded : ""}`}
+                          onClick={() => toggleExpand(evaluation.id)}
+                        >
+                          <td>
+                            <span className={styles.expandIcon}>
+                              {expandedId === evaluation.id ? "▼" : "▶"}
+                            </span>
+                          </td>
+                          <td>
+                            <div className={styles.candidateCell}>
+                              <span className={styles.candidateName}>{evaluation.candidateName}</span>
+                              {evaluation.email && (
+                                <span className={styles.candidateEmail}>{evaluation.email}</span>
+                              )}
+                            </div>
+                          </td>
+                          <td>
+                            <span className={`${styles.resultBadge} ${resultClass(evaluation.result)}`}>
+                              {resultBadge(evaluation.result)}
+                            </span>
+                          </td>
+                          <td>
+                            {evaluation.score != null ? (
+                              <div className={styles.scoreCell}>
+                                <span className={styles.scoreNum} style={{ color: evaluation.result === 'PASS' ? '#4ade80' : '#f87171' }}>
+                                  {evaluation.score}
+                                </span>
+                                <span className={styles.scoreMax}>/100</span>
+                              </div>
+                            ) : "—"}
+                          </td>
+                          <td>
+                            <span className={styles.endReasonBadge}>{endReasonLabel(evaluation.endReason)}</span>
+                          </td>
+                          <td>
+                            <span className={styles.attemptBadge}>{evaluation.attempt}/{3}</span>
+                          </td>
+                          <td>
+                            <span className={styles.dateCell}>{formatDate(evaluation.completedAt)}</span>
+                          </td>
+                        </tr>
+                        {expandedId === evaluation.id && (
+                          <ExpandedRow
+                            interviewId={evaluation.id}
+                            candidateId={evaluation.candidateId}
+                            candidateName={evaluation.candidateName}
+                            result={evaluation.result}
+                            messages={evaluation.messages}
+                            evaluation={evaluation.evaluation}
+                            adminApiBase={adminApiBase}
+                            getAdminToken={getAdminToken}
+                            onReevaluate={handleReevaluate}
+                            colSpan={7}
+                          />
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {evaluations.length < total && (
+                <div style={{ textAlign: "center", marginTop: "16px" }}>
+                  <button onClick={handleLoadMore} className={styles.searchBtn} disabled={loading}>
+                    {loading ? "Loading..." : "Load More"}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}
 
-          {/* Load more */}
-          {evaluations.length < total && (
-            <div className={styles.loadMore}>
-              <button onClick={handleLoadMore} className={styles.loadMoreBtn}>
-                Load More ({total - evaluations.length} remaining)
-              </button>
+      {/* Re-evaluation Requests Table */}
+      {activeSubTab === 're-evaluations' && (
+        <>
+          {reEvalLoading ? (
+            <div className={styles.loading}>Loading re-evaluation requests…</div>
+          ) : reEvaluations.length === 0 ? (
+            <div className={styles.empty}>
+              <div className={styles.emptyIcon}>🔄</div>
+              <h3>No Re-evaluation Requests</h3>
+              <p>Candidate requests for interview re-evaluation will appear here</p>
+            </div>
+          ) : (
+            <div className={styles.tableWrapper}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th style={{ width: 32 }}></th>
+                    <th>Candidate Name</th>
+                    <th>Result</th>
+                    <th>Mark</th>
+                    <th>Attempt Number</th>
+                    <th>Requested Date</th>
+                    <th>Revaluation Status</th>
+                    <th>Reason for Revaluation</th>
+                    <th>Result After Revaluation</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reEvaluations.map(item => (
+                    <React.Fragment key={item.id}>
+                      <tr
+                        className={`${styles.row} ${expandedId === item.id ? styles.rowExpanded : ""}`}
+                        onClick={() => toggleExpand(item.id)}
+                      >
+                        <td>
+                          <span className={styles.expandIcon}>
+                            {expandedId === item.id ? "▼" : "▶"}
+                          </span>
+                        </td>
+                        <td>
+                          <div className={styles.candidateCell}>
+                            <span className={styles.candidateName}>{item.candidateName}</span>
+                            {item.email && <span className={styles.candidateEmail}>{item.email}</span>}
+                          </div>
+                        </td>
+                        <td>
+                          <span className={`${styles.resultBadge} ${resultClass(item.result)}`}>
+                            {resultBadge(item.result)}
+                          </span>
+                        </td>
+                        <td>
+                          {item.score != null ? (
+                            <div className={styles.scoreCell}>
+                              <span className={styles.scoreNum} style={{ color: item.result === 'PASS' ? '#4ade80' : '#f87171' }}>
+                                {item.score}
+                              </span>
+                              <span className={styles.scoreMax}>/100</span>
+                            </div>
+                          ) : "—"}
+                        </td>
+                        <td>
+                          <span className={styles.attemptBadge}>{item.attempt}/{3}</span>
+                        </td>
+                        <td>
+                          <span className={styles.dateCell}>{formatDate(item.requestedAt)}</span>
+                        </td>
+                        <td>
+                          <span className={item.status === 'completed' ? styles.statusCompleted : styles.statusRequested}>
+                            {item.status === 'completed' ? '✓ Completed' : '🔄 Requested'}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={styles.reasonText}>
+                            {item.reason.length > 35 ? item.reason.slice(0, 35) + "…" : item.reason}
+                          </span>
+                        </td>
+                        <td>
+                          {item.status === 'completed' && item.scoreAfter != null ? (
+                            <div className={styles.scoreCell}>
+                              <span className={styles.scoreNum} style={{ color: item.resultAfter === 'PASS' ? '#4ade80' : '#f87171' }}>
+                                {item.scoreAfter}
+                              </span>
+                              <span className={styles.scoreMax}>/100 ({item.resultAfter})</span>
+                            </div>
+                          ) : (
+                            <span style={{ color: '#999', fontSize: '12px' }}>—</span>
+                          )}
+                        </td>
+                        <td>
+                          {item.status === 'pending' ? (
+                            <button
+                              onClick={(e) => handleReevaluateDirect(item.interviewId, item.candidateName, e)}
+                              style={{
+                                padding: "4px 12px",
+                                fontSize: "12px",
+                                background: "#f59e0b",
+                                color: "white",
+                                border: "none",
+                                borderRadius: "6px",
+                                cursor: "pointer",
+                                fontWeight: 600,
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              🔄 Re-evaluate
+                            </button>
+                          ) : (
+                            <span style={{ color: "#10b981", fontSize: "12px", fontWeight: 600 }}>✓ Done</span>
+                          )}
+                        </td>
+                      </tr>
+                      {expandedId === item.id && (
+                        <ExpandedRow
+                          interviewId={item.interviewId}
+                          candidateId={item.candidateId}
+                          candidateName={item.candidateName}
+                          result={item.result}
+                          messages={item.messages}
+                          evaluation={item.evaluation}
+                          adminApiBase={adminApiBase}
+                          getAdminToken={getAdminToken}
+                          onReevaluate={handleReevaluateReEvalItem}
+                          reEvaluationReason={item.reason}
+                          colSpan={10}
+                        />
+                      )}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </>

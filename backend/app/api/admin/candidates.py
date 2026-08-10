@@ -59,6 +59,16 @@ def _get_id_variants(val: Any) -> List[Any]:
     return list(set(variants))
 
 
+def _format_iso(dt: Any) -> Optional[str]:
+    if not dt:
+        return None
+    if isinstance(dt, str):
+        return dt
+    if hasattr(dt, 'tzinfo') and dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
+
+
 def _build_phases(current_phase: str) -> List[PhaseStatus]:
     current_idx = PHASE_ORDER.get(current_phase, 0)
     return [
@@ -393,6 +403,18 @@ async def reevaluate_interview(interview_id: str, _admin=Depends(require_admin_a
         }},
     )
 
+    # Update re-evaluation request status if present
+    db.re_evaluation_requests.update_many(
+        {"interview_id": str(interview_id)},
+        {"$set": {
+            "status": "completed",
+            "score_after": overall_score,
+            "result_after": new_result,
+            "completed_at": now,
+            "updated_at": now,
+        }},
+    )
+
     if new_result == "PASS":
         db.queue_entries.update_one(
             {"candidate_id": session["candidate_id"]},
@@ -608,9 +630,15 @@ async def get_all_evaluations(
 
     db = get_sync_db()
 
-    query: dict = {"status": "completed", "result": {"$in": ["PASS", "FAIL"]}}
-    if result:
+    query: dict = {"status": "completed"}
+    if result and result == "RE_EVALUATION_REQUESTED":
+        reqs = list(db.re_evaluation_requests.find())
+        req_interview_ids = [r.get("interview_id") for r in reqs if r.get("interview_id")]
+        query["_id"] = {"$in": [ObjectId(id) if ObjectId.is_valid(id) else id for id in req_interview_ids]}
+    elif result:
         query["result"] = result
+    else:
+        query["result"] = {"$in": ["PASS", "FAIL"]}
 
     total = db.interview_sessions.count_documents(query)
 
@@ -659,9 +687,6 @@ async def get_all_evaluations(
         if not isinstance(messages, list):
             messages = []
 
-        # Determine the 1-indexed attempt number for this session.
-        # Count how many completed sessions for this candidate started BEFORE or AT the same time.
-        # Sessions are ordered by started_at ASC; this gives each session its distinct attempt number.
         if candidate_id:
             attempt_num = db.interview_sessions.count_documents({
                 "candidate_id": candidate_id,
@@ -675,6 +700,9 @@ async def get_all_evaluations(
         eval_data = interview_data.get("evaluation") or {}
         raw_score = s.get("score")
         score = raw_score if raw_score is not None else eval_data.get("overall_score")
+
+        session_id_str = str(s.get("_id"))
+        re_req = db.re_evaluation_requests.find_one({"interview_id": session_id_str})
 
         evals.append({
             "id": s.get("_id"),
@@ -693,9 +721,131 @@ async def get_all_evaluations(
             "messages": messages,
             "evaluation": interview_data.get("evaluation"),
             "attempt": attempt_num,
+            "reEvaluationRequested": re_req is not None and re_req.get("status") == "pending",
+            "reEvaluationStatus": re_req.get("status") if re_req else None,
+            "reEvaluationReason": re_req.get("reason") if re_req else None,
+            "reEvaluationRequestedAt": _format_iso(re_req.get("requested_at")) if re_req else None,
         })
 
     return {"evaluations": evals, "total": total}
+
+
+# ── Get all re-evaluation requests (admin view) ──────────────────────────────
+
+@router.get("/re-evaluations")
+async def get_all_re_evaluations(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0),
+    search: str = Query(None),
+    _admin=Depends(require_admin_auth),
+):
+    from bson import ObjectId
+
+    db = get_sync_db()
+
+    req_cursor = db.re_evaluation_requests.find().sort("requested_at", -1)
+    all_requests = list(req_cursor)
+
+    items = []
+    for req_doc in all_requests:
+        interview_id = req_doc.get("interview_id")
+        session = None
+        if interview_id:
+            session = db.interview_sessions.find_one({"_id": interview_id})
+            if not session:
+                try:
+                    session = db.interview_sessions.find_one({"_id": ObjectId(interview_id)})
+                except Exception:
+                    pass
+
+        if not session:
+            continue
+
+        interview_data = session.get("interview_data") or {}
+        if isinstance(interview_data, str):
+            try:
+                interview_data = json.loads(interview_data)
+            except Exception:
+                interview_data = {}
+
+        candidate_id = session.get("candidate_id")
+        candidate = None
+        user = None
+        if candidate_id:
+            cand_vars = _get_id_variants(candidate_id)
+            candidate = db.candidates.find_one({"_id": {"$in": cand_vars}})
+
+        if candidate and candidate.get("user_id"):
+            try:
+                user = db.users.find_one({"_id": ObjectId(candidate.get("user_id"))})
+            except Exception:
+                try:
+                    user = db.users.find_one({"_id": candidate.get("user_id")})
+                except Exception:
+                    pass
+
+        candidate_name = ""
+        if candidate:
+            candidate_name = candidate.get("full_name") or ""
+        if not candidate_name and user:
+            candidate_name = user.get("name") or ""
+        candidate_name = candidate_name.strip()
+        if not candidate_name and user:
+            candidate_name = user.get("email", "")
+
+        candidate_email = (user.get("email") if user else (candidate.get("email") if candidate else None)) or ""
+
+        if search:
+            sl = search.lower()
+            if sl not in candidate_name.lower() and sl not in candidate_email.lower():
+                continue
+
+        messages = interview_data.get("messages", [])
+        if not isinstance(messages, list):
+            messages = []
+
+        if candidate_id:
+            attempt_num = db.interview_sessions.count_documents({
+                "candidate_id": {"$in": _get_id_variants(candidate_id)},
+                "status": "completed",
+                "result": {"$in": ["PASS", "FAIL", "WITHDRAWN"]},
+                "started_at": {"$lte": session.get("started_at")},
+            })
+        else:
+            attempt_num = 1
+
+        eval_data = interview_data.get("evaluation") or {}
+        raw_score = session.get("score")
+        score = raw_score if raw_score is not None else eval_data.get("overall_score")
+
+        items.append({
+            "id": req_doc.get("_id"),
+            "interviewId": str(session.get("_id")),
+            "candidateId": candidate_id,
+            "candidateName": candidate_name or "Unknown Candidate",
+            "email": candidate_email,
+            "result": session.get("result"),
+            "endReason": session.get("end_reason"),
+            "score": score,
+            "attempt": attempt_num,
+            "requestedAt": _format_iso(req_doc.get("requested_at")),
+            "completedAt": (
+                session.get("completed_at").isoformat() + "Z" if session.get("completed_at") else
+                session.get("started_at").isoformat() + "Z" if session.get("started_at") else
+                None
+            ),
+            "reason": req_doc.get("reason", ""),
+            "status": req_doc.get("status", "pending"),
+            "scoreAfter": req_doc.get("score_after"),
+            "resultAfter": req_doc.get("result_after"),
+            "reEvalCompletedAt": _format_iso(req_doc.get("completed_at")),
+            "messages": messages,
+            "evaluation": interview_data.get("evaluation"),
+        })
+
+    paginated_items = items[offset:offset + limit]
+    pending_count = db.re_evaluation_requests.count_documents({"status": "pending"})
+    return {"reEvaluations": paginated_items, "total": len(items), "pendingCount": pending_count}
 
 
 # ── Geo Stats ─────────────────────────────────────────────────────────────────

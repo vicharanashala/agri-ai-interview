@@ -98,3 +98,53 @@ async def get_attempts(request: Request, email: str = Query(default=None)):
     ]
 
     return {"attempts": attempts, "cooldownUntil": cooldown_until, "cooldownDays": cooldown_days}
+
+
+@router.get("/session-summary")
+async def get_latest_session_summary(request: Request):
+    """
+    GET /api/candidate/session-summary
+
+    Returns summary data for the candidate's latest completed interview session.
+    """
+    from app.api.candidate.route import _get_candidate_id_with_email_fallback
+    from app.api.candidate.re_evaluation import _get_id_variants
+    candidate_id = _get_candidate_id_with_email_fallback(request)
+    db = get_sync_db()
+
+    cand_variants = _get_id_variants(candidate_id)
+    session = db.interview_sessions.find_one(
+        {"candidate_id": {"$in": cand_variants}, "status": "completed"},
+        sort=[("started_at", -1)],
+    )
+
+    if not session:
+        return {
+            "result": None,
+            "score": None,
+            "end_reason": None,
+            "cooldown_remaining_seconds": None,
+            "interview_id": None,
+        }
+
+    cooldown_days = _cooldown_days(db)
+    cooldown_rem = None
+
+    if session.get("result") == "FAIL" and session.get("completed_at"):
+        failed_ms = session["completed_at"].timestamp() * 1000
+        deadline_ms = failed_ms + cooldown_days * 24 * 60 * 60 * 1000
+        now_ms = datetime.now(timezone.utc).timestamp() * 1000
+        if deadline_ms > now_ms:
+            cooldown_rem = max(0, int((deadline_ms - now_ms) / 1000))
+
+    score_val = session.get("overall_score")
+    if score_val is None:
+        score_val = session.get("score")
+
+    return {
+        "result": session.get("result"),
+        "score": score_val,
+        "end_reason": session.get("end_reason"),
+        "cooldown_remaining_seconds": cooldown_rem,
+        "interview_id": str(session["_id"]),
+    }

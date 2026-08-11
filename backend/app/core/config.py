@@ -47,7 +47,7 @@ class Settings(BaseSettings):
 
     # ViBe integration (Foundation Course)
     VIBE_API_URL: str = "https://vibe.vicharanashala.ai"
-    VIBE_COURSE_ID: str = "6a2be954ca990e71be4e3751"
+    VIBE_COURSE_ID: str = "6a2be954ca990e71be4e3752"
 
     # SMTP / Email settings
     EMAIL_SMTP_HOST: str = "smtp.zoho.in"

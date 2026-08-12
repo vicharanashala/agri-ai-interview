@@ -45,6 +45,7 @@ class CandidateResponse(BaseModel):
     maxAttempts: int = 3
     foundationCourseCompleted: bool = False
     foundationCourseStatus: Optional[str] = "not_started"
+    interviewStatus: Optional[str] = "not_attended"
 
 
 def _get_id_variants(val: Any) -> List[Any]:
@@ -91,6 +92,27 @@ def _candidate_to_response(cand: dict, user_email: Optional[str]) -> CandidateRe
         "result": {"$in": ["PASS", "FAIL", "WITHDRAWN"]},
     })
 
+    latest_session = db.interview_sessions.find_one(
+        {
+            "candidate_id": {"$in": _get_id_variants(cand["_id"])},
+            "status": "completed",
+            "result": {"$in": ["PASS", "FAIL"]}
+        },
+        sort=[("started_at", -1)]
+    )
+
+    interview_status = "not_attended"
+    if latest_session:
+        result = latest_session.get("result")
+        if result == "PASS":
+            interview_status = "pass"
+        elif result == "FAIL":
+            re_req = db.re_evaluation_requests.find_one({"interview_id": str(latest_session["_id"])})
+            if re_req and re_req.get("status") == "pending":
+                interview_status = "requested_revaluation"
+            else:
+                interview_status = "fail"
+
     foundation_completed = cand.get("foundation_course_completed", False)
     foundation_status = cand.get("foundation_course_status", "completed" if foundation_completed else "not_started")
 
@@ -114,6 +136,7 @@ def _candidate_to_response(cand: dict, user_email: Optional[str]) -> CandidateRe
         maxAttempts=3,
         foundationCourseCompleted=foundation_completed,
         foundationCourseStatus=foundation_status,
+        interviewStatus=interview_status,
     )
 
 
@@ -126,6 +149,7 @@ async def get_candidates(
     search: Optional[str] = Query(None),
     state: Optional[str] = Query(None),
     district: Optional[str] = Query(None),
+    interviewStatus: Optional[str] = Query(None),
     _admin=Depends(require_admin_auth),
 ):
     db = get_sync_db()
@@ -156,6 +180,9 @@ async def get_candidates(
             sl = search.lower()
             if sl not in (response.fullName or "").lower() and sl not in (response.email or "").lower():
                 continue
+
+        if interviewStatus and response.interviewStatus != interviewStatus:
+            continue
 
         results.append(response)
 

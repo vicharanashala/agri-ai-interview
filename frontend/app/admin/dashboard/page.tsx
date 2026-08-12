@@ -197,6 +197,7 @@ export default function AdminDashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [phaseFilter, setPhaseFilter] = useState<string>("");
   const [stateFilter, setStateFilter] = useState<string>("");
+  const [interviewStatusFilter, setInterviewStatusFilter] = useState<string>("");
   const [districtFilter, setDistrictFilter] = useState<string>("");
   const [districts, setDistricts] = useState<string[]>([]);
 
@@ -242,6 +243,13 @@ export default function AdminDashboard() {
   useEffect(() => {
     loadData(activeTab);
   }, [activeTab]);
+
+  // Reload candidates when filters change
+  useEffect(() => {
+    if (activeTab === "candidates") {
+      loadCandidates();
+    }
+  }, [phaseFilter, stateFilter, districtFilter, interviewStatusFilter]);
 
   const loadData = async (tab?: Tab) => {
     const target = tab ?? activeTab;
@@ -327,6 +335,7 @@ export default function AdminDashboard() {
       if (phaseFilter) params.append("phase", phaseFilter);
       if (stateFilter) params.append("state", stateFilter);
       if (districtFilter) params.append("district", districtFilter);
+      if (interviewStatusFilter) params.append("interviewStatus", interviewStatusFilter);
       const res = await withAuth(`/api/admin/candidates?${params}`);
       if (res.ok) {
         const data = await res.json();
@@ -567,7 +576,6 @@ export default function AdminDashboard() {
     if (state) {
       loadDistrictsForState(state);
     }
-    loadCandidates();
   };
 
   const loadGuidelines = async () => {
@@ -769,6 +777,29 @@ export default function AdminDashboard() {
   if (loading) {
     return <div className={styles.loading}>Loading...</div>;
   }
+  const handleExportCsv = () => {
+    if (candidates.length === 0) return;
+    const headers = ["Name", "Email", "Phone", "State", "Current Phase", "Interview Status", "Attempts", "Created At"];
+    const csvRows = [headers.join(",")];
+    for (const c of candidates) {
+      csvRows.push([
+        `"${c.fullName || ""}"`,
+        `"${c.email || ""}"`,
+        `"${c.phone || ""}"`,
+        `"${c.state || ""}"`,
+        `"${PHASE_LABELS[c.currentPhase] || c.currentPhase}"`,
+        `"${c.interviewStatus || "not_attended"}"`,
+        c.attemptsDone,
+        `"${c.createdAt ? new Date(c.createdAt).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }) : ""}"`
+      ].join(","));
+    }
+    const blob = new Blob([csvRows.join("\n")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `candidates_${phaseFilter || "all"}_${Date.now()}.csv`;
+    a.click();
+  };
 
   return (
     <div className={styles.container}>
@@ -863,7 +894,7 @@ export default function AdminDashboard() {
               />
               <select
                 value={phaseFilter}
-                onChange={(e) => { setPhaseFilter(e.target.value); loadCandidates(); }}
+                onChange={(e) => setPhaseFilter(e.target.value)}
                 className={styles.phaseSelect}
               >
                 <option value="">All Phases</option>
@@ -884,7 +915,7 @@ export default function AdminDashboard() {
               {stateFilter && (
                 <select
                   value={districtFilter}
-                  onChange={(e) => { setDistrictFilter(e.target.value); loadCandidates(); }}
+                  onChange={(e) => setDistrictFilter(e.target.value)}
                   className={styles.phaseSelect}
                 >
                   <option value="">All Districts</option>
@@ -893,7 +924,21 @@ export default function AdminDashboard() {
                   ))}
                 </select>
               )}
+              <select
+                value={interviewStatusFilter}
+                onChange={(e) => setInterviewStatusFilter(e.target.value)}
+                className={styles.phaseSelect}
+              >
+                <option value="">All Interview Statuses</option>
+                <option value="not_attended">Not Attended (NIL)</option>
+                <option value="pass">Pass</option>
+                <option value="fail">Fail</option>
+                <option value="requested_revaluation">Requested Revaluation</option>
+              </select>
               <button onClick={loadCandidates} className={styles.searchBtn}>Search</button>
+              <button onClick={handleExportCsv} className={styles.exportBtn} style={{ marginLeft: "auto", background: "#10b981", color: "white", padding: "8px 16px", borderRadius: "6px", border: "none", cursor: "pointer", fontWeight: 600 }}>
+                Export CSV
+              </button>
             </div>
 
             {/* Candidates Table */}

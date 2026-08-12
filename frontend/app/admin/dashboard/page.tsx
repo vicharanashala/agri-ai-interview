@@ -29,6 +29,7 @@ interface Candidate {
   maxAttempts: number;
   createdAt?: string;
   documentsSubmitted: boolean;
+  interviewStatus?: string;
 }
 
 interface ParsedResumeData {

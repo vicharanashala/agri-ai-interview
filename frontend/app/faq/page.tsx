@@ -131,6 +131,12 @@ export default function FAQPage() {
             <p className={styles.brandSub}>Center of Excellence for AI in Agriculture, IIT Ropar</p>
           </div>
           <div className={styles.headerButtons}>
+            <button
+              onClick={() => window.open('/raise-ticket.html', '_blank')}
+              className={styles.raiseTicketBtn}
+            >
+              ⚠️ Raise Tickets
+            </button>
             {isSignedIn ? (
               <>
                 <button onClick={() => router.push("/dashboard")} className={styles.faqHelpBtn}>

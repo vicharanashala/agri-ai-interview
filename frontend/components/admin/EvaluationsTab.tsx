@@ -410,6 +410,7 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
   const [reEvalLoading, setReEvalLoading] = useState(false);
   const [reEvalTotal, setReEvalTotal] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
+  const [revaluatingIds, setRevaluatingIds] = useState<Set<string>>(new Set());
 
   const fetchEvaluations = async (resetPage = false) => {
     setLoading(true);
@@ -524,6 +525,8 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
   const handleReevaluateDirect = async (interviewId: string, candidateName: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!confirm(`Re-evaluate interview for ${candidateName}? This will run AI evaluation and update their score.`)) return;
+    
+    setRevaluatingIds(prev => new Set(prev).add(interviewId));
     try {
       const token = getAdminToken();
       const res = await fetch(`${adminApiBase}/api/admin/interviews/${interviewId}/reevaluate`, {
@@ -543,6 +546,12 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
       }
     } catch {
       alert("Network error during re-evaluation.");
+    } finally {
+      setRevaluatingIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(interviewId);
+        return newSet;
+      });
     }
   };
 
@@ -787,19 +796,20 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
                           {item.status === 'pending' ? (
                             <button
                               onClick={(e) => handleReevaluateDirect(item.interviewId, item.candidateName, e)}
+                              disabled={revaluatingIds.has(item.interviewId)}
                               style={{
                                 padding: "4px 12px",
                                 fontSize: "12px",
-                                background: "#f59e0b",
+                                background: revaluatingIds.has(item.interviewId) ? "#9ca3af" : "#f59e0b",
                                 color: "white",
                                 border: "none",
                                 borderRadius: "6px",
-                                cursor: "pointer",
+                                cursor: revaluatingIds.has(item.interviewId) ? "not-allowed" : "pointer",
                                 fontWeight: 600,
                                 whiteSpace: "nowrap",
                               }}
                             >
-                              🔄 Re-evaluate
+                              {revaluatingIds.has(item.interviewId) ? "⏳ Revaluating..." : "🔄 Re-evaluate"}
                             </button>
                           ) : (
                             <span style={{ color: "#10b981", fontSize: "12px", fontWeight: 600 }}>✓ Done</span>

@@ -415,6 +415,12 @@ const completionPercentage = getCompletionPercentage();
           </div>
           <div className={styles.headerButtons}>
             <button
+              onClick={() => window.open('/raise-ticket.html', '_blank')}
+              className={styles.raiseTicketBtn}
+            >
+              ⚠️ Raise Tickets
+            </button>
+            <button
               onClick={handleFaqClick}
               className={styles.faqHelpBtn}
             >

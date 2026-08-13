@@ -436,7 +436,13 @@ export default function OnboardingPage() {
             </div>
             <div className={styles.headerButtons}>
               <button
-                onClick={handleFaqClick}
+              onClick={() => window.open('/raise-ticket.html', '_blank')}
+              className={styles.raiseTicketBtn}
+            >
+              ⚠️ Raise Tickets
+            </button>
+            <button
+              onClick={handleFaqClick}
                 className={styles.faqHelpBtn}
               >
                 💬 FAQ & Help

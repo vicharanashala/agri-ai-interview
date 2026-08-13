@@ -266,7 +266,14 @@ export default function UploadDocumentsPage() {
           <p className={styles.brandSub}>Center of Excellence for AI in Agriculture, IIT Ropar</p>
         </div>
         <div className={styles.headerButtons}>
-          <button onClick={handleFaqClick} className={styles.faqHelpBtn}>
+          <button
+              onClick={() => window.open('/raise-ticket.html', '_blank')}
+              className={styles.raiseTicketBtn}
+            >
+              ⚠️ Raise Tickets
+            </button>
+            <button
+              onClick={handleFaqClick} className={styles.faqHelpBtn}>
             FAQ & Help
           </button>
           <button onClick={handleLogout} disabled={loggingOut} className={styles.signOutBtn}>

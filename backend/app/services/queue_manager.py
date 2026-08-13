@@ -238,9 +238,11 @@ class SlotManager:
             return
 
         messages = []
+        qa_pairs = []
         interview_data = session.get("interview_data", {})
         if interview_data:
             messages = interview_data.get("messages", [])
+            qa_pairs = interview_data.get("qa_pairs", [])
 
         resume_parsed = None
         resume = get_sync_db().resumes.find_one({"candidate_id": session["candidate_id"]})
@@ -257,6 +259,7 @@ class SlotManager:
             if role and content:
                 state.messages.append({"role": role, "content": content, "timestamp": msg.get("timestamp", "")})
         state.status = session.get("status", "active")
+        state.qa_pairs = qa_pairs
         _interviews[interview_id] = state
 
         try:
@@ -303,6 +306,14 @@ class SlotManager:
 
             interview_data = dict(session.get("interview_data", {}))
             interview_data["messages"] = messages
+            
+            try:
+                state = self.workflow.get_active_interview(interview_id)
+                if state and hasattr(state, 'qa_pairs') and state.qa_pairs:
+                    interview_data["qa_pairs"] = state.qa_pairs
+            except Exception:
+                pass
+
             if evaluation:
                 interview_data["evaluation"] = evaluation
             update["interview_data"] = interview_data
@@ -390,8 +401,9 @@ class SlotManager:
 
         interview_data = session.get("interview_data", {})
         candidate_data = interview_data.get("candidate_data", {})
+        qa_pairs = interview_data.get("qa_pairs", [])
 
-        next_question = await self._rehydrate_workflow(session["_id"], messages, candidate_data)
+        next_question = await self._rehydrate_workflow(session["_id"], messages, candidate_data, qa_pairs)
 
         db.interview_sessions.update_one(
             {"_id": session["_id"]},
@@ -407,8 +419,9 @@ class SlotManager:
         }
 
     async def _rehydrate_workflow(
-        self, interview_id: str, messages: list, candidate_data: dict
+        self, interview_id: str, messages: list, candidate_data: dict, qa_pairs: list = None
     ) -> str:
+        qa_pairs = qa_pairs or []
         last_question = next(
             (m["content"] for m in reversed(messages) if m.get("role") == "assistant"),
             "Please continue from where you left off.",
@@ -418,11 +431,13 @@ class SlotManager:
         if interview_id in interview_workflow._interviews:
             state = interview_workflow._interviews[interview_id]
             state.messages = [m for m in messages if m.get("role") in ("user", "assistant")]
+            state.qa_pairs = qa_pairs
             state.question_count = len([m for m in state.messages if m.get("role") == "user"])
         else:
             from app.workflows.interview_workflow import InterviewState
             state = InterviewState(interview_id, candidate_data, resume_parsed=None)
             state.messages = [m for m in messages if m.get("role") in ("user", "assistant")]
+            state.qa_pairs = qa_pairs
             state.question_count = len([m for m in state.messages if m.get("role") == "user"])
             interview_workflow._interviews[interview_id] = state
 

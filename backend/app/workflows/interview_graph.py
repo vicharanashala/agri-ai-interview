@@ -163,6 +163,14 @@ class InterviewGraphManager:
                             interview_data = {}
                     interview_data["evaluation"] = evaluation
 
+                    # Also persist qa_pairs from state so re-evaluations have the categorized Q&A pairs
+                    try:
+                        state = self.workflow.get_completed_interview(interview_id)
+                        if state and hasattr(state, 'qa_pairs') and state.qa_pairs:
+                            interview_data["qa_pairs"] = state.qa_pairs
+                    except Exception as e:
+                        logger.error(f"[InterviewGraph] {interview_id}: failed to fetch qa_pairs for persistence: {e}")
+
                     update = {"interview_data": interview_data}
 
                     # Also write score + result to document root fields (used for cooldown computation)

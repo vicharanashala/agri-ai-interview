@@ -278,6 +278,7 @@ Questions MUST relate to agriculture, crops, soil, irrigation, or farming practi
         if qa_pairs:
             qa_lines = []
             for qa in qa_pairs:
+                qa_lines.append(f"Topic: {qa.get('topic', 'unknown')}")
                 qa_lines.append(f"Q: {qa.get('question', '')}")
                 qa_lines.append(f"A: {qa.get('answer', '')}\n")
             qa_text = "\n".join(qa_lines)
@@ -300,7 +301,7 @@ Questions MUST relate to agriculture, crops, soil, irrigation, or farming practi
             + '"areas_for_improvement": ["area 1", "area 2"],\n'
             + '"recommendation": "pass/consider/reject with brief explanation"\n'
             + "}\n\n"
-            + "Score each topic on a scale of 0-10. Topics with no questions get 0. "
+            + "Score each topic on a scale of 0-10. CRITICAL: If a topic is NOT explicitly present in the provided Q&A pairs below, you MUST assign it a score of 0. Do not guess or hallucinate scores for unasked topics. "
             + "Compute overall_score as: (sum of 6 topic scores / 6) * 10.\n"
             + "CRITICAL CONSTRAINTS:\n"
             + "1. Keep all text descriptions (details, summary) extremely concise to prevent output truncation.\n"

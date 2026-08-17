@@ -179,13 +179,13 @@
     <script>
       window.addEventListener("pageshow", function () {
         const submitButton = document.getElementById(
-          "zsSubmitButton_202216000002590180",
+          "zsSubmitButton_202216000002655681",
         );
         if (submitButton) {
           submitButton.removeAttribute("disabled");
         }
         const captchaTextField =
-          document.forms["zsWebToCase_202216000002590180"][
+          document.forms["zsWebToCase_202216000002655681"][
             "zsWebFormCaptchaWord"
           ];
         if (window.zsRegenerateCaptcha && captchaTextField.value) {
@@ -205,7 +205,7 @@
         if (mapDependancyLabels) {
           for (var i = 0; i < mapDependancyLabels.length; i++) {
             var label = mapDependancyLabels[i];
-            var obj = document.forms["zsWebToCase_202216000002590180"][label];
+            var obj = document.forms["zsWebToCase_202216000002655681"][label];
             if (obj) {
               setDependent(obj, true);
             }
@@ -250,7 +250,7 @@
                 label = label.replace(/\./g, "___");
               }
               var depObj =
-                document.forms["zsWebToCase_202216000002590180"][label];
+                document.forms["zsWebToCase_202216000002655681"][label];
               if (depObj && depObj.options) {
                 var mapValues = "";
                 var selected_val = depObj.value;
@@ -421,14 +421,14 @@
       var zsWebFormMandatoryFields = new Array(
         "Contact Name",
         "Email",
-        "Issue",
         "Subject",
+        "Issue Encountered",
       );
       var zsFieldsDisplayLabelArray = new Array(
         "Contact Name",
         "Email",
-        "Issue",
         "Subject",
+        "Issue Encountered",
       );
       function reformatAllDateFields() {
         const dateFields = document.querySelectorAll(".dob-field");
@@ -450,7 +450,7 @@
         for (var index = 0; index < zsWebFormMandatoryFields.length; index++) {
           isError = 0;
           var fieldObject =
-            document.forms["zsWebToCase_202216000002590180"][
+            document.forms["zsWebToCase_202216000002655681"][
               zsWebFormMandatoryFields[index]
             ];
           if (fieldObject) {
@@ -495,12 +495,12 @@
         }
         if (isError == 0) {
           if (
-            document.forms["zsWebToCase_202216000002590180"][
+            document.forms["zsWebToCase_202216000002655681"][
               "zsWebFormCaptchaWord"
             ].value.replace(/^\s+|\s+$/g, "").length == 0
           ) {
             alert("Please enter the captcha code.");
-            document.forms["zsWebToCase_202216000002590180"][
+            document.forms["zsWebToCase_202216000002655681"][
               "zsWebFormCaptchaWord"
             ].focus();
             return false;
@@ -509,7 +509,7 @@
         if (isError == 0) {
           reformatAllDateFields();
           document
-            .getElementById("zsSubmitButton_202216000002590180")
+            .getElementById("zsSubmitButton_202216000002655681")
             .setAttribute("disabled", "disabled");
         }
       }
@@ -940,11 +940,11 @@
         }
         setAllDependancyFieldsMapping();
         document
-          .getElementById("zsSubmitButton_202216000002590180")
+          .getElementById("zsSubmitButton_202216000002655681")
           .removeAttribute("disabled");
         zsAttachedAttachmentsCount = 0;
         zsAttachmentFileBrowserIdsList = [1, 2, 3, 4, 5];
-        document.forms["zsWebToCase_202216000002590180"][
+        document.forms["zsWebToCase_202216000002655681"][
           "zsWebFormCaptchaWord"
         ].value = "";
         jQuery("#zsFileBrowseAttachments").html("");
@@ -984,12 +984,12 @@
           },
         );
         if (
-          document.forms["zsWebToCase_202216000002590180"][
+          document.forms["zsWebToCase_202216000002655681"][
             "zsCloudPickerAttachments"
           ] != undefined
         ) {
           var zsCloudAttachments = jQuery.parseJSON(
-            document.forms["zsWebToCase_202216000002590180"][
+            document.forms["zsWebToCase_202216000002655681"][
               "zsCloudPickerAttachments"
             ].value,
           );
@@ -1001,7 +1001,7 @@
       function zsResetWebForm(webFormId) {
         document.forms["zsWebToCase_" + webFormId].reset();
         document
-          .getElementById("zsSubmitButton_202216000002590180")
+          .getElementById("zsSubmitButton_202216000002655681")
           .removeAttribute("disabled");
         setAllDependancyFieldsMapping();
         zsAttachedAttachmentsCount = 0;
@@ -1009,11 +1009,11 @@
         jQuery("#zsFileBrowseAttachments").html("");
         zsCloudPickerJSON = {};
         if (
-          document.forms["zsWebToCase_202216000002590180"][
+          document.forms["zsWebToCase_202216000002655681"][
             "zsCloudPickerAttachments"
           ] != undefined
         ) {
-          document.forms["zsWebToCase_202216000002590180"][
+          document.forms["zsWebToCase_202216000002655681"][
             "zsCloudPickerAttachments"
           ].value = JSON.stringify({});
         }
@@ -1036,6 +1036,7 @@
         align-items: center;
         min-height: 100vh;
       }
+
       #zohoSupportWebToCase {
         background: #ffffff;
         border-radius: 16px;
@@ -1048,20 +1049,24 @@
         max-width: 500px;
         box-sizing: border-box;
       }
+
       .zsFormClass {
         width: 100% !important;
       }
+
       .zsFontClass {
         font-family: "Inter", sans-serif !important;
         font-size: 14px !important;
         color: #334155 !important;
       }
+
       #zohoSupportWebToCase td {
         padding: 8px 0;
         display: block;
         width: 100%;
         box-sizing: border-box;
       }
+
       #zohoSupportWebToCase textarea,
       #zohoSupportWebToCase input[type="text"],
       #zohoSupportWebToCase select {
@@ -1074,6 +1079,7 @@
         transition: all 0.2s ease;
         background: #f8fafc;
       }
+
       #zohoSupportWebToCase textarea:focus,
       #zohoSupportWebToCase input[type="text"]:focus,
       #zohoSupportWebToCase select:focus {
@@ -1082,9 +1088,11 @@
         box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.15);
         background: #ffffff;
       }
+
       .manfieldbdr {
         border-left: 1px solid #cbd5e1 !important;
       }
+
       input[type="submit"] {
         background: #22c55e !important;
         color: white !important;
@@ -1098,10 +1106,12 @@
         width: 100%;
         margin-bottom: 10px;
       }
+
       input[type="submit"]:hover {
         background: #16a34a !important;
         transform: translateY(-1px);
       }
+
       input[type="button"][value="Reset"] {
         background: #f1f5f9 !important;
         color: #64748b !important;
@@ -1113,10 +1123,12 @@
         transition: all 0.2s ease;
         width: 100%;
       }
+
       input[type="button"][value="Reset"]:hover {
         background: #e2e8f0 !important;
         color: #334155 !important;
       }
+
       tr:first-child .zsFontClass strong {
         font-size: 24px;
         font-weight: 800;
@@ -1125,12 +1137,14 @@
         margin-bottom: 20px;
         text-align: center;
       }
+
       td[nowrap] {
         font-weight: 600 !important;
         color: #475569 !important;
         margin-bottom: 4px;
         display: block;
       }
+
       .wtcuploadfile {
         color: #22c55e !important;
         font-weight: 600;
@@ -1141,11 +1155,13 @@
         display: inline-block;
         text-align: center;
       }
+
       .wtcuploadinput {
         margin-top: -30px !important;
         height: 35px;
         width: 100px !important;
       }
+
       .wb_FtCon {
         justify-content: center !important;
         margin-top: 20px;
@@ -1156,8 +1172,8 @@
   </head>
   <div id="zohoSupportWebToCase" align="center">
     <form
-      name="zsWebToCase_202216000002590180"
-      id="zsWebToCase_202216000002590180"
+      name="zsWebToCase_202216000002655681"
+      id="zsWebToCase_202216000002655681"
       action="https://desk.zoho.in/support/WebToCase"
       method="POST"
       onSubmit="return zsValidateMandatoryFields()"
@@ -1171,7 +1187,7 @@
       <input
         type="hidden"
         name="xmIwtLD"
-        value="edbsn5c23cbf22d7dadc08ef1f235b87cb8761a8abd58f98f24f8faa5c685128f3afc"
+        value="edbsnf6c682689c75d7cba205d6654c9d735ed3b9c758718f41c635f2e430089e66eb"
       />
       <input type="hidden" name="xJdfEaS" value="" />
       <input type="hidden" name="actionType" value="Q2FzZXM=" />
@@ -1184,9 +1200,7 @@
       <input type="hidden" name="returnURL" value="*" />
       <table border="0" cellspacing="0" class="zsFormClass">
         <tr>
-          <td colspan="2" class="zsFontClass">
-            <strong>Raise Tickets</strong>
-          </td>
+          <td colspan="2" class="zsFontClass"><strong>Tickets</strong></td>
         </tr>
         <br />
         <tr>
@@ -1212,12 +1226,23 @@
         </tr>
         <tr>
           <td nowrap class="zsFontClass hleft" width="25%" Top>
-            Issue &nbsp;&nbsp;<br /><select
-              name="Issue"
+            Subject&nbsp;&nbsp;<br /><input
+              type="text"
+              maxlength="255"
+              name="Subject"
+              value=""
+              class="manfieldbdr"
+            />
+          </td>
+        </tr>
+        <tr>
+          <td nowrap class="zsFontClass hleft" width="25%" Top>
+            Issue Encountered &nbsp;&nbsp;<br /><select
+              name="Issue Encountered"
               value=""
               class="manfieldbdr"
               onchange="setDependent(this, false)"
-              id="CASECF7"
+              id="CASECF8"
             >
               <option value="">-None-</option>
               <option value="Login">Login</option>
@@ -1227,17 +1252,6 @@
               <option value="Foundation Course">Foundation Course</option>
               <option value="Documents Upload">Documents Upload</option>
             </select>
-          </td>
-        </tr>
-        <tr>
-          <td nowrap class="zsFontClass hleft" width="25%" Top>
-            Subject&nbsp;&nbsp;<br /><input
-              type="text"
-              maxlength="255"
-              name="Subject"
-              value=""
-              class="manfieldbdr"
-            />
           </td>
         </tr>
         <tr>
@@ -1359,7 +1373,7 @@
           >
             <input
               type="submit"
-              id="zsSubmitButton_202216000002590180"
+              id="zsSubmitButton_202216000002655681"
               class="zsFontClass"
               value="Submit"
             />
@@ -1368,7 +1382,7 @@
               type="button"
               class="zsFontClass"
               value="Reset"
-              onclick="zsResetWebForm('202216000002590180')"
+              onclick="zsResetWebForm('202216000002655681')"
             />
           </td>
         </tr>

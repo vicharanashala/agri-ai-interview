@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import styles from './page.module.css';
 import HowToUseModal from '@/components/HowToUseModal';
+import BrandLogos from '@/components/BrandLogos';
 
 type Phase = 1 | 2 | 3 | 4 | 5;
 
@@ -405,14 +406,7 @@ const completionPercentage = getCompletionPercentage();
       {/* Top Navbar */}
       <nav className={styles.topNavbar}>
         <div className={styles.navbarContent}>
-          <div className={styles.logoWrapper}>
-          <img
-          src="/annam-logo.png"
-          alt="ANNAM.AI"
-          className={styles.logo}
-        />
-            <p className={styles.brandSub}>Center of Excellence for AI in Agriculture, IIT Ropar</p>
-          </div>
+          <BrandLogos variant="header" />
           <div className={styles.headerButtons}>
             <button
               onClick={() => window.open('/raise-ticket.html', '_blank')}

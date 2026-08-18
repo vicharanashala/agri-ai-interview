@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import styles from "./page.module.css";
+import BrandLogos from "@/components/BrandLogos";
 
 interface FAQ {
   id: string;
@@ -122,14 +123,7 @@ export default function FAQPage() {
     <main className={styles.container}>
       <nav className={styles.topNavbar}>
         <div className={styles.navbarContent}>
-          <div className={styles.logoWrapper}>
-            <img
-          src="/annam-logo.png"
-          alt="ANNAM.AI"
-          className={styles.logo}
-        />
-            <p className={styles.brandSub}>Center of Excellence for AI in Agriculture, IIT Ropar</p>
-          </div>
+          <BrandLogos variant="header" />
           <div className={styles.headerButtons}>
             <button
               onClick={() => window.open('/raise-ticket.html', '_blank')}

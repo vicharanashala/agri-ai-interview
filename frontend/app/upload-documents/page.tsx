@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import { syncPhaseToDb } from '@/lib/phaseSync';
 import styles from './page.module.css';
+import BrandLogos from '@/components/BrandLogos';
 
 const ALLOWED_TYPES = [
   'application/pdf',
@@ -257,14 +258,7 @@ export default function UploadDocumentsPage() {
   const renderHeader = () => (
     <nav className={styles.topNavbar}>
       <div className={styles.navbarContent}>
-        <div className={styles.logoWrapper}>
-         <img
-          src="/annam-logo.png"
-          alt="ANNAM.AI"
-          className={styles.logo}
-        />
-          <p className={styles.brandSub}>Center of Excellence for AI in Agriculture, IIT Ropar</p>
-        </div>
+        <BrandLogos variant="header" />
         <div className={styles.headerButtons}>
           <button
               onClick={() => window.open('/raise-ticket.html', '_blank')}

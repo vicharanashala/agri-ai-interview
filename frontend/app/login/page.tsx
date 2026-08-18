@@ -5,6 +5,7 @@ import { signIn } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import styles from './page.module.css';
 import OtpModal from '@/components/OtpModal/OtpModal';
+import BrandLogos from '@/components/BrandLogos';
 
 // ── Registration step machine ────────────────────────────────────────────────
 // step 1: email  →  step 2: otp  →  step 3: name+password
@@ -187,8 +188,7 @@ function LoginPageInner() {
         <div className={styles.leftContent}>
           {/* Logo + subtitle */}
           <div className={styles.topBar}>
-            <img src="/annam-logo.png" alt="ANNAM.AI" className={styles.logo} />
-            <p className={styles.brandSub}>Center of Excellence for AI in Agriculture, IIT Ropar</p>
+            <BrandLogos variant="login" />
           </div>
 
           {/* Hero heading + tagline */}

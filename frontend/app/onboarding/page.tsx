@@ -8,6 +8,7 @@ import { INDIA_STATES_DISTRICTS, INDIAN_STATES } from '@/data/india-states-distr
 import SearchableSelect from '@/components/SearchableSelect';
 import { interceptAuthFetch } from '@/lib/auth-fetch';
 import { signOut } from 'next-auth/react';
+import BrandLogos from '@/components/BrandLogos';
 
 interface ResumeData {
   id?: string;
@@ -426,14 +427,7 @@ export default function OnboardingPage() {
         {/* Top Navbar */}
         <nav className={styles.topNavbar}>
           <div className={styles.navbarContent}>
-            <div className={styles.logoWrapper}>
-              <img
-                src="/annam-logo.png"
-                alt="ANNAM.AI"
-                className={styles.logo}
-              />
-              <p className={styles.brandSub}>Center of Excellence for AI in Agriculture, IIT Ropar</p>
-            </div>
+            <BrandLogos variant="header" />
             <div className={styles.headerButtons}>
               <button
               onClick={() => window.open('/raise-ticket.html', '_blank')}
@@ -584,14 +578,7 @@ export default function OnboardingPage() {
       {/* Top Navbar */}
       <nav className={styles.topNavbar}>
         <div className={styles.navbarContent}>
-          <div className={styles.logoWrapper}>
-           <img
-              src="/annam-logo.png"
-              alt="ANNAM.AI"
-              className={styles.logo}
-            />
-            <p className={styles.brandSub}>Center of Excellence for AI in Agriculture, IIT Ropar</p>
-          </div>
+          <BrandLogos variant="header" />
           <div className={styles.headerButtons}>
             <button
               onClick={handleFaqClick}

@@ -565,7 +565,7 @@ const completionPercentage = getCompletionPercentage();
 
       {/* Video Modal */}
       {showVideoModal && (
-        <HowToUseModal onClose={() => setShowVideoModal(false)} videoUrl="https://youtu.be/BcI7S2kg-Gw" />
+        <HowToUseModal onClose={() => setShowVideoModal(false)} videoUrl="https://youtu.be/D22IYyDw5ME" />
       )}
 
       {/* Interview Already Done Popup */}

@@ -22,7 +22,7 @@ function getYouTubeEmbedUrl(url: string): string | null {
   return null;
 }
 
-export default function HowToUseModal({ onClose, videoUrl }: HowToUseModalProps) {
+export default function HowToUseModal({ onClose, videoUrl = 'https://youtu.be/D22IYyDw5ME'}: HowToUseModalProps) {
   const youtubeEmbedUrl = videoUrl ? getYouTubeEmbedUrl(videoUrl) : null;
 
   return (
@@ -56,7 +56,6 @@ export default function HowToUseModal({ onClose, videoUrl }: HowToUseModalProps)
               />
             )
           ) : (
-            // Placeholder — replace with your actual tutorial video
             <div className={styles.videoPlaceholder}>
               <div className={styles.placeholderIcon}>🎬</div>
               <p className={styles.placeholderTitle}>Tutorial Video Coming Soon</p>

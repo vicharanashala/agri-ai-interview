@@ -215,14 +215,14 @@ function LoginPageInner() {
 
             <div className={styles.gettingStartedRight}>
               <a
-                href="https://youtu.be/BcI7S2kg-Gw"
+                href="https://youtu.be/D22IYyDw5ME"
                 target="_blank"
                 rel="noopener noreferrer"
                 className={styles.videoCard}
                 aria-label="Watch platform walkthrough"
               >
                 <img
-                  src="https://img.youtube.com/vi/BcI7S2kg-Gw/maxresdefault.jpg"
+                  src="https://img.youtube.com/vi/D22IYyDw5ME/maxresdefault.jpg"
                   alt="Platform walkthrough thumbnail"
                   className={styles.videoThumb}
                   onError={(e) => {

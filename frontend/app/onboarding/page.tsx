@@ -27,6 +27,10 @@ interface FormData {
   currentRole: string;
   yearsOfExperience: string;
   highestEducation: string;
+  educationStatus?: string;
+  discipline?: string;
+  disciplineOther?: string;
+  nonAgriConsent?: boolean;
   institution: string;
   farmingBackground: string;
   cropsGrown: string;
@@ -45,6 +49,10 @@ export default function OnboardingPage() {
     currentRole: '',
     yearsOfExperience: '',
     highestEducation: '',
+    educationStatus: '',
+    discipline: '',
+    disciplineOther: '',
+    nonAgriConsent: false,
     institution: '',
     farmingBackground: '',
     cropsGrown: '',
@@ -119,6 +127,10 @@ export default function OnboardingPage() {
               currentRole: candidate.currentRole || '',
               yearsOfExperience: candidate.yearsOfExperience?.toString() || '',
               highestEducation: candidate.highestEducation || '',
+              educationStatus: candidate.educationStatus || '',
+              discipline: candidate.discipline || '',
+              disciplineOther: candidate.disciplineOther || '',
+              nonAgriConsent: !!candidate.nonAgriConsent,
               institution: candidate.institution || '',
               farmingBackground: candidate.farmingBackground || '',
               cropsGrown: candidate.cropsGrown || '',
@@ -306,6 +318,27 @@ export default function OnboardingPage() {
     if (!formData.highestEducation.trim()) {
       setError('Please select your highest education');
       return;
+    }
+
+    if (!formData.educationStatus?.trim()) {
+      setError('Please select your current education status (Pursuing or Completed)');
+      return;
+    }
+
+    if (!formData.discipline?.trim()) {
+      setError('Please select your discipline');
+      return;
+    }
+
+    if (formData.discipline === 'Others') {
+      if (!formData.disciplineOther?.trim()) {
+        setError('Please specify your discipline');
+        return;
+      }
+      if (!formData.nonAgriConsent) {
+        setError('You must accept the declaration to proceed');
+        return;
+      }
     }
 
     if (!formData.institution.trim()) {
@@ -785,18 +818,108 @@ export default function OnboardingPage() {
                 id="highestEducation"
                 name="highestEducation"
                 value={formData.highestEducation}
-                onChange={handleChange}
+                onChange={(e) => {
+                  handleChange(e);
+                  if (!e.target.value) {
+                    setFormData((prev) => ({ ...prev, highestEducation: '', educationStatus: '' }));
+                  }
+                }}
                 className={styles.input}
                 required
               >
                 <option value="">Select...</option>
-                <option value="High School">High School</option>
                 <option value="Diploma">Diploma</option>
                 <option value="Bachelor's">Bachelor's</option>
                 <option value="Master's">Master's</option>
                 <option value="PhD">PhD</option>
               </select>
             </div>
+
+            {formData.highestEducation && (
+              <div className={styles.field}>
+                <label htmlFor="educationStatus" className={styles.label}>
+                  Current Status <span className={styles.required}>*</span>
+                </label>
+                <select
+                  id="educationStatus"
+                  name="educationStatus"
+                  value={formData.educationStatus || ''}
+                  onChange={handleChange}
+                  className={styles.input}
+                  required
+                >
+                  <option value="">Select status...</option>
+                  <option value="Pursuing">Pursuing</option>
+                  <option value="Completed">Completed</option>
+                </select>
+              </div>
+            )}
+
+            <div className={styles.field}>
+              <label htmlFor="discipline" className={styles.label}>
+                Discipline <span className={styles.required}>*</span>
+              </label>
+              <select
+                id="discipline"
+                name="discipline"
+                value={formData.discipline || ''}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFormData((prev) => ({
+                    ...prev,
+                    discipline: val,
+                    ...(val !== 'Others' ? { disciplineOther: '', nonAgriConsent: false } : {}),
+                  }));
+                }}
+                className={styles.input}
+                required
+              >
+                <option value="">Select discipline...</option>
+                <option value="Agriculture">Agriculture</option>
+                <option value="Others">Others</option>
+              </select>
+            </div>
+
+            {formData.discipline === 'Others' && (
+              <>
+                <div className={styles.field}>
+                  <label htmlFor="disciplineOther" className={styles.label}>
+                    Specify Discipline <span className={styles.required}>*</span>
+                  </label>
+                  <input
+                    type="text"
+                    id="disciplineOther"
+                    name="disciplineOther"
+                    value={formData.disciplineOther || ''}
+                    onChange={handleChange}
+                    className={styles.input}
+                    placeholder="Enter your discipline / field of study"
+                    maxLength={50}
+                    required
+                  />
+                  <span className={styles.charCount}>{(formData.disciplineOther || '').length}/50</span>
+                </div>
+
+                <div className={styles.consentField}>
+                  <label className={styles.checkboxLabel}>
+                    <input
+                      type="checkbox"
+                      id="nonAgriConsent"
+                      name="nonAgriConsent"
+                      checked={!!formData.nonAgriConsent}
+                      onChange={(e) =>
+                        setFormData((prev) => ({ ...prev, nonAgriConsent: e.target.checked }))
+                      }
+                      className={styles.checkboxInput}
+                      required
+                    />
+                    <span className={styles.checkboxText}>
+                      <strong>Declaration:</strong> I acknowledge that I am from a non-agriculture discipline. I understand that I am not eligible under standard criteria but am willing to work as an intern, and agree to the platform evaluation terms. <span className={styles.required}>*</span>
+                    </span>
+                  </label>
+                </div>
+              </>
+            )}
 
             <div className={styles.field}>
               <label htmlFor="institution" className={styles.label}>

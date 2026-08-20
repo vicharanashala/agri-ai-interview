@@ -17,8 +17,8 @@ const SECTIONS = [
   {
     title: 'Identity',
     fields: [
-      { key: 'aadhaar', label: 'Aadhaar Card (Front and Back side)', required: true, maxSizeMB: 5, multi: true },
-      { key: 'pan', label: 'PAN Card (Front and Back side)', required: true, maxSizeMB: 5, multi: true },
+      { key: 'aadhaar', label: 'Aadhaar Card (Front and Back side)', required: true, maxSizeMB: 5, multi: false },
+      { key: 'pan', label: 'PAN Card (Front and Back side)', required: true, maxSizeMB: 5, multi: false },
       { key: 'bank_details', label: 'Bank Account Details', required: true, maxSizeMB: 5, multi: false },
     ],
   },
@@ -28,8 +28,8 @@ const SECTIONS = [
       { key: 'updated_resume', label: 'Updated Resume', required: true, maxSizeMB: 5, multi: false },
       { key: 'marksheet_10', label: '10th Class Marksheet', required: true, maxSizeMB: 10, multi: false },
       { key: 'marksheet_12', label: '12th Class Marksheet', required: true, maxSizeMB: 10, multi: false },
-      { key: 'grad_marksheets', label: 'Graduation mark sheets (all semesters) and Degree Certificate', required: false, maxSizeMB: 10, multi: true },
-      { key: 'pg_marksheets', label: 'Post-Graduation mark sheets (all semesters) and Degree Certificate (if applicable)', required: false, maxSizeMB: 10, multi: true },
+      { key: 'grad_marksheets', label: 'Graduation mark sheets (all semesters) and Degree Certificate', required: false, maxSizeMB: 10, multi: false },
+      { key: 'pg_marksheets', label: 'Post-Graduation mark sheets (all semesters) and Degree Certificate (if applicable)', required: false, maxSizeMB: 10, multi: false },
       { key: 'noc', label: 'NOC from the institute, if currently pursuing studies', required: false, maxSizeMB: 5, multi: false },
     ],
   },
@@ -37,8 +37,8 @@ const SECTIONS = [
     title: 'Experience',
     fields: [
       { key: 'experience_letter', label: 'Offer Letter / Experience Letter from previous organization (if applicable)', required: false, maxSizeMB: 5, multi: false },
-      { key: 'salary_slips', label: "Last three months' salary slips (if applicable)", required: false, maxSizeMB: 5, multi: true },
-      { key: 'other_docs', label: 'Any other supporting documents mentioned in the resume', required: false, maxSizeMB: 5, multi: true },
+      { key: 'salary_slips', label: "Last three months' salary slips (if applicable)", required: false, maxSizeMB: 5, multi: false },
+      { key: 'other_docs', label: 'Any other supporting documents mentioned in the resume', required: false, maxSizeMB: 5, multi: false },
     ],
   },
 ];
@@ -349,7 +349,7 @@ export default function UploadDocumentsPage() {
         )}
 
         <div className={styles.notice}>
-          Please upload all documents only in .pdf, .doc, or .docx format
+          Please upload all documents only in .pdf, .doc, or .docx format (Max 5MB/10MB per file). Only attach one document per field.
         </div>
 
         <div className={styles.sections}>

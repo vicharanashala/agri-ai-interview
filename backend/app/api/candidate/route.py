@@ -86,6 +86,16 @@ def _get_candidate_id_with_email_fallback(request: Request) -> str:
 
 # ── Request/Response models ───────────────────────────────────────────────────
 
+class EducationItem(BaseModel):
+    level: Optional[str] = None
+    levelOther: Optional[str] = None
+    discipline: Optional[str] = None
+    disciplineOther: Optional[str] = None
+    status: Optional[str] = None
+    institution: Optional[str] = None
+    yearOfCompletion: Optional[str] = None
+
+
 class OnboardingRequest(BaseModel):
     fullName: str
     phone: str
@@ -95,8 +105,14 @@ class OnboardingRequest(BaseModel):
     address: str
     currentRole: str
     yearsOfExperience: Optional[float] = None
-    highestEducation: str
-    institution: str
+    highestEducation: Optional[str] = None
+    institution: Optional[str] = None
+    education: Optional[list[EducationItem]] = None
+    educationStatus: Optional[str] = None
+    discipline: Optional[str] = None
+    disciplineOther: Optional[str] = None
+    nonAgriConsent: Optional[bool] = None
+    isInternshipConsent: Optional[bool] = None
     farmingBackground: Optional[str] = None
     cropsGrown: str
     farmSize: Optional[str] = None
@@ -116,6 +132,12 @@ class CandidateProfileResponse(BaseModel):
     yearsOfExperience: Optional[float] = None
     highestEducation: Optional[str] = None
     institution: Optional[str] = None
+    education: Optional[list[dict]] = None
+    educationStatus: Optional[str] = None
+    discipline: Optional[str] = None
+    disciplineOther: Optional[str] = None
+    nonAgriConsent: Optional[bool] = None
+    isInternshipConsent: Optional[bool] = None
     farmingBackground: Optional[str] = None
     cropsGrown: Optional[str] = None
     farmSize: Optional[str] = None
@@ -204,6 +226,12 @@ async def upsert_candidate(request: Request, body: OnboardingRequest):
         "years_of_experience": body.yearsOfExperience,
         "highest_education": body.highestEducation,
         "institution": body.institution,
+        "education": [e.model_dump() for e in body.education] if body.education else [],
+        "education_status": body.educationStatus,
+        "discipline": body.discipline,
+        "discipline_other": body.disciplineOther,
+        "non_agri_consent": body.nonAgriConsent,
+        "is_internship_consent": body.isInternshipConsent,
         "farming_background": body.farmingBackground,
         "crops_grown": body.cropsGrown,
         "farm_size": body.farmSize,
@@ -272,6 +300,12 @@ async def get_candidate_profile(email: Optional[str] = Query(None)):
         yearsOfExperience=cand.get("years_of_experience"),
         highestEducation=cand.get("highest_education"),
         institution=cand.get("institution"),
+        education=cand.get("education"),
+        educationStatus=cand.get("education_status"),
+        discipline=cand.get("discipline"),
+        disciplineOther=cand.get("discipline_other"),
+        nonAgriConsent=cand.get("non_agri_consent"),
+        isInternshipConsent=cand.get("is_internship_consent"),
         farmingBackground=cand.get("farming_background"),
         cropsGrown=cand.get("crops_grown"),
         farmSize=cand.get("farm_size"),

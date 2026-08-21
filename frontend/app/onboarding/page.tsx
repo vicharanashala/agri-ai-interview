@@ -17,6 +17,104 @@ interface ResumeData {
   data: string | null; // base64 encoded file
 }
 
+interface EducationItem {
+  id: string;
+  level: string;
+  levelOther?: string;
+  discipline: string;
+  disciplineOther?: string;
+  status: string; // 'Pursuing' | 'Completed' | ''
+  institution: string;
+  yearOfCompletion: string;
+}
+
+const EDUCATION_LEVELS = [
+  'Diploma',
+  'B.Sc.',
+  'B.Sc. (Hons.)',
+  'B.Tech.',
+  'B.E.',
+  'B.A.',
+  'B.Com.',
+  'BCA',
+  'BBA',
+  'B.Pharm.',
+  'B.V.Sc. & A.H.',
+  'B.F.Sc.',
+  'LLB',
+  'MBBS',
+  'BDS',
+  'BAMS',
+  'BHMS',
+  "Other Bachelor's Degree",
+  'M.Sc.',
+  'M.Tech.',
+  'M.E.',
+  'MCA',
+  'MBA',
+  'M.Com.',
+  'M.A.',
+  'M.Pharm.',
+  'M.V.Sc.',
+  'M.F.Sc.',
+  'MSW',
+  'LLM',
+  'MD',
+  'MS',
+  "Other Master's Degree",
+  'PG Diploma',
+  'M.Phil.',
+  'Ph.D.',
+  'D.Sc.',
+  'D.Litt.',
+  'Postdoctoral',
+  'Other',
+];
+
+const DISCIPLINES = [
+  'Agriculture',
+  'Agronomy',
+  'Horticulture',
+  'Agricultural Engineering',
+  'Agricultural Economics',
+  'Agricultural Extension',
+  'Soil Science',
+  'Entomology',
+  'Plant Pathology',
+  'Genetics & Plant Breeding',
+  'Seed Science & Technology',
+  'Agrometeorology',
+  'Food Technology',
+  'Biotechnology',
+  'Botany',
+  'Zoology',
+  'Microbiology',
+  'Environmental Science',
+  'Computer Science',
+  'Computer Applications',
+  'Information Technology',
+  'Data Science',
+  'Engineering',
+  'Management',
+  'Commerce',
+  'Economics',
+  'Mathematics',
+  'Statistics',
+  'Physics',
+  'Chemistry',
+  'Life Sciences',
+  'Veterinary Science',
+  'Fisheries Science',
+  'Forestry',
+  'Pharmacy',
+  'Medicine',
+  'Nursing',
+  'Law',
+  'Arts & Humanities',
+  'Social Sciences',
+  'Other',
+];
+
 interface FormData {
   fullName: string;
   phone: string;
@@ -26,13 +124,23 @@ interface FormData {
   address: string;
   currentRole: string;
   yearsOfExperience: string;
-  highestEducation: string;
-  institution: string;
+  nonAgriConsent?: boolean;
   farmingBackground: string;
   cropsGrown: string;
   primaryExpertise: string;
   districtCustom?: string;
 }
+
+const createEmptyEducation = (): EducationItem => ({
+  id: Math.random().toString(36).substring(2, 9),
+  level: '',
+  levelOther: '',
+  discipline: '',
+  disciplineOther: '',
+  status: '',
+  institution: '',
+  yearOfCompletion: '',
+});
 
 export default function OnboardingPage() {
   const [formData, setFormData] = useState<FormData>({
@@ -44,13 +152,13 @@ export default function OnboardingPage() {
     address: '',
     currentRole: '',
     yearsOfExperience: '',
-    highestEducation: '',
-    institution: '',
+    nonAgriConsent: false,
     farmingBackground: '',
     cropsGrown: '',
     primaryExpertise: '',
     districtCustom: '',
   });
+  const [education, setEducation] = useState<EducationItem[]>([createEmptyEducation()]);
   const [phoneError, setPhoneError] = useState('');
   const [pincodeError, setPincodeError] = useState('');
   const [error, setError] = useState('');
@@ -118,13 +226,41 @@ export default function OnboardingPage() {
               address: candidate.address || '',
               currentRole: candidate.currentRole || '',
               yearsOfExperience: candidate.yearsOfExperience?.toString() || '',
-              highestEducation: candidate.highestEducation || '',
-              institution: candidate.institution || '',
+              nonAgriConsent: !!(candidate.nonAgriConsent || candidate.isInternshipConsent),
               farmingBackground: candidate.farmingBackground || '',
               cropsGrown: candidate.cropsGrown || '',
               primaryExpertise: candidate.primaryExpertise || '',
               districtCustom: candidate.districtCustom || '',
             });
+
+            if (candidate.education && Array.isArray(candidate.education) && candidate.education.length > 0) {
+              setEducation(
+                candidate.education.map((e: any) => ({
+                  id: Math.random().toString(36).substring(2, 9),
+                  level: e.level || '',
+                  levelOther: e.levelOther || '',
+                  discipline: e.discipline || '',
+                  disciplineOther: e.disciplineOther || '',
+                  status: e.status || '',
+                  institution: e.institution || '',
+                  yearOfCompletion: e.yearOfCompletion || '',
+                }))
+              );
+            } else if (candidate.highestEducation) {
+              setEducation([
+                {
+                  id: Math.random().toString(36).substring(2, 9),
+                  level: candidate.highestEducation || '',
+                  levelOther: '',
+                  discipline: candidate.discipline || '',
+                  disciplineOther: candidate.disciplineOther || '',
+                  status: candidate.educationStatus || '',
+                  institution: candidate.institution || '',
+                  yearOfCompletion: '',
+                },
+              ]);
+            }
+
             if (candidate.resumeName) {
               setResume({
                 id: candidate.resumeId,
@@ -146,6 +282,102 @@ export default function OnboardingPage() {
       restore();
     };
   }, []);
+
+  // ── Education Management ───────────────────────────────────────────────────
+  const isOtherLevel = (level: string) =>
+    level === 'Other' ||
+    level === "Other Bachelor's Degree" ||
+    level === "Other Master's Degree";
+
+  const handleAddEducation = () => {
+    setEducation((prev) => [...prev, createEmptyEducation()]);
+  };
+
+  const handleRemoveEducation = (index: number) => {
+    setEducation((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleEducationChange = (index: number, field: keyof EducationItem, value: string) => {
+    setEducation((prev) => {
+      const updated = [...prev];
+      updated[index] = {
+        ...updated[index],
+        [field]: value,
+        ...(field === 'level' && !isOtherLevel(value) ? { levelOther: '' } : {}),
+        ...(field === 'discipline' && value !== 'Other' ? { disciplineOther: '' } : {}),
+      };
+      return updated;
+    });
+    setError('');
+  };
+
+  // ── Eligibility Calculation ────────────────────────────────────────────────
+  // Young Professional Qualifying Qualifications:
+  // 1. Diploma in Agriculture
+  // 2. B.Sc. (Hons.) Agriculture or B.Sc. Agriculture
+  // 3. M.Sc. / Ph.D. in any of:
+  //    • Agronomy
+  //    • Soil Science & Agricultural Chemistry (Soil Science)
+  //    • Horticulture
+  //    • Entomology
+  //    • Plant Pathology
+  //    • Agrometeorology
+  //    • Post-Harvest Technology (Food Technology)
+  //    • Extension & Communication (Agricultural Extension)
+  //    • Genetics & Plant Breeding
+  //    • Seed Science & Technology
+  //    • Agriculture
+  // AND all added education records must have status Completed (no record can be Pursuing).
+  const QUALIFYING_MSC_DISCIPLINES = [
+    'Agriculture',
+    'Agronomy',
+    'Soil Science',
+    'Horticulture',
+    'Entomology',
+    'Plant Pathology',
+    'Agrometeorology',
+    'Food Technology',
+    'Agricultural Extension',
+    'Genetics & Plant Breeding',
+    'Seed Science & Technology',
+  ];
+
+  const checkQualifyingDegree = (eduList: EducationItem[]): boolean => {
+    if (!eduList || eduList.length === 0) return false;
+
+    // 1. Diploma in Agriculture
+    const hasDiplomaAgri = eduList.some(
+      (e) => e.level === 'Diploma' && e.discipline === 'Agriculture'
+    );
+    if (hasDiplomaAgri) return true;
+
+    // 2. B.Sc. (Hons.) Agriculture or B.Sc. Agriculture
+    const hasBScAgri = eduList.some(
+      (e) =>
+        (e.level === 'B.Sc. (Hons.)' || e.level === 'B.Sc.') &&
+        e.discipline === 'Agriculture'
+    );
+    if (hasBScAgri) return true;
+
+    // 3. M.Sc. / Ph.D. in qualifying agricultural disciplines
+    const hasMScAgri = eduList.some(
+      (e) =>
+        (e.level === 'M.Sc.' || e.level === 'Ph.D.') &&
+        QUALIFYING_MSC_DISCIPLINES.includes(e.discipline)
+    );
+    if (hasMScAgri) return true;
+
+    return false;
+  };
+
+  const isEligibleForYP =
+    checkQualifyingDegree(education) &&
+    !education.some((e) => e.status === 'Pursuing');
+
+  // Candidate needs internship declaration if they entered education info and are NOT eligible for YP
+  const hasStartedEdu = education.some((e) => e.level || e.discipline || e.status);
+  const needsConsent = hasStartedEdu && !isEligibleForYP;
+  const isBelowDisabled = needsConsent && !formData.nonAgriConsent;
 
   const validatePhone = (value: string): boolean => {
     // Only integers allowed, exactly 10 digits
@@ -303,13 +535,46 @@ export default function OnboardingPage() {
       return;
     }
 
-    if (!formData.highestEducation.trim()) {
-      setError('Please select your highest education');
+    if (!education || education.length === 0) {
+      setError('Please add at least one education record');
       return;
     }
 
-    if (!formData.institution.trim()) {
-      setError('Please enter your institution/university');
+    for (let i = 0; i < education.length; i++) {
+      const edu = education[i];
+      const num = i + 1;
+      if (!edu.level) {
+        setError(`Please select the education level for Education #${num}`);
+        return;
+      }
+      if (isOtherLevel(edu.level) && !edu.levelOther?.trim()) {
+        setError(`Please specify the degree / qualification for Education #${num}`);
+        return;
+      }
+      if (!edu.discipline) {
+        setError(`Please select the discipline for Education #${num}`);
+        return;
+      }
+      if (edu.discipline === 'Other' && !edu.disciplineOther?.trim()) {
+        setError(`Please specify the discipline for Education #${num}`);
+        return;
+      }
+      if (!edu.status) {
+        setError(`Please select the current status for Education #${num}`);
+        return;
+      }
+      if (!edu.institution.trim()) {
+        setError(`Please enter the institution/university for Education #${num}`);
+        return;
+      }
+      if (!edu.yearOfCompletion.trim()) {
+        setError(`Please enter the year of completion for Education #${num}`);
+        return;
+      }
+    }
+
+    if (needsConsent && !formData.nonAgriConsent) {
+      setError('Please acknowledge and tick the internship declaration to proceed');
       return;
     }
 
@@ -340,8 +605,25 @@ export default function OnboardingPage() {
       // When "Others" is selected, use the custom district name instead
       const districtToSubmit =
         formData.district === 'Others' ? formData.districtCustom?.trim() : formData.district;
+
+      const highestEdu =
+        education.find((e) => e.level === 'PhD') ||
+        education.find((e) => e.level === "Master's") ||
+        education.find((e) => e.level === "Bachelor's") ||
+        education.find((e) => e.level === 'Diploma') ||
+        education[0] ||
+        {};
+
       const payload = {
         ...formData,
+        highestEducation: highestEdu.level || '',
+        institution: highestEdu.institution || '',
+        educationStatus: highestEdu.status || '',
+        discipline: highestEdu.discipline || '',
+        disciplineOther: highestEdu.disciplineOther || '',
+        education: education.map(({ id, ...rest }) => rest),
+        nonAgriConsent: formData.nonAgriConsent,
+        isInternshipConsent: needsConsent ? formData.nonAgriConsent : false,
         yearsOfExperience: formData.yearsOfExperience ? parseFloat(formData.yearsOfExperience) : undefined,
         district: districtToSubmit || formData.district,
       };
@@ -511,16 +793,20 @@ export default function OnboardingPage() {
                 <span className={styles.displayLabel}>Years of Experience</span>
                 <span className={styles.displayValue}>{displayValue(formData.yearsOfExperience)}</span>
               </div>
+            </section>
 
-              <div className={styles.displayField}>
-                <span className={styles.displayLabel}>Highest Education</span>
-                <span className={styles.displayValue}>{getSelectDisplayText(formData.highestEducation)}</span>
-              </div>
-
-              <div className={styles.displayField}>
-                <span className={styles.displayLabel}>Institution/University</span>
-                <span className={styles.displayValue}>{displayValue(formData.institution)}</span>
-              </div>
+            <section className={styles.section}>
+              <h2 className={styles.sectionTitle}>Educational Background</h2>
+              {education.map((edu, idx) => (
+                <div key={edu.id || idx} style={{ marginBottom: '12px', padding: '14px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ fontWeight: 600, color: '#1e293b', marginBottom: '4px' }}>
+                    {(isOtherLevel(edu.level) && edu.levelOther) ? edu.levelOther : (edu.level || 'Education')} in {edu.discipline === 'Other' ? (edu.disciplineOther || 'Other') : (edu.discipline || 'N/A')} {edu.status ? `(${edu.status})` : ''}
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#64748b' }}>
+                    {edu.institution || ''} {edu.yearOfCompletion ? `• Year: ${edu.yearOfCompletion}` : ''}
+                  </div>
+                </div>
+              ))}
             </section>
 
             <section className={styles.section}>
@@ -752,7 +1038,7 @@ export default function OnboardingPage() {
                 value={formData.currentRole}
                 onChange={handleChange}
                 className={styles.input}
-                placeholder="e.g., Farmer, Agronomist"
+                placeholder="e.g., Farmer, Agronomist, Student"
                 maxLength={30}
                 required
               />
@@ -776,151 +1062,324 @@ export default function OnboardingPage() {
                 required
               />
             </div>
-
-            <div className={styles.field}>
-              <label htmlFor="highestEducation" className={styles.label}>
-                Highest Education <span className={styles.required}>*</span>
-              </label>
-              <select
-                id="highestEducation"
-                name="highestEducation"
-                value={formData.highestEducation}
-                onChange={handleChange}
-                className={styles.input}
-                required
-              >
-                <option value="">Select...</option>
-                <option value="High School">High School</option>
-                <option value="Diploma">Diploma</option>
-                <option value="Bachelor's">Bachelor's</option>
-                <option value="Master's">Master's</option>
-                <option value="PhD">PhD</option>
-              </select>
-            </div>
-
-            <div className={styles.field}>
-              <label htmlFor="institution" className={styles.label}>
-                Institution/University <span className={styles.required}>*</span>
-              </label>
-              <input
-                type="text"
-                id="institution"
-                name="institution"
-                value={formData.institution}
-                onChange={handleChange}
-                className={styles.input}
-                placeholder="Name of your institution"
-                maxLength={30}
-                required
-              />
-              <span className={styles.charCount}>{formData.institution.length}/30</span>
-            </div>
           </section>
 
+          {/* ─── Educational Background (Repeatable LinkedIn Style) ─── */}
           <section className={styles.section}>
-            <h2 className={styles.sectionTitle}>Agricultural Field Experience</h2>
-            
-            <div className={styles.field}>
-              <label htmlFor="farmingBackground" className={styles.label}>
-                Rural Agricultural Work Experience (RAWE) <span className={styles.required}>*</span>
-              </label>
-              <textarea
-                id="farmingBackground"
-                name="farmingBackground"
-                value={formData.farmingBackground}
-                onChange={handleChange}
-                className={styles.textarea}
-                placeholder="Describe your farming experience..."
-                rows={3}
-                required
-              />
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.sectionTitle}>Educational Background <span className={styles.required}>*</span></h2>
+              <p className={styles.sectionSubtitle}>Add all your relevant education qualifications</p>
             </div>
 
-            <div className={styles.field}>
-              <label htmlFor="cropsGrown" className={styles.label}>
-                Crops Grown/Handled <span className={styles.required}>*</span>
-              </label>
-              <input
-                type="text"
-                id="cropsGrown"
-                name="cropsGrown"
-                value={formData.cropsGrown}
-                onChange={handleChange}
-                className={styles.input}
-                placeholder="e.g., Wheat, Rice, Cotton"
-                required
-              />
-            </div>
-
-            <div className={styles.field}>
-              <label htmlFor="primaryExpertise" className={styles.label}>
-                Primary Area of Expertise <span className={styles.required}>*</span>
-              </label>
-              <select
-                id="primaryExpertise"
-                name="primaryExpertise"
-                value={formData.primaryExpertise}
-                onChange={handleChange}
-                className={styles.input}
-                required
-              >
-                <option value="">Select...</option>
-                <option value="Crop Production">Crop Production</option>
-                <option value="Livestock Management">Livestock Management</option>
-                <option value="Horticulture">Horticulture</option>
-                <option value="Agri-Business">Agri-Business</option>
-                <option value="Agricultural Engineering">Agricultural Engineering</option>
-                <option value="Soil Science">Soil Science</option>
-                <option value="Pest Management">Pest Management</option>
-                <option value="Organic Farming">Organic Farming</option>
-                <option value="Other">Other</option>
-              </select>
-            </div>
-          </section>
-
-          <section className={styles.section}>
-            <h2 className={styles.sectionTitle}>Resume <span className={styles.required}>*</span></h2>
-            
-            <div className={styles.resumeSection}>
-              {resume ? (
-                <div className={styles.resumePreview}>
-                  <span className={styles.resumeIcon}>📄</span>
-                  <div className={styles.resumeInfo}>
-                    <p className={styles.resumeName}>{resume.name}</p>
-                    <p className={styles.resumeSize}>{resume.size}</p>
+            <div className={styles.educationList}>
+              {education.map((edu, index) => (
+                <div key={edu.id} className={styles.educationCard}>
+                  <div className={styles.educationCardHeader}>
+                    <h3 className={styles.educationCardTitle}>
+                      Education #{index + 1} {edu.level ? `— ${edu.level}` : ''}
+                    </h3>
+                    {education.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveEducation(index)}
+                        className={styles.removeEduBtn}
+                      >
+                        ✕ Remove
+                      </button>
+                    )}
                   </div>
-                  <div className={styles.resumeActions}>
-                    <button
-                      type="button"
-                      onClick={handleRemoveResume}
-                      className={styles.removeButton}
-                    >
-                      Remove
-                    </button>
+
+                  <div className={styles.educationGrid}>
+                    {/* Education Level */}
+                    <div className={styles.field}>
+                      <label className={styles.label}>
+                        Level <span className={styles.required}>*</span>
+                      </label>
+                      <select
+                        value={edu.level}
+                        onChange={(e) => handleEducationChange(index, 'level', e.target.value)}
+                        className={styles.input}
+                        required
+                      >
+                        <option value="">Select level...</option>
+                        {EDUCATION_LEVELS.map((lvl) => (
+                          <option key={lvl} value={lvl}>
+                            {lvl}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Discipline */}
+                    <div className={styles.field}>
+                      <label className={styles.label}>
+                        Discipline <span className={styles.required}>*</span>
+                      </label>
+                      <select
+                        value={edu.discipline}
+                        onChange={(e) => handleEducationChange(index, 'discipline', e.target.value)}
+                        className={styles.input}
+                        required
+                      >
+                        <option value="">Select discipline...</option>
+                        {DISCIPLINES.map((disc) => (
+                          <option key={disc} value={disc}>
+                            {disc}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* If Other Level: Specify Degree */}
+                    {isOtherLevel(edu.level) && (
+                      <div className={`${styles.field} ${styles.fullWidth}`}>
+                        <label className={styles.label}>
+                          Specify Degree / Qualification <span className={styles.required}>*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={edu.levelOther || ''}
+                          onChange={(e) => handleEducationChange(index, 'levelOther', e.target.value)}
+                          className={styles.input}
+                          placeholder="Enter your exact degree / qualification name"
+                          maxLength={60}
+                          required
+                        />
+                      </div>
+                    )}
+
+                    {/* If Other Discipline: Specify Discipline */}
+                    {edu.discipline === 'Other' && (
+                      <div className={`${styles.field} ${styles.fullWidth}`}>
+                        <label className={styles.label}>
+                          Specify Discipline / Branch <span className={styles.required}>*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={edu.disciplineOther || ''}
+                          onChange={(e) => handleEducationChange(index, 'disciplineOther', e.target.value)}
+                          className={styles.input}
+                          placeholder="e.g., Computer Science, Mechanical Engineering, Commerce..."
+                          maxLength={60}
+                          required
+                        />
+                      </div>
+                    )}
+
+                    {/* Current Status */}
+                    <div className={styles.field}>
+                      <label className={styles.label}>
+                        Current Status <span className={styles.required}>*</span>
+                      </label>
+                      <select
+                        value={edu.status}
+                        onChange={(e) => handleEducationChange(index, 'status', e.target.value)}
+                        className={styles.input}
+                        required
+                      >
+                        <option value="">Select status...</option>
+                        <option value="Pursuing">Pursuing</option>
+                        <option value="Completed">Completed</option>
+                      </select>
+                    </div>
+
+                    {/* Year of Completion */}
+                    <div className={styles.field}>
+                      <label className={styles.label}>
+                        Year of Completion {edu.status === 'Pursuing' ? '(Expected)' : ''} <span className={styles.required}>*</span>
+                      </label>
+                      <input
+                        type="number"
+                        value={edu.yearOfCompletion}
+                        onChange={(e) => handleEducationChange(index, 'yearOfCompletion', e.target.value)}
+                        className={styles.input}
+                        placeholder="e.g., 2024"
+                        min="1970"
+                        max="2035"
+                        required
+                      />
+                    </div>
+
+                    {/* Institution Name */}
+                    <div className={`${styles.field} ${styles.fullWidth}`}>
+                      <label className={styles.label}>
+                        Institution / University <span className={styles.required}>*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={edu.institution}
+                        onChange={(e) => handleEducationChange(index, 'institution', e.target.value)}
+                        className={styles.input}
+                        placeholder="Name of your college / university"
+                        maxLength={80}
+                        required
+                      />
+                    </div>
                   </div>
                 </div>
-              ) : (
-                <label className={styles.resumeUpload}>
-                  <span className={styles.uploadIcon}>📎</span>
-                  <p className={styles.uploadText}>Click to upload your resume</p>
-                  <p className={styles.uploadHint}>PDF or Word document (max 5MB)</p>
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleFileSelect}
-                    accept=".pdf,.doc,.docx"
-                    className={styles.resumeInput}
-                  />
-                </label>
-              )}
+              ))}
             </div>
+
+            <button
+              type="button"
+              onClick={handleAddEducation}
+              className={styles.addEducationBtn}
+            >
+              + Add Another Education
+            </button>
           </section>
 
-          {error && <p className={styles.error}>{error}</p>}
+          {/* ─── Internship Eligibility & Declaration (Compact) ─── */}
+          {needsConsent && (
+            <div className={styles.declarationCard}>
+              <div className={styles.declarationHeader}>
+                <span className={styles.declarationIcon}>⚠️</span>
+                <h3 className={styles.declarationTitle}>Internship Program Eligibility & Declaration</h3>
+              </div>
+              <p className={styles.declarationNotice}>
+                Based on your qualifications, you are eligible for the <strong>Internship Program</strong> (minimum 3-month commitment, 3 hours/day, ₹5,000/month stipend). Please check our <a href="/faq" target="_blank" rel="noopener noreferrer" className={styles.faqLink}>FAQs</a> for full details.
+              </p>
 
-          <button type="submit" className={styles.button} disabled={isLoading}>
-            {isLoading ? 'Saving...' : 'Complete Profile'}
-          </button>
+              <label className={styles.consentCheckboxLabel}>
+                <input
+                  type="checkbox"
+                  name="nonAgriConsent"
+                  checked={!!formData.nonAgriConsent}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, nonAgriConsent: e.target.checked }))
+                  }
+                  className={styles.consentCheckbox}
+                  required
+                />
+                <span className={styles.consentCheckboxText}>
+                  I accept the internship terms and wish to proceed with the application. <span className={styles.required}>*</span>
+                </span>
+              </label>
+            </div>
+          )}
+
+          {/* ─── Remaining Sections (Disabled until Declaration is accepted if non-eligible) ─── */}
+          {isBelowDisabled && (
+            <div className={styles.lockNoticeBanner}>
+              🔒 Please accept the Internship Declaration above to unlock and complete the remaining sections.
+            </div>
+          )}
+
+          <div className={isBelowDisabled ? styles.disabledSectionWrapper : ''}>
+            <section className={styles.section}>
+              <h2 className={styles.sectionTitle}>Agricultural Field Experience</h2>
+              
+              <div className={styles.field}>
+                <label htmlFor="farmingBackground" className={styles.label}>
+                  Rural Agricultural Work Experience (RAWE) <span className={styles.required}>*</span>
+                </label>
+                <textarea
+                  id="farmingBackground"
+                  name="farmingBackground"
+                  value={formData.farmingBackground}
+                  onChange={handleChange}
+                  className={styles.textarea}
+                  placeholder="Describe your farming experience..."
+                  rows={3}
+                  disabled={isBelowDisabled}
+                  required
+                />
+              </div>
+
+              <div className={styles.field}>
+                <label htmlFor="cropsGrown" className={styles.label}>
+                  Crops Grown/Handled <span className={styles.required}>*</span>
+                </label>
+                <input
+                  type="text"
+                  id="cropsGrown"
+                  name="cropsGrown"
+                  value={formData.cropsGrown}
+                  onChange={handleChange}
+                  className={styles.input}
+                  placeholder="e.g., Wheat, Rice, Cotton"
+                  disabled={isBelowDisabled}
+                  required
+                />
+              </div>
+
+              <div className={styles.field}>
+                <label htmlFor="primaryExpertise" className={styles.label}>
+                  Primary Area of Expertise <span className={styles.required}>*</span>
+                </label>
+                <select
+                  id="primaryExpertise"
+                  name="primaryExpertise"
+                  value={formData.primaryExpertise}
+                  onChange={handleChange}
+                  className={styles.input}
+                  disabled={isBelowDisabled}
+                  required
+                >
+                  <option value="">Select...</option>
+                  <option value="Crop Production">Crop Production</option>
+                  <option value="Livestock Management">Livestock Management</option>
+                  <option value="Horticulture">Horticulture</option>
+                  <option value="Agri-Business">Agri-Business</option>
+                  <option value="Agricultural Engineering">Agricultural Engineering</option>
+                  <option value="Soil Science">Soil Science</option>
+                  <option value="Pest Management">Pest Management</option>
+                  <option value="Organic Farming">Organic Farming</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+            </section>
+
+            <section className={styles.section}>
+              <h2 className={styles.sectionTitle}>Resume <span className={styles.required}>*</span></h2>
+              
+              <div className={styles.resumeSection}>
+                {resume ? (
+                  <div className={styles.resumePreview}>
+                    <span className={styles.resumeIcon}>📄</span>
+                    <div className={styles.resumeInfo}>
+                      <p className={styles.resumeName}>{resume.name}</p>
+                      <p className={styles.resumeSize}>{resume.size}</p>
+                    </div>
+                    <div className={styles.resumeActions}>
+                      <button
+                        type="button"
+                        onClick={handleRemoveResume}
+                        className={styles.removeButton}
+                        disabled={isBelowDisabled}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <label className={`${styles.resumeUpload} ${isBelowDisabled ? styles.disabledUpload : ''}`}>
+                    <span className={styles.uploadIcon}>📎</span>
+                    <p className={styles.uploadText}>Click to upload your resume</p>
+                    <p className={styles.uploadHint}>PDF or Word document (max 5MB)</p>
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleFileSelect}
+                      accept=".pdf,.doc,.docx"
+                      className={styles.resumeInput}
+                      disabled={isBelowDisabled}
+                    />
+                  </label>
+                )}
+              </div>
+            </section>
+
+            {error && <p className={styles.error}>{error}</p>}
+
+            <button
+              type="submit"
+              className={styles.button}
+              disabled={isLoading || isBelowDisabled}
+            >
+              {isLoading ? 'Saving...' : 'Complete Profile'}
+            </button>
+          </div>
         </form>
       </div>
     </main>

@@ -126,26 +126,20 @@ export default function FAQPage() {
         <div className={styles.navbarContent}>
           <BrandLogos variant="header" />
           <div className={styles.headerButtons}>
-            <button
-              onClick={() => window.open('/raise-ticket.html', '_blank')}
-              className={styles.raiseTicketBtn}
-            >
-              ⚠️ Raise Tickets
-            </button>
             {isSignedIn ? (
+              <ProfileNavButton showFaqHeaderButton={false} />
+            ) : (
               <>
-                <button onClick={() => router.push("/dashboard")} className={styles.faqHelpBtn}>
-                  Dashboard
+                <button
+                  onClick={() => window.open('/raise-ticket.html', '_blank')}
+                  className={styles.raiseTicketBtn}
+                >
+                  ⚠️ Raise Tickets
                 </button>
-                <ProfileNavButton />
-                <button onClick={handleLogout} disabled={loggingOut} className={styles.signOutBtn}>
-                  {loggingOut ? "Signing out..." : "Sign Out"}
+                <button onClick={() => router.push("/login")} className={styles.faqHelpBtn}>
+                  Sign In
                 </button>
               </>
-            ) : (
-              <button onClick={() => router.push("/login")} className={styles.faqHelpBtn}>
-                Sign In
-              </button>
             )}
           </div>
         </div>

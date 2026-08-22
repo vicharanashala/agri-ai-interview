@@ -6,6 +6,7 @@ import { signOut } from 'next-auth/react';
 import styles from './page.module.css';
 import BrandLogos from '@/components/BrandLogos';
 import SearchableSelect from '@/components/SearchableSelect';
+import ProfileNavButton from '@/components/ProfileNavButton';
 import { INDIAN_STATES, INDIA_STATES_DISTRICTS } from '@/data/india-states-districts';
 import { EDUCATION_LEVELS, DISCIPLINES } from '@/data/education-data';
 
@@ -255,35 +256,7 @@ export default function ProfilePage() {
         <div className={styles.navbarContent}>
           <BrandLogos variant="header" />
           <div className={styles.headerButtons}>
-            <button
-              type="button"
-              onClick={() => window.open('/raise-ticket.html', '_blank')}
-              className={styles.raiseTicketBtn}
-            >
-              ⚠️ Raise Tickets
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push('/dashboard')}
-              className={styles.dashboardBtn}
-            >
-              📊 Dashboard
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push('/faq')}
-              className={styles.faqHelpBtn}
-            >
-              💬 FAQ & Help
-            </button>
-            <button
-              type="button"
-              onClick={handleLogout}
-              disabled={loggingOut}
-              className={styles.signOutBtn}
-            >
-              {loggingOut ? 'Signing out...' : 'Sign Out'}
-            </button>
+            <ProfileNavButton forceShow={true} />
           </div>
         </div>
       </nav>

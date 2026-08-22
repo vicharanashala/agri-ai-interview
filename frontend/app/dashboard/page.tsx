@@ -409,26 +409,7 @@ const completionPercentage = getCompletionPercentage();
         <div className={styles.navbarContent}>
           <BrandLogos variant="header" />
           <div className={styles.headerButtons}>
-            <button
-              onClick={() => window.open('/raise-ticket.html', '_blank')}
-              className={styles.raiseTicketBtn}
-            >
-              ⚠️ Raise Tickets
-            </button>
-            <button
-              onClick={handleFaqClick}
-              className={styles.faqHelpBtn}
-            >
-              💬 FAQ & Help
-            </button>
             <ProfileNavButton />
-            <button
-              onClick={handleLogout}
-              disabled={loggingOut}
-              className={styles.signOutBtn}
-            >
-              {loggingOut ? 'Signing out...' : 'Sign Out'}
-            </button>
           </div>
         </div>
       </nav>

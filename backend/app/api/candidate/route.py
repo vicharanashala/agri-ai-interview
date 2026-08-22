@@ -150,6 +150,10 @@ class CandidateProfileResponse(BaseModel):
     foundationCourseCompleted: Optional[bool] = False
     passedAndVisitedSummary: Optional[bool] = False
     documentsSubmitted: Optional[bool] = False
+    consentAccepted: Optional[bool] = False
+    consentTimestamp: Optional[str] = None
+    consentWithdrawn: Optional[bool] = False
+    consentWithdrawnAt: Optional[str] = None
 
 
 class CandidatePatchRequest(BaseModel):
@@ -159,6 +163,10 @@ class CandidatePatchRequest(BaseModel):
     joiningDetailsVisited: Optional[bool] = None
     documentsSubmitted: Optional[bool] = None
     foundationCourseCompleted: Optional[bool] = None
+    consentAccepted: Optional[bool] = None
+    consentTimestamp: Optional[str] = None
+    consentWithdrawn: Optional[bool] = None
+    consentWithdrawnAt: Optional[str] = None
 
 
 class CandidatePatchResponse(BaseModel):
@@ -318,6 +326,10 @@ async def get_candidate_profile(email: Optional[str] = Query(None)):
         foundationCourseCompleted=cand.get("foundation_course_completed", False),
         passedAndVisitedSummary=cand.get("passed_and_visited_summary", False),
         documentsSubmitted=cand.get("documents_submitted", False),
+        consentAccepted=cand.get("consent_accepted", False),
+        consentTimestamp=cand.get("consent_timestamp"),
+        consentWithdrawn=cand.get("consent_withdrawn", False),
+        consentWithdrawnAt=cand.get("consent_withdrawn_at"),
     )
 
 
@@ -332,6 +344,53 @@ async def delete_candidate(request: Request):
         db.candidates.delete_one({"_id": _to_objectid(candidate_id)})
         db.users.delete_one({"_id": user_id["user_id"]})
     return {"success": True, "message": "Candidate deleted"}
+
+
+@router.post("/consent/withdraw")
+async def withdraw_consent(request: Request):
+    """Withdraw candidate data access and document verification consent (DPDP Act)."""
+    candidate_id = _get_candidate_id_from_request(request)
+    db = get_sync_db()
+    now = datetime.now(timezone.utc)
+    res = db.candidates.update_one(
+        {"_id": _to_objectid(candidate_id)},
+        {
+            "$set": {
+                "consent_withdrawn": True,
+                "consent_withdrawn_at": now.isoformat(),
+                "consent_accepted": False,
+                "consent_status": "withdrawn",
+                "updated_at": now,
+            }
+        }
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+    return {"success": True, "message": "Consent has been successfully withdrawn."}
+
+
+@router.post("/consent/grant")
+async def grant_consent(request: Request):
+    """Re-grant candidate data access and document verification consent."""
+    candidate_id = _get_candidate_id_from_request(request)
+    db = get_sync_db()
+    now = datetime.now(timezone.utc)
+    res = db.candidates.update_one(
+        {"_id": _to_objectid(candidate_id)},
+        {
+            "$set": {
+                "consent_accepted": True,
+                "consent_timestamp": now.isoformat(),
+                "consent_withdrawn": False,
+                "consent_withdrawn_at": None,
+                "consent_status": "granted",
+                "updated_at": now,
+            }
+        }
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+    return {"success": True, "message": "Consent has been successfully granted."}
 
 
 @router.patch("", response_model=CandidatePatchResponse)
@@ -359,6 +418,20 @@ async def patch_candidate(request: Request, body: CandidatePatchRequest):
         updates["documents_submitted"] = body.documentsSubmitted
     if body.foundationCourseCompleted is not None:
         updates["foundation_course_completed"] = body.foundationCourseCompleted
+    if body.consentAccepted is not None:
+        updates["consent_accepted"] = body.consentAccepted
+        if body.consentAccepted:
+            updates["consent_withdrawn"] = False
+            updates["consent_status"] = "granted"
+    if body.consentTimestamp is not None:
+        updates["consent_timestamp"] = body.consentTimestamp
+    if body.consentWithdrawn is not None:
+        updates["consent_withdrawn"] = body.consentWithdrawn
+        if body.consentWithdrawn:
+            updates["consent_accepted"] = False
+            updates["consent_status"] = "withdrawn"
+    if body.consentWithdrawnAt is not None:
+        updates["consent_withdrawn_at"] = body.consentWithdrawnAt
 
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")

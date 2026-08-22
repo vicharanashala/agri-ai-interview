@@ -46,6 +46,11 @@ class CandidateResponse(BaseModel):
     foundationCourseCompleted: bool = False
     foundationCourseStatus: Optional[str] = "not_started"
     interviewStatus: Optional[str] = "not_attended"
+    consentAccepted: Optional[bool] = False
+    consentWithdrawn: Optional[bool] = False
+    consentStatus: Optional[str] = "pending"
+    consentTimestamp: Optional[str] = None
+    consentWithdrawnAt: Optional[str] = None
 
 
 def _get_id_variants(val: Any) -> List[Any]:
@@ -116,6 +121,15 @@ def _candidate_to_response(cand: dict, user_email: Optional[str]) -> CandidateRe
     foundation_completed = cand.get("foundation_course_completed", False)
     foundation_status = cand.get("foundation_course_status", "completed" if foundation_completed else "not_started")
 
+    consent_withdrawn = bool(cand.get("consent_withdrawn", False))
+    consent_accepted = bool(cand.get("consent_accepted", False) or (cand.get("documents_submitted") and not consent_withdrawn))
+    if consent_withdrawn:
+        consent_status = "withdrawn"
+    elif consent_accepted:
+        consent_status = "granted"
+    else:
+        consent_status = "pending"
+
     return CandidateResponse(
         id=str(cand["_id"]),
         fullName=raw_full_name,
@@ -137,6 +151,11 @@ def _candidate_to_response(cand: dict, user_email: Optional[str]) -> CandidateRe
         foundationCourseCompleted=foundation_completed,
         foundationCourseStatus=foundation_status,
         interviewStatus=interview_status,
+        consentAccepted=consent_accepted,
+        consentWithdrawn=consent_withdrawn,
+        consentStatus=consent_status,
+        consentTimestamp=_format_iso(cand.get("consent_timestamp")),
+        consentWithdrawnAt=_format_iso(cand.get("consent_withdrawn_at")),
     )
 
 

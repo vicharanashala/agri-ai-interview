@@ -6,6 +6,7 @@ import { signOut } from 'next-auth/react';
 import styles from './page.module.css';
 import HowToUseModal from '@/components/HowToUseModal';
 import BrandLogos from '@/components/BrandLogos';
+import ProfileNavButton from '@/components/ProfileNavButton';
 
 type Phase = 1 | 2 | 3 | 4 | 5;
 
@@ -408,25 +409,7 @@ const completionPercentage = getCompletionPercentage();
         <div className={styles.navbarContent}>
           <BrandLogos variant="header" />
           <div className={styles.headerButtons}>
-            <button
-              onClick={() => window.open('/raise-ticket.html', '_blank')}
-              className={styles.raiseTicketBtn}
-            >
-              ⚠️ Raise Tickets
-            </button>
-            <button
-              onClick={handleFaqClick}
-              className={styles.faqHelpBtn}
-            >
-              💬 FAQ & Help
-            </button>
-            <button
-              onClick={handleLogout}
-              disabled={loggingOut}
-              className={styles.signOutBtn}
-            >
-              {loggingOut ? 'Signing out...' : 'Sign Out'}
-            </button>
+            <ProfileNavButton />
           </div>
         </div>
       </nav>

@@ -8,6 +8,11 @@ interface CandidateRow {
   email: string | null;
   currentPhase: string;
   documentsSubmitted: boolean;
+  consentAccepted?: boolean;
+  consentWithdrawn?: boolean;
+  consentStatus?: string;
+  consentTimestamp?: string | null;
+  consentWithdrawnAt?: string | null;
 }
 
 interface Props {
@@ -99,50 +104,108 @@ export default function DocumentsTab({ adminToken }: Props) {
               <th style={{ padding: '8px 12px', textAlign: 'left', color: '#6b7280', fontWeight: 500, fontSize: 12 }}>Name</th>
               <th style={{ padding: '8px 12px', textAlign: 'left', color: '#6b7280', fontWeight: 500, fontSize: 12 }}>Email</th>
               <th style={{ padding: '8px 12px', textAlign: 'left', color: '#6b7280', fontWeight: 500, fontSize: 12 }}>Documents</th>
+              <th style={{ padding: '8px 12px', textAlign: 'left', color: '#6b7280', fontWeight: 500, fontSize: 12 }}>Data Access Consent</th>
               <th style={{ padding: '8px 12px', textAlign: 'left', color: '#6b7280', fontWeight: 500, fontSize: 12 }}>Download</th>
             </tr>
           </thead>
           <tbody>
-            {candidates.map(c => (
-              <tr
-                key={c.id}
-                style={{ borderBottom: '1px solid #f3f4f6' }}
-                onMouseEnter={e => (e.currentTarget.style.background = '#f9fafb')}
-                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-              >
-                <td style={{ padding: '10px 12px' }}>{c.fullName || '—'}</td>
-                <td style={{ padding: '10px 12px', color: '#6b7280' }}>{c.email || '—'}</td>
-                <td style={{ padding: '10px 12px' }}>
-                  <span style={{
-                    color: c.documentsSubmitted ? '#16a34a' : '#d97706',
-                    fontWeight: 600,
-                  }}>
-                    {c.documentsSubmitted ? 'Yes' : 'No'}
-                  </span>
-                </td>
-                <td style={{ padding: '10px 12px' }}>
-                  {c.documentsSubmitted ? (
-                    <button
-                      onClick={() => downloadZip(c.id, c.fullName)}
-                      disabled={downloading === c.id}
-                      style={{
-                        color: '#08CB00',
-                        background: 'none',
-                        border: 'none',
-                        cursor: downloading === c.id ? 'default' : 'pointer',
-                        fontSize: 13,
-                        padding: 0,
-                        opacity: downloading === c.id ? 0.6 : 1,
-                      }}
-                    >
-                      {downloading === c.id ? 'Downloading…' : 'Download ZIP'}
-                    </button>
-                  ) : (
-                    <span style={{ color: '#d1d5db', fontSize: 13 }}>—</span>
-                  )}
-                </td>
-              </tr>
-            ))}
+            {candidates.map(c => {
+              const isWithdrawn = Boolean(c.consentWithdrawn || c.consentStatus === 'withdrawn');
+              const isGranted = Boolean((c.consentAccepted || c.documentsSubmitted || c.consentStatus === 'granted') && !isWithdrawn);
+
+              return (
+                <tr
+                  key={c.id}
+                  style={{ borderBottom: '1px solid #f3f4f6' }}
+                  onMouseEnter={e => (e.currentTarget.style.background = '#f9fafb')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <td style={{ padding: '10px 12px' }}>{c.fullName || '—'}</td>
+                  <td style={{ padding: '10px 12px', color: '#6b7280' }}>{c.email || '—'}</td>
+                  <td style={{ padding: '10px 12px' }}>
+                    <span style={{
+                      color: c.documentsSubmitted ? '#16a34a' : '#d97706',
+                      fontWeight: 600,
+                    }}>
+                      {c.documentsSubmitted ? 'Yes' : 'No'}
+                    </span>
+                  </td>
+                  <td style={{ padding: '10px 12px' }}>
+                    {isWithdrawn ? (
+                      <span
+                        title={c.consentWithdrawnAt ? `Withdrawn at: ${new Date(c.consentWithdrawnAt).toLocaleString()}` : 'Consent Withdrawn'}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          color: '#dc2626',
+                          background: '#fee2e2',
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          fontWeight: 600,
+                          fontSize: 12,
+                        }}
+                      >
+                        ⚠️ Withdrawn
+                      </span>
+                    ) : isGranted ? (
+                      <span
+                        title={c.consentTimestamp ? `Granted at: ${new Date(c.consentTimestamp).toLocaleString()}` : 'Consent Granted'}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          color: '#16a34a',
+                          background: '#dcfce7',
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          fontWeight: 600,
+                          fontSize: 12,
+                        }}
+                      >
+                        ✓ Granted
+                      </span>
+                    ) : (
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          color: '#6b7280',
+                          background: '#f3f4f6',
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          fontWeight: 500,
+                          fontSize: 12,
+                        }}
+                      >
+                        Pending
+                      </span>
+                    )}
+                  </td>
+                  <td style={{ padding: '10px 12px' }}>
+                    {c.documentsSubmitted ? (
+                      <button
+                        onClick={() => downloadZip(c.id, c.fullName)}
+                        disabled={downloading === c.id}
+                        style={{
+                          color: '#08CB00',
+                          background: 'none',
+                          border: 'none',
+                          cursor: downloading === c.id ? 'default' : 'pointer',
+                          fontSize: 13,
+                          padding: 0,
+                          opacity: downloading === c.id ? 0.6 : 1,
+                        }}
+                      >
+                        {downloading === c.id ? 'Downloading…' : 'Download ZIP'}
+                      </button>
+                    ) : (
+                      <span style={{ color: '#d1d5db', fontSize: 13 }}>—</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}

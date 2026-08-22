@@ -6,6 +6,7 @@ import { signOut } from 'next-auth/react';
 import { syncPhaseToDb } from '@/lib/phaseSync';
 import styles from './page.module.css';
 import BrandLogos from '@/components/BrandLogos';
+import ProfileNavButton from '@/components/ProfileNavButton';
 
 const ALLOWED_TYPES = [
   'application/pdf',
@@ -281,6 +282,7 @@ export default function UploadDocumentsPage() {
               onClick={handleFaqClick} className={styles.faqHelpBtn}>
             FAQ & Help
           </button>
+          <ProfileNavButton />
           <button onClick={handleLogout} disabled={loggingOut} className={styles.signOutBtn}>
             {loggingOut ? 'Signing out...' : 'Sign Out'}
           </button>

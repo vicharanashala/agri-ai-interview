@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import styles from "./page.module.css";
 import BrandLogos from "@/components/BrandLogos";
+import ProfileNavButton from "@/components/ProfileNavButton";
 
 interface FAQ {
   id: string;
@@ -136,6 +137,7 @@ export default function FAQPage() {
                 <button onClick={() => router.push("/dashboard")} className={styles.faqHelpBtn}>
                   Dashboard
                 </button>
+                <ProfileNavButton />
                 <button onClick={handleLogout} disabled={loggingOut} className={styles.signOutBtn}>
                   {loggingOut ? "Signing out..." : "Sign Out"}
                 </button>

@@ -1,0 +1,40 @@
+﻿.profileNavBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease-in-out;
+  text-decoration: none;
+}
+
+.profileNavBtn:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: #0284c7;
+  transform: translateY(-1px);
+}
+
+.profileIcon {
+  color: #64748b;
+  transition: color 0.2s ease-in-out;
+}
+
+.profileNavBtn:hover .profileIcon {
+  color: #0284c7;
+}
+
+@media (max-width: 768px) {
+  .profileNavBtn {
+    padding: 8px 10px;
+    font-size: 12px;
+    gap: 4px;
+  }
+}

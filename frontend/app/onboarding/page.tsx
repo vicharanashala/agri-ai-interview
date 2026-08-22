@@ -312,27 +312,22 @@ export default function OnboardingPage() {
   };
 
   // ── Eligibility Calculation ────────────────────────────────────────────────
-  // Young Professional Qualifying Qualifications:
-  // 1. Diploma in Agriculture
-  // 2. B.Sc. (Hons.) Agriculture or B.Sc. Agriculture
-  // 3. M.Sc. / Ph.D. in any of:
-  //    • Agronomy
-  //    • Soil Science & Agricultural Chemistry (Soil Science)
-  //    • Horticulture
-  //    • Entomology
-  //    • Plant Pathology
-  //    • Agrometeorology
-  //    • Post-Harvest Technology (Food Technology)
-  //    • Extension & Communication (Agricultural Extension)
-  //    • Genetics & Plant Breeding
-  //    • Seed Science & Technology
-  //    • Agriculture
-  // AND all added education records must have status Completed (no record can be Pursuing).
-  const QUALIFYING_MSC_DISCIPLINES = [
-    'Agriculture',
+  // Young Professional ONLY Allowed Qualifications (must be Completed):
+  // 1. B.Sc. (Hons.) Agriculture (normal B.Sc. Agriculture is NOT allowed on its own)
+  // 2. M.Sc. Agronomy
+  // 3. M.Sc. Soil Science & Agricultural Chemistry (Soil Science)
+  // 4. M.Sc. Horticulture (with a B.Sc. Agriculture / Diploma Agriculture background)
+  // 5. M.Sc. Entomology
+  // 6. M.Sc. Plant Pathology
+  // 7. M.Sc. Agrometeorology
+  // 8. M.Sc. Post-Harvest Technology (Food Technology)
+  // 9. M.Sc. Extension & Communication (Agricultural Extension)
+  // 10. M.Sc. Genetics & Plant Breeding
+  // 11. M.Sc. Seed Science & Technology
+  // 12. Diploma in Agriculture
+  const STANDALONE_QUALIFYING_MSC_DISCIPLINES = [
     'Agronomy',
     'Soil Science',
-    'Horticulture',
     'Entomology',
     'Plant Pathology',
     'Agrometeorology',
@@ -342,41 +337,61 @@ export default function OnboardingPage() {
     'Seed Science & Technology',
   ];
 
-  const checkQualifyingDegree = (eduList: EducationItem[]): boolean => {
+  // Checks if the candidate has AT LEAST ONE education entry that matches our
+  // agricultural criteria AND has status = 'Completed'
+  const hasCompletedQualifyingDegree = (eduList: EducationItem[]): boolean => {
     if (!eduList || eduList.length === 0) return false;
 
-    // 1. Diploma in Agriculture
+    // 1. Diploma in Agriculture (Completed)
     const hasDiplomaAgri = eduList.some(
-      (e) => e.level === 'Diploma' && e.discipline === 'Agriculture'
+      (e) => e.level === 'Diploma' && e.discipline === 'Agriculture' && e.status === 'Completed'
     );
     if (hasDiplomaAgri) return true;
 
-    // 2. B.Sc. (Hons.) Agriculture or B.Sc. Agriculture
-    const hasBScAgri = eduList.some(
+    // 2. B.Sc. (Hons.) Agriculture (Completed) — normal B.Sc. is NOT allowed
+    const hasBScHonsAgri = eduList.some(
       (e) =>
-        (e.level === 'B.Sc. (Hons.)' || e.level === 'B.Sc.') &&
-        e.discipline === 'Agriculture'
+        e.level === 'B.Sc. (Hons.)' &&
+        e.discipline === 'Agriculture' &&
+        e.status === 'Completed'
     );
-    if (hasBScAgri) return true;
+    if (hasBScHonsAgri) return true;
 
-    // 3. M.Sc. / Ph.D. in qualifying agricultural disciplines
+    // 3. M.Sc. Horticulture (with a B.Sc. Agriculture background, both Completed)
+    const hasMScHorticulture = eduList.some(
+      (e) =>
+        (e.level === 'M.Sc.' || e.level === 'Ph.D.') &&
+        e.discipline === 'Horticulture' &&
+        e.status === 'Completed'
+    );
+    const hasBScOrDiplomaAgriBg = eduList.some(
+      (e) =>
+        (e.level === 'B.Sc.' || e.level === 'B.Sc. (Hons.)' || e.level === 'Diploma') &&
+        e.discipline === 'Agriculture' &&
+        e.status === 'Completed'
+    );
+    if (hasMScHorticulture && hasBScOrDiplomaAgriBg) return true;
+
+    // 4. M.Sc. / Ph.D. in standalone qualifying agricultural disciplines (Completed)
     const hasMScAgri = eduList.some(
       (e) =>
         (e.level === 'M.Sc.' || e.level === 'Ph.D.') &&
-        QUALIFYING_MSC_DISCIPLINES.includes(e.discipline)
+        STANDALONE_QUALIFYING_MSC_DISCIPLINES.includes(e.discipline) &&
+        e.status === 'Completed'
     );
     if (hasMScAgri) return true;
 
     return false;
   };
 
-  const isEligibleForYP =
-    checkQualifyingDegree(education) &&
-    !education.some((e) => e.status === 'Pursuing');
+  const isEligibleForYP = hasCompletedQualifyingDegree(education);
 
-  // Candidate needs internship declaration if they entered education info and are NOT eligible for YP
-  const hasStartedEdu = education.some((e) => e.level || e.discipline || e.status);
-  const needsConsent = hasStartedEdu && !isEligibleForYP;
+  const hasFilledEducationDetails = education.some(
+    (e) => Boolean(e.level && e.discipline && e.status)
+  );
+
+  // Declaration box ONLY appears if they have chosen discipline & status AND do not have any completed qualifying degree
+  const needsConsent = hasFilledEducationDetails && !isEligibleForYP;
   const isBelowDisabled = needsConsent && !formData.nonAgriConsent;
 
   const validatePhone = (value: string): boolean => {

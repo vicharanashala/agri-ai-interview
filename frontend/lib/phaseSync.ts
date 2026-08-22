@@ -20,6 +20,8 @@ export async function syncPhaseToDb(
     passedAndVisitedSummary?: boolean
     foundationCourseCompleted?: boolean
     documentsSubmitted?: boolean
+    consentAccepted?: boolean
+    consentTimestamp?: string
   }
 ): Promise<void> {
   try {

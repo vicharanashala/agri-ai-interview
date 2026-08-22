@@ -263,6 +263,7 @@
   font-size: 14px;
   font-weight: 500;
   line-height: 1.75;
+  white-space: pre-line;
   margin: 16px 0 0 46px;
   padding-top: 14px;
   border-top: 1px solid #e2e8f0;

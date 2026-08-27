@@ -169,6 +169,9 @@ async def get_candidates(
     state: Optional[str] = Query(None),
     district: Optional[str] = Query(None),
     interviewStatus: Optional[str] = Query(None),
+    phases: Optional[str] = Query(None),
+    limit: int = Query(10, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     _admin=Depends(require_admin_auth),
 ):
     db = get_sync_db()
@@ -180,8 +183,16 @@ async def get_candidates(
         query["state"] = {"$regex": state, "$options": "i"}
     if district:
         query["district"] = {"$regex": district, "$options": "i"}
+    if phases:
+        phase_list = [p.strip() for p in phases.split(",")]
+        query["$or"] = [
+            {"current_phase": {"$in": phase_list}},
+            {"foundation_course_completed": True},
+        ]
 
-    cursor = db.candidates.find(query).sort("created_at", -1)
+    total = db.candidates.count_documents(query)
+
+    cursor = db.candidates.find(query).sort("created_at", -1).skip(offset).limit(limit)
     all_candidates = list(cursor)
 
     results = []
@@ -205,7 +216,7 @@ async def get_candidates(
 
         results.append(response)
 
-    return {"candidates": results, "total": len(results)}
+    return {"candidates": results, "total": total}
 
 
 @router.get("/candidates/{candidate_id}")
@@ -597,12 +608,14 @@ async def get_state_stats(state: str = Query(None), _admin=Depends(require_admin
 @router.get("/anti-cheat/violations")
 async def get_anti_cheat_violations(
     limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     _admin=Depends(require_admin_auth),
 ):
     from bson import ObjectId
 
     db = get_sync_db()
-    cursor = db.anti_cheat_events.find().sort("created_at", -1).limit(limit)
+    total = db.anti_cheat_events.count_documents({})
+    cursor = db.anti_cheat_events.find().sort("created_at", -1).skip(offset).limit(limit)
     violations = []
     for event in cursor:
         cid = event.get("candidate_id")
@@ -621,7 +634,7 @@ async def get_anti_cheat_violations(
             "createdAt": event.get("created_at").isoformat() + "Z" if event.get("created_at") else "",
             "autoClosed": event.get("severity") == "critical",
         })
-    return {"violations": violations, "total": len(violations)}
+    return {"violations": violations, "total": total}
 
 
 # ── Update a single candidate field ───────────────────────────────────────────

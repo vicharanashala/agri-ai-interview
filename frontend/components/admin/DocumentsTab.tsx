@@ -25,6 +25,9 @@ const PASS_PHASES = ['documents', 'offer', 'signing', 'joining'];
 export default function DocumentsTab({ adminToken }: Props) {
   const [candidates, setCandidates] = useState<CandidateRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
+  const [limit, setLimit] = useState(10);
   const [downloading, setDownloading] = useState<string | null>(null);
 
   const withAuth = useCallback((url: string, opts: RequestInit = {}): Promise<Response> => {
@@ -66,26 +69,33 @@ export default function DocumentsTab({ adminToken }: Props) {
     }
   }, [withAuth]);
 
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      try {
-        const res = await withAuth('/api/admin/candidates');
-        if (res.ok) {
-          const data = await res.json();
-          const passed = (data.candidates || []).filter(
-            (c: CandidateRow) => PASS_PHASES.includes(c.currentPhase)
-          );
-          setCandidates(passed);
-        }
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
+  const loadCandidates = useCallback(async (resetPage = true) => {
+    setLoading(true);
+    try {
+      const offset = resetPage ? 0 : page * limit;
+      const params = new URLSearchParams({
+        phases: PASS_PHASES.join(','),
+        limit: String(limit),
+        offset: String(offset),
+      });
+      const res = await withAuth(`/api/admin/candidates?${params}`);
+      if (res.ok) {
+        const data = await res.json();
+        setCandidates(resetPage ? (data.candidates || []) : prev => [...prev, ...(data.candidates || [])]);
+        setTotal(data.total ?? 0);
+        if (!resetPage) setPage(p => p + 1);
       }
-    };
-    load();
-  }, [withAuth]);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  }, [withAuth, limit, page]);
+
+  useEffect(() => {
+    loadCandidates(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [limit]);
 
   return (
     <div style={{ padding: '24px' }}>
@@ -93,11 +103,27 @@ export default function DocumentsTab({ adminToken }: Props) {
         Candidate Documents
       </h2>
 
-      {loading ? (
+      {/* Page size selector */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+        <label style={{ fontSize: 13, color: '#4b5563' }}>Show:</label>
+        <select
+          value={limit}
+          onChange={e => { setLimit(Number(e.target.value)); setPage(0); }}
+          style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #d1d5db', fontSize: 13 }}
+        >
+          {[10, 20, 50, 100, 200].map(n => (
+            <option key={n} value={n}>{n} / page</option>
+          ))}
+        </select>
+        <span style={{ fontSize: 13, color: '#6b7280' }}>{total} total</span>
+      </div>
+
+      {loading && candidates.length === 0 ? (
         <div>Loading...</div>
       ) : candidates.length === 0 ? (
         <div>No candidates found</div>
       ) : (
+        <>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
           <thead>
             <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
@@ -208,6 +234,26 @@ export default function DocumentsTab({ adminToken }: Props) {
             })}
           </tbody>
         </table>
+        {candidates.length < total && (
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: '16px' }}>
+            <button
+              onClick={() => loadCandidates(false)}
+              style={{
+                background: '#08CB00',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '6px',
+                padding: '8px 20px',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Load More ({total - candidates.length} remaining)
+            </button>
+          </div>
+        )}
+        </>
       )}
     </div>
   );

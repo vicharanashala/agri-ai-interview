@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import PageSelector from './PageSelector';
 
 interface CandidateRow {
   id: string;
@@ -29,6 +30,28 @@ export default function DocumentsTab({ adminToken }: Props) {
   const [page, setPage] = useState(0);
   const [limit, setLimit] = useState(10);
   const [downloading, setDownloading] = useState<string | null>(null);
+
+  const loadCandidates = useCallback(async (explicitPage: number) => {
+    setLoading(true);
+    try {
+      const offset = explicitPage * limit;
+      const params = new URLSearchParams({
+        phases: PASS_PHASES.join(','),
+        limit: String(limit),
+        offset: String(offset),
+      });
+      const res = await withAuth(`/api/admin/candidates?${params}`);
+      if (res.ok) {
+        const data = await res.json();
+        setCandidates(data.candidates || []);
+        setTotal(data.total ?? 0);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  }, [withAuth, limit]);
 
   const withAuth = useCallback((url: string, opts: RequestInit = {}): Promise<Response> => {
     const headers: Record<string, string> = {
@@ -69,31 +92,8 @@ export default function DocumentsTab({ adminToken }: Props) {
     }
   }, [withAuth]);
 
-  const loadCandidates = useCallback(async (resetPage = true) => {
-    setLoading(true);
-    try {
-      const offset = resetPage ? 0 : page * limit;
-      const params = new URLSearchParams({
-        phases: PASS_PHASES.join(','),
-        limit: String(limit),
-        offset: String(offset),
-      });
-      const res = await withAuth(`/api/admin/candidates?${params}`);
-      if (res.ok) {
-        const data = await res.json();
-        setCandidates(resetPage ? (data.candidates || []) : prev => [...prev, ...(data.candidates || [])]);
-        setTotal(data.total ?? 0);
-        if (!resetPage) setPage(p => p + 1);
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  }, [withAuth, limit, page]);
-
   useEffect(() => {
-    loadCandidates(true);
+    loadCandidates(0);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [limit]);
 
@@ -103,19 +103,16 @@ export default function DocumentsTab({ adminToken }: Props) {
         Candidate Documents
       </h2>
 
-      {/* Page size selector */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-        <label style={{ fontSize: 13, color: '#4b5563' }}>Show:</label>
-        <select
-          value={limit}
-          onChange={e => { setLimit(Number(e.target.value)); setPage(0); }}
-          style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #d1d5db', fontSize: 13 }}
-        >
-          {[10, 20, 50, 100, 200].map(n => (
-            <option key={n} value={n}>{n} / page</option>
-          ))}
-        </select>
-        <span style={{ fontSize: 13, color: '#6b7280' }}>{total} total</span>
+      {/* Pagination */}
+      <div style={{ marginBottom: '16px' }}>
+        <PageSelector
+          total={total}
+          page={page}
+          limit={limit}
+          onPageChange={p => { setPage(p); loadCandidates(p); }}
+          onLimitChange={l => { setLimit(l); setPage(0); loadCandidates(0); }}
+          loading={loading}
+        />
       </div>
 
       {loading && candidates.length === 0 ? (
@@ -234,26 +231,7 @@ export default function DocumentsTab({ adminToken }: Props) {
             })}
           </tbody>
         </table>
-        {candidates.length < total && (
-          <div style={{ display: 'flex', justifyContent: 'center', marginTop: '16px' }}>
-            <button
-              onClick={() => loadCandidates(false)}
-              style={{
-                background: '#08CB00',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '6px',
-                padding: '8px 20px',
-                fontSize: '13px',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              Load More ({total - candidates.length} remaining)
-            </button>
-          </div>
-        )}
-        </>
+</>
       )}
     </div>
   );

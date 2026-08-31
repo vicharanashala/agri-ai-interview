@@ -9,6 +9,7 @@ import EvaluationsTab from "../../../components/admin/EvaluationsTab";
 import OfferLetterTab from "../../../components/admin/OfferLetterTab";
 import DocumentsTab from "../../../components/admin/DocumentsTab";
 import CourseCompletionTab from "../../../components/admin/CourseCompletionTab";
+import PageSelector from "../../../components/admin/PageSelector";
 
 // Types
 interface Candidate {
@@ -236,7 +237,7 @@ export default function AdminDashboard() {
       return () => clearInterval(interval);
     }
     if (activeTab === "anti-cheat") {
-      const interval = setInterval(loadViolations, 5000);
+      const interval = setInterval(() => loadViolations(violationsPage), 5000);
       return () => clearInterval(interval);
     }
   }, [activeTab]);
@@ -254,7 +255,7 @@ export default function AdminDashboard() {
   // Reload candidates when filters change
   useEffect(() => {
     if (activeTab === "candidates") {
-      loadCandidates();
+      loadCandidates(0);
     }
   }, [phaseFilter, stateFilter, districtFilter, interviewStatusFilter]);
 
@@ -267,11 +268,12 @@ export default function AdminDashboard() {
         calls.push(
           loadStats().catch(err => console.error("loadStats error:", err)),
           loadActiveInterviews().catch(err => console.error("loadActiveInterviews error:", err)),
+          loadCandidates(0).catch(err => console.error("loadCandidates error:", err)),
         );
       } else if (target === "candidates") {
         calls.push(
           loadStats().catch(err => console.error("loadStats error:", err)),
-          loadCandidates().catch(err => console.error("loadCandidates error:", err)),
+          loadCandidates(0).catch(err => console.error("loadCandidates error:", err)),
         );
       } else if (target === "analytics") {
         calls.push(
@@ -286,12 +288,11 @@ export default function AdminDashboard() {
       } else if (target === "course-completion") {
         calls.push(
           loadStats().catch(err => console.error("loadStats error:", err)),
-          loadCandidates().catch(err => console.error("loadCandidates error:", err)),
         );
       } else if (target === "anti-cheat") {
         calls.push(
           loadStats().catch(err => console.error("loadStats error:", err)),
-          loadViolations(false).catch(err => console.error("loadViolations error:", err)),
+          loadViolations(0).catch(err => console.error("loadViolations error:", err)),
         );
       } else if (target === "documents") {
         calls.push(
@@ -335,7 +336,7 @@ export default function AdminDashboard() {
     }
   };
 
-  const loadCandidates = async (resetPage = true) => {
+  const loadCandidates = async (explicitPage: number) => {
     try {
       const params = new URLSearchParams();
       if (searchQuery) params.append("search", searchQuery);
@@ -343,20 +344,14 @@ export default function AdminDashboard() {
       if (stateFilter) params.append("state", stateFilter);
       if (districtFilter) params.append("district", districtFilter);
       if (interviewStatusFilter) params.append("interviewStatus", interviewStatusFilter);
-      const limit = resetPage ? candidateLimit : candidateLimit;
-      const offset = resetPage ? 0 : candidatePage * candidateLimit;
-      params.append("limit", String(limit));
+      const offset = explicitPage * candidateLimit;
+      params.append("limit", String(candidateLimit));
       params.append("offset", String(offset));
       const res = await withAuth(`/api/admin/candidates?${params}`);
       if (res.ok) {
         const data = await res.json();
-        if (resetPage) {
-          setCandidates(data.candidates || []);
-          setCandidatePage(1);
-        } else {
-          setCandidates(prev => [...prev, ...(data.candidates || [])]);
-          setCandidatePage(p => p + 1);
-        }
+        setCandidates(data.candidates || []);
+        setCandidatePage(explicitPage);
         setCandidateTotal(data.total ?? 0);
       }
     } catch (err) {
@@ -528,20 +523,15 @@ export default function AdminDashboard() {
     }
   }, [activeTab, candidates]);
 
-  const loadViolations = async (loadMore = false) => {
+  const loadViolations = async (explicitPage: number) => {
     setViolationsLoading(true);
     try {
-      const offset = loadMore ? violationsPage * violationsLimit : 0;
+      const offset = explicitPage * violationsLimit;
       const res = await withAuth(`/api/admin/anti-cheat/violations?limit=${violationsLimit}&offset=${offset}`);
       if (res.ok) {
         const data = await res.json();
-        if (loadMore) {
-          setViolations(prev => [...prev, ...(data.violations || [])]);
-          setViolationsPage(p => p + 1);
-        } else {
-          setViolations(data.violations || []);
-          setViolationsPage(1);
-        }
+        setViolations(data.violations || []);
+        setViolationsPage(explicitPage);
         setViolationsTotal(data.total ?? 0);
       }
     } catch (err) {
@@ -915,19 +905,17 @@ export default function AdminDashboard() {
                 placeholder="Search by name or email..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && loadCandidates()}
+                onKeyDown={(e) => e.key === "Enter" && loadCandidates(0)}
                 className={styles.searchInput}
               />
-              <select
-                value={candidateLimit}
-                onChange={(e) => { setCandidateLimit(Number(e.target.value)); loadCandidates(true); }}
-                className={styles.phaseSelect}
-                style={{ width: "80px" }}
-              >
-                {[10, 20, 50, 100, 200].map(n => (
-                  <option key={n} value={n}>{n} / page</option>
-                ))}
-              </select>
+              <PageSelector
+                total={candidateTotal}
+                page={candidatePage}
+                limit={candidateLimit}
+                onPageChange={p => loadCandidates(p)}
+                onLimitChange={l => { setCandidateLimit(l); setCandidatePage(0); loadCandidates(0); }}
+                loading={loading}
+              />
               <select
                 value={phaseFilter}
                 onChange={(e) => setPhaseFilter(e.target.value)}
@@ -971,7 +959,7 @@ export default function AdminDashboard() {
                 <option value="fail">Fail</option>
                 <option value="requested_revaluation">Requested Revaluation</option>
               </select>
-              <button onClick={loadCandidates} className={styles.searchBtn}>Search</button>
+              <button onClick={() => { setCandidatePage(0); loadCandidates(0); }} className={styles.searchBtn}>Search</button>
               <button onClick={handleExportCsv} className={styles.exportBtn} style={{ marginLeft: "auto", background: "#10b981", color: "white", padding: "8px 16px", borderRadius: "6px", border: "none", cursor: "pointer", fontWeight: 600 }}>
                 Export CSV
               </button>
@@ -1068,16 +1056,7 @@ export default function AdminDashboard() {
                     </tbody>
                   </table>
                 </div>
-                {candidates.length < candidateTotal && (
-                  <div style={{ display: "flex", justifyContent: "center", marginTop: "16px" }}>
-                    <button
-                      onClick={() => loadCandidates(false)}
-                      className={styles.searchBtn}
-                    >
-                      Load More ({candidateTotal - candidates.length} remaining)
-                    </button>
-                  </div>
-                )}
+
               </>
             )}
           </div>
@@ -1669,7 +1648,7 @@ export default function AdminDashboard() {
           <CourseCompletionTab
             adminToken={getAdminToken()}
             adminApiBase={ADMIN_API_BASE}
-            onRefreshCandidates={loadCandidates}
+            onRefreshCandidates={() => loadCandidates(0)}
           />
         )}
 
@@ -1683,16 +1662,14 @@ export default function AdminDashboard() {
           <div className={styles.antiCheatContainer}>
             <h2 className={styles.antiCheatTitle}>🛡️ Anti-Cheat Violations ({violationsTotal})</h2>
             <div className={styles.filters} style={{ marginBottom: "12px" }}>
-              <select
-                value={violationsLimit}
-                onChange={(e) => { setViolationsLimit(Number(e.target.value)); loadViolations(false); }}
-                className={styles.phaseSelect}
-                style={{ width: "80px" }}
-              >
-                {[10, 20, 50, 100, 200].map(n => (
-                  <option key={n} value={n}>{n} / page</option>
-                ))}
-              </select>
+              <PageSelector
+                total={violationsTotal}
+                page={violationsPage}
+                limit={violationsLimit}
+                onPageChange={p => loadViolations(p)}
+                onLimitChange={l => { setViolationsLimit(l); setViolationsPage(0); loadViolations(0); }}
+                loading={violationsLoading}
+              />
             </div>
             {violationsLoading && violations.length === 0 ? (
               <p>Loading...</p>
@@ -1738,17 +1715,7 @@ export default function AdminDashboard() {
                     </tbody>
                   </table>
                 </div>
-                {violations.length < violationsTotal && (
-                  <div style={{ display: "flex", justifyContent: "center", marginTop: "16px" }}>
-                    <button
-                      onClick={() => loadViolations(true)}
-                      className={styles.searchBtn}
-                      disabled={violationsLoading}
-                    >
-                      {violationsLoading ? "Loading..." : `Load More (${violationsTotal - violations.length} remaining)`}
-                    </button>
-                  </div>
-                )}
+
               </>
             )}
           </div>

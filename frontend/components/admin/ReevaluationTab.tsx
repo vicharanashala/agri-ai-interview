@@ -385,7 +385,7 @@ export default function ReevaluationTab({ adminApiBase, getAdminToken }: Reevalu
           page={page}
           limit={limit}
           onPageChange={p => { setPage(p); fetchReEvaluations(p); }}
-          onLimitChange={l => { setLimit(l); setPage(0); }}
+          onLimitChange={l => { setLimit(l); setPage(0); fetchReEvaluations(0); }}
           loading={loading}
         />
       </div>

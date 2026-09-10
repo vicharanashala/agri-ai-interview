@@ -31,6 +31,14 @@ export default function DocumentsTab({ adminToken }: Props) {
   const [limit, setLimit] = useState(10);
   const [downloading, setDownloading] = useState<string | null>(null);
 
+  const withAuth = useCallback((url: string, opts: RequestInit = {}): Promise<Response> => {
+    const headers: Record<string, string> = {
+      ...((opts.headers as Record<string, string>) || {}),
+    };
+    if (adminToken) headers['X-Admin-Token'] = adminToken;
+    return fetch(url, { ...opts, headers, credentials: 'include' });
+  }, [adminToken]);
+
   const loadCandidates = useCallback(async (explicitPage: number) => {
     setLoading(true);
     try {
@@ -52,14 +60,6 @@ export default function DocumentsTab({ adminToken }: Props) {
       setLoading(false);
     }
   }, [withAuth, limit]);
-
-  const withAuth = useCallback((url: string, opts: RequestInit = {}): Promise<Response> => {
-    const headers: Record<string, string> = {
-      ...((opts.headers as Record<string, string>) || {}),
-    };
-    if (adminToken) headers['X-Admin-Token'] = adminToken;
-    return fetch(url, { ...opts, headers, credentials: 'include' });
-  }, [adminToken]);
 
   const downloadZip = useCallback(async (candidateId: string, fullName: string | null) => {
     setDownloading(candidateId);

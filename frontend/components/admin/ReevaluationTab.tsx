@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from "react";
 import styles from "./ReevaluationTab.module.css";
-import PageSelector from "./PageSelector";
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -320,14 +319,12 @@ export default function ReevaluationTab({ adminApiBase, getAdminToken }: Reevalu
   const [total, setTotal] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [page, setPage] = useState(0);
-  const [limit, setLimit] = useState(10);
 
-  const fetchReEvaluations = async (explicitPage: number) => {
+  const fetchReEvaluations = async () => {
     setLoading(true);
     try {
       const token = getAdminToken();
-      const params = new URLSearchParams({ limit: String(limit), offset: String(explicitPage * limit) });
+      const params = new URLSearchParams({ limit: "50", offset: "0" });
       if (searchQuery.trim()) params.set("search", searchQuery.trim());
 
       const res = await fetch(`${adminApiBase}/api/admin/re-evaluations?${params}`, {
@@ -347,11 +344,11 @@ export default function ReevaluationTab({ adminApiBase, getAdminToken }: Reevalu
   };
 
   useEffect(() => {
-    fetchReEvaluations(0);
+    fetchReEvaluations();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleSearch = () => { setPage(0); fetchReEvaluations(0); };
+  const handleSearch = () => fetchReEvaluations();
   const handleKeyDown = (e: React.KeyboardEvent) => { if (e.key === "Enter") handleSearch(); };
 
   const toggleExpand = (id: string) => {
@@ -379,15 +376,7 @@ export default function ReevaluationTab({ adminApiBase, getAdminToken }: Reevalu
           className={styles.searchInput}
         />
         <button onClick={handleSearch} className={styles.searchBtn}>Search</button>
-        <div style={{ flex: 1 }} />
-        <PageSelector
-          total={total}
-          page={page}
-          limit={limit}
-          onPageChange={p => { setPage(p); fetchReEvaluations(p); }}
-          onLimitChange={l => { setLimit(l); setPage(0); }}
-          loading={loading}
-        />
+        <span className={styles.totalCount}>{total} requests</span>
       </div>
 
       {/* Table */}

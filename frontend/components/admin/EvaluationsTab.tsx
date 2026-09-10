@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from "react";
 import styles from "./EvaluationsTab.module.css";
-import PageSelector from "./PageSelector";
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -403,8 +402,8 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
   const [resultFilter, setResultFilter] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [evalPage, setEvalPage] = useState(0);
-  const [evalLimit, setEvalLimit] = useState(10);
+  const [page, setPage] = useState(0);
+  const [limit, setLimit] = useState(10);
 
   // Re-evaluations state
   const [reEvaluations, setReEvaluations] = useState<ReEvaluationItem[]>([]);
@@ -412,14 +411,12 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
   const [reEvalTotal, setReEvalTotal] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
   const [revaluatingIds, setRevaluatingIds] = useState<Set<string>>(new Set());
-  const [reEvalPage, setReEvalPage] = useState(0);
-  const [reEvalLimit, setReEvalLimit] = useState(10);
 
-  const fetchEvaluations = async (explicitPage: number) => {
+  const fetchEvaluations = async (resetPage = false) => {
     setLoading(true);
     try {
       const token = getAdminToken();
-      const params = new URLSearchParams({ limit: String(evalLimit), offset: String(explicitPage * evalLimit) });
+      const params = new URLSearchParams({ limit: String(limit), offset: String(resetPage ? 0 : page * limit) });
       if (resultFilter) params.set("result", resultFilter);
       if (searchQuery.trim()) params.set("search", searchQuery.trim());
 
@@ -429,7 +426,7 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
       });
       if (res.ok) {
         const data = await res.json();
-        setEvaluations(data.evaluations || []);
+        setEvaluations(resetPage ? data.evaluations : prev => [...prev, ...data.evaluations]);
         setTotal(data.total);
       }
     } catch (err) {
@@ -439,11 +436,11 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
     }
   };
 
-  const fetchReEvaluations = async (explicitPage: number) => {
+  const fetchReEvaluations = async () => {
     setReEvalLoading(true);
     try {
       const token = getAdminToken();
-      const params = new URLSearchParams({ limit: String(reEvalLimit), offset: String(explicitPage * reEvalLimit) });
+      const params = new URLSearchParams({ limit: "50", offset: "0" });
       if (searchQuery.trim()) params.set("search", searchQuery.trim());
 
       const res = await fetch(`${adminApiBase}/api/admin/re-evaluations?${params}`, {
@@ -469,17 +466,22 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
   };
 
   useEffect(() => {
-    fetchEvaluations(0);
-    fetchReEvaluations(0);
+    fetchEvaluations(true);
+    fetchReEvaluations();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resultFilter]);
 
   const handleSearch = () => {
-    fetchEvaluations(0);
-    fetchReEvaluations(0);
+    fetchEvaluations(true);
+    fetchReEvaluations();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => { if (e.key === "Enter") handleSearch(); };
+
+  const handleLoadMore = () => {
+    setPage(p => p + 1);
+    fetchEvaluations(false);
+  };
 
   const toggleExpand = (id: string) => {
     setExpandedId(prev => prev === id ? null : id);
@@ -577,11 +579,13 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
             <option value="RE_EVALUATION_REQUESTED">Re-evaluation Requested</option>
           </select>
         )}
-        <PageSelector
-          total={total}
-          page={evalPage}
-          limit={evalLimit}
-          onPageChange={p => { setEvalPage(p); fetchEvaluations(p); }}
-          onLimitChange={l => { setEvalLimit(l); setEvalPage(0); }}
-          loading={loading}
-        />
+        <select
+          value={limit}
+          onChange={e => { setLimit(Number(e.target.value)); fetchEvaluations(true); }}
+          className={styles.filterSelect}
+          style={{ width: "80px" }}
+        >
+          {[10, 20, 50, 100, 200].map(n => (
+            <option key={n} value={n}>{n} / page</option>
+          ))}
+        </select>

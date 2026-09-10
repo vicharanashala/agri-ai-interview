@@ -449,3 +449,107 @@ async def patch_candidate(request: Request, body: CandidatePatchRequest):
     current_phase = updated_cand.get("current_phase", "onboarding") if updated_cand else None
 
     return CandidatePatchResponse(success=True, currentPhase=current_phase, message="Candidate updated")
+
+# ── Password Reset ────────────────────────────────────────────────────────────
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+@router.post("/forgot-password")
+async def forgot_password(body: ForgotPasswordRequest):
+    email = body.email.lower().strip()
+    db = get_sync_db()
+    user = db.users.find_one({"email": email})
+    
+    # We return success regardless to prevent email enumeration
+    if not user:
+        return {"success": True, "message": "If an account exists with this email, a password reset link has been sent."}
+    
+    import secrets
+    import hashlib
+    import os
+    from datetime import timedelta
+    from app.services.zoho_smtp import zoho_smtp_provider
+    from app.core.config import settings
+
+    # Generate token
+    raw_token = secrets.token_hex(32)
+    hashed_token = hashlib.sha256(raw_token.encode()).hexdigest()
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+
+    # Save to user
+    db.users.update_one(
+        {"_id": user["_id"]},
+        {
+            "$set": {
+                "reset_password_token": hashed_token,
+                "reset_password_expires": expires_at,
+                "updated_at": datetime.now(timezone.utc)
+            }
+        }
+    )
+
+    # Email
+    reset_url = f"{os.getenv('NEXTAUTH_URL', 'http://localhost:3003')}/reset-password?token={raw_token}"
+    subject = "Password Reset Request"
+    body_text = f"You requested a password reset. Click here to reset: {reset_url}\nThis link expires in 1 hour."
+    body_html = f"""
+    <p>You requested a password reset.</p>
+    <p><a href="{reset_url}">Click here to reset your password</a></p>
+    <p>This link expires in 1 hour.</p>
+    """
+    
+    zoho_smtp_provider.send(
+        to=email,
+        subject=subject,
+        body=body_text,
+        html_body=body_html
+    )
+
+    return {"success": True, "message": "If an account exists with this email, a password reset link has been sent."}
+
+@router.post("/reset-password")
+async def reset_password(body: ResetPasswordRequest):
+    import hashlib
+    import bcrypt
+    
+    raw_token = body.token
+    new_password = body.new_password
+    
+    if len(new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters.")
+
+    hashed_token = hashlib.sha256(raw_token.encode()).hexdigest()
+    
+    db = get_sync_db()
+    user = db.users.find_one({
+        "reset_password_token": hashed_token,
+        "reset_password_expires": {"$gt": datetime.now(timezone.utc)}
+    })
+
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token.")
+
+    # Hash new password
+    salt = bcrypt.gensalt()
+    hashed_pw = bcrypt.hashpw(new_password.encode('utf-8'), salt).decode('utf-8')
+
+    db.users.update_one(
+        {"_id": user["_id"]},
+        {
+            "$set": {
+                "password": hashed_pw,
+                "updated_at": datetime.now(timezone.utc)
+            },
+            "$unset": {
+                "reset_password_token": "",
+                "reset_password_expires": ""
+            }
+        }
+    )
+
+    return {"success": True, "message": "Password reset successfully."}

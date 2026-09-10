@@ -20,8 +20,14 @@ export default function LoginPage() {
 }
 
 function LoginPageInner() {
-  // ── View toggle: 'signin' | 'register' ───────────────────────
-  const [view, setView] = useState<'signin' | 'register'>('register');
+  // ── View toggle: 'signin' | 'register' | 'forgot_password' ────────────────
+  const [view, setView] = useState<'signin' | 'register' | 'forgot_password'>('register');
+
+  // ── Forgot Password state ────────────────────────────────────
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotMessage, setForgotMessage] = useState('');
+  const [forgotError, setForgotError] = useState('');
 
   // ── Sign-in state ────────────────────────────────────────────
   const [signInEmail, setSignInEmail] = useState('');
@@ -181,6 +187,39 @@ function LoginPageInner() {
     }
   };
 
+  // ── Forgot Password submit ─────────────────────────────────────
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotError('');
+    setForgotMessage('');
+    setForgotLoading(true);
+
+    try {
+      if (!forgotEmail) {
+        setForgotError('Please enter your email address');
+        setForgotLoading(false);
+        return;
+      }
+
+      const res = await fetch('/api/candidate/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotEmail }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setForgotError(data.detail || data.error || 'Something went wrong.');
+      } else {
+        setForgotMessage(data.message || 'If an account exists with this email, a reset link has been sent.');
+      }
+    } catch {
+      setForgotError('Network error. Please try again.');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
   return (
     <main className={styles.page}>
       {/* ─── Left panel: Info & Branding ─────────────────── */}
@@ -313,20 +352,22 @@ function LoginPageInner() {
           </div>
 
           {/* ─── View toggle tabs ───────────────────────────────── */}
-          <div className={styles.viewTabs}>
-            <button
-              className={`${styles.viewTab} ${view === 'signin' ? styles.viewTabActive : ''}`}
-              onClick={() => { setView('signin'); setSignInError(''); }}
-            >
-              Sign In
-            </button>
-            <button
-              className={`${styles.viewTab} ${view === 'register' ? styles.viewTabActive : ''}`}
-              onClick={() => { setView('register'); setRegError(''); }}
-            >
-              Create Account
-            </button>
-          </div>
+          {view !== 'forgot_password' && (
+            <div className={styles.viewTabs}>
+              <button
+                className={`${styles.viewTab} ${view === 'signin' ? styles.viewTabActive : ''}`}
+                onClick={() => { setView('signin'); setSignInError(''); }}
+              >
+                Sign In
+              </button>
+              <button
+                className={`${styles.viewTab} ${view === 'register' ? styles.viewTabActive : ''}`}
+                onClick={() => { setView('register'); setRegError(''); }}
+              >
+                Create Account
+              </button>
+            </div>
+          )}
 
           {/* ══════════ SIGN IN ══════════ */}
           {view === 'signin' && (
@@ -386,9 +427,16 @@ function LoginPageInner() {
                   </button>
                 </div>
               </div>
+              <div style={{ textAlign: 'center', marginTop: '16px', marginBottom: '8px' }}>
+                <span onClick={() => { setView('forgot_password'); setForgotError(''); setForgotMessage(''); }} className={styles.link} style={{ fontSize: '0.9rem', textDecoration: 'underline', cursor: 'pointer' }}>
+                  Forgot your password?
+                </span>
+              </div>
 
               {signInError && <p className={styles.error}>{signInError}</p>}
               {isIdleTimeout && <p className={styles.idleNotice}>Your session expired due to inactivity. Please sign in again.</p>}
+
+
 
               <button type="submit" className={styles.button} disabled={signInLoading}>
                 {signInLoading ? 'Signing in...' : 'Sign In'}
@@ -534,6 +582,51 @@ function LoginPageInner() {
               </p>
             </form>
           )}
+            </>
+          )}
+
+          {/* ══════════ FORGOT PASSWORD ══════════ */}
+          {view === 'forgot_password' && (
+            <>
+              <p className={styles.subtitle}>
+                Enter your email address and we will send you a link to reset your password.
+              </p>
+
+              <form onSubmit={handleForgotPassword} className={styles.form} autoComplete="on">
+                <div className={styles.field}>
+                  <label htmlFor="forgot-email" className={styles.label}>Email</label>
+                  <div className={styles.inputContainer}>
+                    <svg className={styles.inputIcon} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                      <polyline points="22,6 12,13 2,6"/>
+                    </svg>
+                    <input
+                      type="email"
+                      id="forgot-email"
+                      value={forgotEmail}
+                      onChange={e => setForgotEmail(e.target.value)}
+                      className={styles.input}
+                      placeholder="you@example.com"
+                      autoComplete="email"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {forgotError && <p className={styles.error}>{forgotError}</p>}
+                {forgotMessage && <p className={styles.success} style={{ color: 'green', fontSize: '0.9rem', marginBottom: '16px' }}>{forgotMessage}</p>}
+
+                <button type="submit" className={styles.button} disabled={forgotLoading}>
+                  {forgotLoading ? 'Sending link...' : 'Send Reset Link'}
+                </button>
+
+                <p className={styles.footer}>
+                  Remembered your password?{' '}
+                  <span className={styles.link} onClick={() => setView('signin')}>
+                    Sign in
+                  </span>
+                </p>
+              </form>
             </>
           )}
         </div>

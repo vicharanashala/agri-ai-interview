@@ -153,9 +153,6 @@ export default function AdminDashboard() {
   // Data states
   const [activeInterviews, setActiveInterviews] = useState<ActiveInterview[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
-  const [candidateTotal, setCandidateTotal] = useState(0);
-  const [candidatePage, setCandidatePage] = useState(0);
-  const [candidateLimit, setCandidateLimit] = useState(10);
   const [guidelines, setGuidelines] = useState<Guidelines[]>([]);
   const [criteria, setCriteria] = useState<EvaluationCriteria[]>([]);
 
@@ -192,9 +189,6 @@ export default function AdminDashboard() {
   
   const [geoStats, setGeoStats] = useState<any>(null);
   const [violations, setViolations] = useState<any[]>([]);
-  const [violationsTotal, setViolationsTotal] = useState(0);
-  const [violationsPage, setViolationsPage] = useState(0);
-  const [violationsLimit, setViolationsLimit] = useState(10);
   const [violationsLoading, setViolationsLoading] = useState(false);
   const [uniqueStates, setUniqueStates] = useState<string[]>([]);
   const [stateFunnel, setStateFunnel] = useState<{states: any[]; totalStates: number} | null>(null);
@@ -291,7 +285,7 @@ export default function AdminDashboard() {
       } else if (target === "anti-cheat") {
         calls.push(
           loadStats().catch(err => console.error("loadStats error:", err)),
-          loadViolations(false).catch(err => console.error("loadViolations error:", err)),
+          loadViolations().catch(err => console.error("loadViolations error:", err)),
         );
       } else if (target === "documents") {
         calls.push(
@@ -335,7 +329,7 @@ export default function AdminDashboard() {
     }
   };
 
-  const loadCandidates = async (resetPage = true) => {
+  const loadCandidates = async () => {
     try {
       const params = new URLSearchParams();
       if (searchQuery) params.append("search", searchQuery);
@@ -343,21 +337,10 @@ export default function AdminDashboard() {
       if (stateFilter) params.append("state", stateFilter);
       if (districtFilter) params.append("district", districtFilter);
       if (interviewStatusFilter) params.append("interviewStatus", interviewStatusFilter);
-      const limit = resetPage ? candidateLimit : candidateLimit;
-      const offset = resetPage ? 0 : candidatePage * candidateLimit;
-      params.append("limit", String(limit));
-      params.append("offset", String(offset));
       const res = await withAuth(`/api/admin/candidates?${params}`);
       if (res.ok) {
         const data = await res.json();
-        if (resetPage) {
-          setCandidates(data.candidates || []);
-          setCandidatePage(1);
-        } else {
-          setCandidates(prev => [...prev, ...(data.candidates || [])]);
-          setCandidatePage(p => p + 1);
-        }
-        setCandidateTotal(data.total ?? 0);
+        setCandidates(data.candidates || []);
       }
     } catch (err) {
       console.error("Failed to load candidates:", err);
@@ -528,21 +511,13 @@ export default function AdminDashboard() {
     }
   }, [activeTab, candidates]);
 
-  const loadViolations = async (loadMore = false) => {
+  const loadViolations = async () => {
     setViolationsLoading(true);
     try {
-      const offset = loadMore ? violationsPage * violationsLimit : 0;
-      const res = await withAuth(`/api/admin/anti-cheat/violations?limit=${violationsLimit}&offset=${offset}`);
+      const res = await withAuth("/api/admin/anti-cheat/violations");
       if (res.ok) {
         const data = await res.json();
-        if (loadMore) {
-          setViolations(prev => [...prev, ...(data.violations || [])]);
-          setViolationsPage(p => p + 1);
-        } else {
-          setViolations(data.violations || []);
-          setViolationsPage(1);
-        }
-        setViolationsTotal(data.total ?? 0);
+        setViolations(data.violations || []);
       }
     } catch (err) {
       console.error("Failed to load violations:", err);
@@ -854,7 +829,7 @@ export default function AdminDashboard() {
           className={`${styles.tab} ${activeTab === "candidates" ? styles.activeTab : ""}`}
           onClick={() => setActiveTab("candidates")}
         >
-          👥 All Candidates ({candidateTotal})
+          👥 All Candidates ({candidates.length})
         </button>
         <button
           className={`${styles.tab} ${activeTab === "analytics" ? styles.activeTab : ""}`}
@@ -919,16 +894,6 @@ export default function AdminDashboard() {
                 className={styles.searchInput}
               />
               <select
-                value={candidateLimit}
-                onChange={(e) => { setCandidateLimit(Number(e.target.value)); loadCandidates(true); }}
-                className={styles.phaseSelect}
-                style={{ width: "80px" }}
-              >
-                {[10, 20, 50, 100, 200].map(n => (
-                  <option key={n} value={n}>{n} / page</option>
-                ))}
-              </select>
-              <select
                 value={phaseFilter}
                 onChange={(e) => setPhaseFilter(e.target.value)}
                 className={styles.phaseSelect}
@@ -983,102 +948,90 @@ export default function AdminDashboard() {
                 <p>No candidates found</p>
               </div>
             ) : (
-              <>
-                <div className={styles.candidatesTable}>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Name</th>
-                        <th>Email</th>
-                        <th>Phone</th>
-                        <th>State</th>
-                        <th>Current Phase</th>
-                        <th>Phase Progress</th>
-                        <th>Attempts</th>
-                        <th>Resume</th>
-                        <th>Created</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {candidates.map((candidate) => (
-                        <tr key={candidate.id}>
-                          <td>{candidate.fullName || "-"}</td>
-                          <td>{candidate.email || "-"}</td>
-                          <td>{candidate.phone || "-"}</td>
-                          <td>{candidate.state || "-"}</td>
-                          <td>
-                            <span className={styles.phaseBadge}>
-                              {PHASE_LABELS[candidate.currentPhase] || candidate.currentPhase}
-                            </span>
-                          </td>
-                          <td>
-                            <div className={styles.phaseProgress}>
-                              {(candidate.phases || []).map((p, idx) => (
-                                <div
-                                  key={idx}
-                                  className={`${styles.phaseDot} ${
-                                    p.status === "completed" ? styles.phaseCompleted :
-                                    p.status === "in_progress" ? styles.phaseActive : ""
-                                  }`}
-                                  title={`${PHASE_LABELS[p.phase] || p.phase}: ${p.status}`}
-                                />
-                              ))}
+              <div className={styles.candidatesTable}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Email</th>
+                      <th>Phone</th>
+                      <th>State</th>
+                      <th>Current Phase</th>
+                      <th>Phase Progress</th>
+                      <th>Attempts</th>
+                      <th>Resume</th>
+                      <th>Created</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {candidates.map((candidate) => (
+                      <tr key={candidate.id}>
+                        <td>{candidate.fullName || "-"}</td>
+                        <td>{candidate.email || "-"}</td>
+                        <td>{candidate.phone || "-"}</td>
+                        <td>{candidate.state || "-"}</td>
+                        <td>
+                          <span className={styles.phaseBadge}>
+                            {PHASE_LABELS[candidate.currentPhase] || candidate.currentPhase}
+                          </span>
+                        </td>
+                        <td>
+                          <div className={styles.phaseProgress}>
+                            {(candidate.phases || []).map((p, idx) => (
+                              <div
+                                key={idx}
+                                className={`${styles.phaseDot} ${
+                                  p.status === "completed" ? styles.phaseCompleted :
+                                  p.status === "in_progress" ? styles.phaseActive : ""
+                                }`}
+                                title={`${PHASE_LABELS[p.phase] || p.phase}: ${p.status}`}
+                              />
+                            ))}
+                          </div>
+                        </td>
+                        <td>
+                          <span className={styles.phaseBadge}>
+                            {candidate.attemptsDone}/{candidate.maxAttempts}
+                          </span>
+                        </td>
+                        <td>
+                          {candidateResumes[candidate.id] ? (
+                            <div style={{ display: "flex", gap: "4px" }}>
+                              <button
+                                onClick={() => handlePreviewResume(candidateResumes[candidate.id]!)}
+                                style={{ padding: "2px 8px", fontSize: "12px", cursor: "pointer" }}
+                                title="Preview resume"
+                              >
+                                👁 Preview
+                              </button>
+                              <button
+                                onClick={() => candidateResumes[candidate.id]?.parsedData
+                                  ? setMatchModal({ open: true, candidateId: candidate.id, candidateName: candidate.fullName || candidate.email || "", role: "frontend_engineer" })
+                                  : null
+                                }
+                                style={{ padding: "2px 8px", fontSize: "12px", cursor: candidateResumes[candidate.id]?.parsedData ? "pointer" : "not-allowed", opacity: candidateResumes[candidate.id]?.parsedData ? 1 : 0.4 }}
+                                title={candidateResumes[candidate.id]?.parsedData ? "Match skills to a role" : "Resume not yet parsed"}
+                              >
+                                🔗 Match
+                              </button>
+                              <button
+                                onClick={() => handleDownloadResume(candidateResumes[candidate.id]!)}
+                                style={{ padding: "2px 8px", fontSize: "12px", cursor: "pointer" }}
+                                title="Download resume"
+                              >
+                                ⬇ Download
+                              </button>
                             </div>
-                          </td>
-                          <td>
-                            <span className={styles.phaseBadge}>
-                              {candidate.attemptsDone}/{candidate.maxAttempts}
-                            </span>
-                          </td>
-                          <td>
-                            {candidateResumes[candidate.id] ? (
-                              <div style={{ display: "flex", gap: "4px" }}>
-                                <button
-                                  onClick={() => handlePreviewResume(candidateResumes[candidate.id]!)}
-                                  style={{ padding: "2px 8px", fontSize: "12px", cursor: "pointer" }}
-                                  title="Preview resume"
-                                >
-                                  👁 Preview
-                                </button>
-                                <button
-                                  onClick={() => candidateResumes[candidate.id]?.parsedData
-                                    ? setMatchModal({ open: true, candidateId: candidate.id, candidateName: candidate.fullName || candidate.email || "", role: "frontend_engineer" })
-                                    : null
-                                  }
-                                  style={{ padding: "2px 8px", fontSize: "12px", cursor: candidateResumes[candidate.id]?.parsedData ? "pointer" : "not-allowed", opacity: candidateResumes[candidate.id]?.parsedData ? 1 : 0.4 }}
-                                  title={candidateResumes[candidate.id]?.parsedData ? "Match skills to a role" : "Resume not yet parsed"}
-                                >
-                                  🔗 Match
-                                </button>
-                                <button
-                                  onClick={() => handleDownloadResume(candidateResumes[candidate.id]!)}
-                                  style={{ padding: "2px 8px", fontSize: "12px", cursor: "pointer" }}
-                                  title="Download resume"
-                                >
-                                  ⬇ Download
-                                </button>
-                              </div>
-                            ) : (
-                              <span style={{ color: "#999", fontSize: "12px" }}>—</span>
-                            )}
-                          </td>
-                          <td>{candidate.createdAt ? new Date(candidate.createdAt).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }) : "-"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {candidates.length < candidateTotal && (
-                  <div style={{ display: "flex", justifyContent: "center", marginTop: "16px" }}>
-                    <button
-                      onClick={() => loadCandidates(false)}
-                      className={styles.searchBtn}
-                    >
-                      Load More ({candidateTotal - candidates.length} remaining)
-                    </button>
-                  </div>
-                )}
-              </>
+                          ) : (
+                            <span style={{ color: "#999", fontSize: "12px" }}>—</span>
+                          )}
+                        </td>
+                        <td>{candidate.createdAt ? new Date(candidate.createdAt).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }) : "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         )}
@@ -1681,75 +1634,50 @@ export default function AdminDashboard() {
         {/* Anti-Cheat Tab */}
         {activeTab === "anti-cheat" && (
           <div className={styles.antiCheatContainer}>
-            <h2 className={styles.antiCheatTitle}>🛡️ Anti-Cheat Violations ({violationsTotal})</h2>
-            <div className={styles.filters} style={{ marginBottom: "12px" }}>
-              <select
-                value={violationsLimit}
-                onChange={(e) => { setViolationsLimit(Number(e.target.value)); loadViolations(false); }}
-                className={styles.phaseSelect}
-                style={{ width: "80px" }}
-              >
-                {[10, 20, 50, 100, 200].map(n => (
-                  <option key={n} value={n}>{n} / page</option>
-                ))}
-              </select>
-            </div>
+            <h2 className={styles.antiCheatTitle}>🛡️ Anti-Cheat Violations</h2>
             {violationsLoading && violations.length === 0 ? (
               <p>Loading...</p>
             ) : violations.length === 0 ? (
               <p className={styles.noDataMessage}>No violations recorded yet.</p>
             ) : (
-              <>
-                <div className={styles.violationsTable}>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Candidate</th>
-                        <th>Email</th>
-                        <th>Violation</th>
-                        <th>Severity</th>
-                        <th>Auto-Closed</th>
-                        <th>Time</th>
+              <div className={styles.violationsTable}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Candidate</th>
+                      <th>Email</th>
+                      <th>Violation</th>
+                      <th>Severity</th>
+                      <th>Auto-Closed</th>
+                      <th>Time</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {violations.map((v: any) => (
+                      <tr key={v.id}>
+                        <td>{v.candidateName}</td>
+                        <td>{v.email}</td>
+                        <td>
+                          <span className={styles.violationBadge}>
+                            {v.eventType.replace(/_/g, " ")}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={v.severity === "critical" ? styles.severityCritical : styles.severityWarning}>
+                            {v.severity}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={v.autoClosed ? styles.autoClosedYes : styles.autoClosedNo}>
+                            {v.autoClosed ? "🔴 Yes" : "—"}
+                          </span>
+                        </td>
+                        <td>{v.createdAt ? new Date(v.createdAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"}</td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {violations.map((v: any) => (
-                        <tr key={v.id}>
-                          <td>{v.candidateName}</td>
-                          <td>{v.email}</td>
-                          <td>
-                            <span className={styles.violationBadge}>
-                              {v.eventType.replace(/_/g, " ")}
-                            </span>
-                          </td>
-                          <td>
-                            <span className={v.severity === "critical" ? styles.severityCritical : styles.severityWarning}>
-                              {v.severity}
-                            </span>
-                          </td>
-                          <td>
-                            <span className={v.autoClosed ? styles.autoClosedYes : styles.autoClosedNo}>
-                              {v.autoClosed ? "🔴 Yes" : "—"}
-                            </span>
-                          </td>
-                          <td>{v.createdAt ? new Date(v.createdAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {violations.length < violationsTotal && (
-                  <div style={{ display: "flex", justifyContent: "center", marginTop: "16px" }}>
-                    <button
-                      onClick={() => loadViolations(true)}
-                      className={styles.searchBtn}
-                      disabled={violationsLoading}
-                    >
-                      {violationsLoading ? "Loading..." : `Load More (${violationsTotal - violations.length} remaining)`}
-                    </button>
-                  </div>
-                )}
-              </>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         )}

@@ -577,27 +577,11 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
             <option value="RE_EVALUATION_REQUESTED">Re-evaluation Requested</option>
           </select>
         )}
-        <div style={{ flex: 1 }} />
-        {activeSubTab === 'evaluations' ? (
-          <PageSelector
-            total={total}
-            page={evalPage}
-            limit={evalLimit}
-            onPageChange={p => { setEvalPage(p); fetchEvaluations(p); }}
-            onLimitChange={l => { setEvalLimit(l); setEvalPage(0); fetchEvaluations(0); }}
-            loading={loading}
-          />
-        ) : (
-          <PageSelector
-            total={reEvalTotal}
-            page={reEvalPage}
-            limit={reEvalLimit}
-            onPageChange={p => { setReEvalPage(p); fetchReEvaluations(p); }}
-            onLimitChange={l => { setReEvalLimit(l); setReEvalPage(0); fetchReEvaluations(0); }}
-            loading={reEvalLoading}
-          />
-        )}
-      </div>
-    </div>
-  );
-}
+        <PageSelector
+          total={total}
+          page={evalPage}
+          limit={evalLimit}
+          onPageChange={p => { setEvalPage(p); fetchEvaluations(p); }}
+          onLimitChange={l => { setEvalLimit(l); setEvalPage(0); }}
+          loading={loading}
+        />

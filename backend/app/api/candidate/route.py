@@ -467,7 +467,7 @@ async def forgot_password(body: ForgotPasswordRequest):
     
     # We return success regardless to prevent email enumeration
     if not user:
-        return {"success": True, "message": "If an account exists with this email, a password reset link has been sent."}
+        return {"success": True, "message": "Your password reset link has been sent."}
     
     import secrets
     import hashlib
@@ -510,7 +510,7 @@ async def forgot_password(body: ForgotPasswordRequest):
         html_body=body_html
     )
 
-    return {"success": True, "message": "If an account exists with this email, a password reset link has been sent."}
+    return {"success": True, "message": "Your password reset link has been sent."}
 
 @router.post("/reset-password")
 async def reset_password(body: ResetPasswordRequest):

@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from "react";
 import styles from "./EvaluationsTab.module.css";
-import PageSelector from "./PageSelector";
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -403,8 +402,8 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
   const [resultFilter, setResultFilter] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [evalPage, setEvalPage] = useState(0);
-  const [evalLimit, setEvalLimit] = useState(10);
+  const [page, setPage] = useState(0);
+  const LIMIT = 20;
 
   // Re-evaluations state
   const [reEvaluations, setReEvaluations] = useState<ReEvaluationItem[]>([]);
@@ -412,14 +411,12 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
   const [reEvalTotal, setReEvalTotal] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
   const [revaluatingIds, setRevaluatingIds] = useState<Set<string>>(new Set());
-  const [reEvalPage, setReEvalPage] = useState(0);
-  const [reEvalLimit, setReEvalLimit] = useState(10);
 
-  const fetchEvaluations = async (explicitPage: number) => {
+  const fetchEvaluations = async (resetPage = false) => {
     setLoading(true);
     try {
       const token = getAdminToken();
-      const params = new URLSearchParams({ limit: String(evalLimit), offset: String(explicitPage * evalLimit) });
+      const params = new URLSearchParams({ limit: String(LIMIT), offset: String(resetPage ? 0 : page * LIMIT) });
       if (resultFilter) params.set("result", resultFilter);
       if (searchQuery.trim()) params.set("search", searchQuery.trim());
 
@@ -429,7 +426,7 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
       });
       if (res.ok) {
         const data = await res.json();
-        setEvaluations(data.evaluations || []);
+        setEvaluations(resetPage ? data.evaluations : prev => [...prev, ...data.evaluations]);
         setTotal(data.total);
       }
     } catch (err) {
@@ -439,11 +436,11 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
     }
   };
 
-  const fetchReEvaluations = async (explicitPage: number) => {
+  const fetchReEvaluations = async () => {
     setReEvalLoading(true);
     try {
       const token = getAdminToken();
-      const params = new URLSearchParams({ limit: String(reEvalLimit), offset: String(explicitPage * reEvalLimit) });
+      const params = new URLSearchParams({ limit: "50", offset: "0" });
       if (searchQuery.trim()) params.set("search", searchQuery.trim());
 
       const res = await fetch(`${adminApiBase}/api/admin/re-evaluations?${params}`, {
@@ -469,17 +466,22 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
   };
 
   useEffect(() => {
-    fetchEvaluations(0);
-    fetchReEvaluations(0);
+    fetchEvaluations(true);
+    fetchReEvaluations();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resultFilter]);
 
   const handleSearch = () => {
-    fetchEvaluations(0);
-    fetchReEvaluations(0);
+    fetchEvaluations(true);
+    fetchReEvaluations();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => { if (e.key === "Enter") handleSearch(); };
+
+  const handleLoadMore = () => {
+    setPage(p => p + 1);
+    fetchEvaluations(false);
+  };
 
   const toggleExpand = (id: string) => {
     setExpandedId(prev => prev === id ? null : id);
@@ -577,27 +579,266 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
             <option value="RE_EVALUATION_REQUESTED">Re-evaluation Requested</option>
           </select>
         )}
-        <div style={{ flex: 1 }} />
-        {activeSubTab === 'evaluations' ? (
-          <PageSelector
-            total={total}
-            page={evalPage}
-            limit={evalLimit}
-            onPageChange={p => { setEvalPage(p); fetchEvaluations(p); }}
-            onLimitChange={l => { setEvalLimit(l); setEvalPage(0); fetchEvaluations(0); }}
-            loading={loading}
-          />
-        ) : (
-          <PageSelector
-            total={reEvalTotal}
-            page={reEvalPage}
-            limit={reEvalLimit}
-            onPageChange={p => { setReEvalPage(p); fetchReEvaluations(p); }}
-            onLimitChange={l => { setReEvalLimit(l); setReEvalPage(0); fetchReEvaluations(0); }}
-            loading={reEvalLoading}
-          />
-        )}
+        <button onClick={handleSearch} className={styles.searchBtn}>Search</button>
+
+        {/* Sub-tab navigation before total count */}
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "8px" }}>
+          <button
+            className={`${styles.subTabBtn} ${activeSubTab === 'evaluations' ? styles.activeSubTabBtn : ''}`}
+            onClick={() => setActiveSubTab('evaluations')}
+          >
+            📋 All Evaluations
+          </button>
+          <button
+            className={`${styles.subTabBtn} ${activeSubTab === 're-evaluations' ? styles.activeSubTabBtn : ''}`}
+            onClick={() => setActiveSubTab('re-evaluations')}
+          >
+            🔄 Re-evaluation Requests ({pendingCount})
+          </button>
+          <span className={styles.totalCount}>
+            {activeSubTab === 'evaluations' ? `${total} total` : `${reEvalTotal} requests`}
+          </span>
+        </div>
       </div>
+
+      {/* Main Evaluations Table */}
+      {activeSubTab === 'evaluations' && (
+        <>
+          {loading && evaluations.length === 0 ? (
+            <div className={styles.loading}>Loading evaluations…</div>
+          ) : evaluations.length === 0 ? (
+            <div className={styles.empty}>
+              <div className={styles.emptyIcon}>📋</div>
+              <h3>No Evaluations Yet</h3>
+              <p>Completed interview evaluations will appear here</p>
+            </div>
+          ) : (
+            <>
+              <div className={styles.tableWrapper}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th style={{ width: 32 }}></th>
+                      <th>Candidate</th>
+                      <th>Result</th>
+                      <th>Score</th>
+                      <th>End Reason</th>
+                      <th>Attempt</th>
+                      <th>Completed</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {evaluations.map(evaluation => (
+                      <React.Fragment key={evaluation.id}>
+                        <tr
+                          className={`${styles.row} ${expandedId === evaluation.id ? styles.rowExpanded : ""}`}
+                          onClick={() => toggleExpand(evaluation.id)}
+                        >
+                          <td>
+                            <span className={styles.expandIcon}>
+                              {expandedId === evaluation.id ? "▼" : "▶"}
+                            </span>
+                          </td>
+                          <td>
+                            <div className={styles.candidateCell}>
+                              <span className={styles.candidateName}>{evaluation.candidateName}</span>
+                              {evaluation.email && (
+                                <span className={styles.candidateEmail}>{evaluation.email}</span>
+                              )}
+                            </div>
+                          </td>
+                          <td>
+                            <span className={`${styles.resultBadge} ${resultClass(evaluation.result)}`}>
+                              {resultBadge(evaluation.result)}
+                            </span>
+                          </td>
+                          <td>
+                            {evaluation.score != null ? (
+                              <div className={styles.scoreCell}>
+                                <span className={styles.scoreNum} style={{ color: evaluation.result === 'PASS' ? '#4ade80' : '#f87171' }}>
+                                  {evaluation.score}
+                                </span>
+                                <span className={styles.scoreMax}>/100</span>
+                              </div>
+                            ) : "—"}
+                          </td>
+                          <td>
+                            <span className={styles.endReasonBadge}>{endReasonLabel(evaluation.endReason)}</span>
+                          </td>
+                          <td>
+                            <span className={styles.attemptBadge}>{evaluation.attempt}/{3}</span>
+                          </td>
+                          <td>
+                            <span className={styles.dateCell}>{formatDate(evaluation.completedAt)}</span>
+                          </td>
+                        </tr>
+                        {expandedId === evaluation.id && (
+                          <ExpandedRow
+                            interviewId={evaluation.id}
+                            candidateId={evaluation.candidateId}
+                            candidateName={evaluation.candidateName}
+                            result={evaluation.result}
+                            messages={evaluation.messages}
+                            evaluation={evaluation.evaluation}
+                            adminApiBase={adminApiBase}
+                            getAdminToken={getAdminToken}
+                            onReevaluate={handleReevaluate}
+                            colSpan={7}
+                          />
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {evaluations.length < total && (
+                <div style={{ textAlign: "center", marginTop: "16px" }}>
+                  <button onClick={handleLoadMore} className={styles.searchBtn} disabled={loading}>
+                    {loading ? "Loading..." : "Load More"}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}
+
+      {/* Re-evaluation Requests Table */}
+      {activeSubTab === 're-evaluations' && (
+        <>
+          {reEvalLoading ? (
+            <div className={styles.loading}>Loading re-evaluation requests…</div>
+          ) : reEvaluations.length === 0 ? (
+            <div className={styles.empty}>
+              <div className={styles.emptyIcon}>🔄</div>
+              <h3>No Re-evaluation Requests</h3>
+              <p>Candidate requests for interview re-evaluation will appear here</p>
+            </div>
+          ) : (
+            <div className={styles.tableWrapper}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th style={{ width: 32 }}></th>
+                    <th>Candidate Name</th>
+                    <th>Result</th>
+                    <th>Mark</th>
+                    <th>Attempt Number</th>
+                    <th>Requested Date</th>
+                    <th>Revaluation Status</th>
+                    <th>Reason for Revaluation</th>
+                    <th>Result After Revaluation</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reEvaluations.map(item => (
+                    <React.Fragment key={item.id}>
+                      <tr
+                        className={`${styles.row} ${expandedId === item.id ? styles.rowExpanded : ""}`}
+                        onClick={() => toggleExpand(item.id)}
+                      >
+                        <td>
+                          <span className={styles.expandIcon}>
+                            {expandedId === item.id ? "▼" : "▶"}
+                          </span>
+                        </td>
+                        <td>
+                          <div className={styles.candidateCell}>
+                            <span className={styles.candidateName}>{item.candidateName}</span>
+                            {item.email && <span className={styles.candidateEmail}>{item.email}</span>}
+                          </div>
+                        </td>
+                        <td>
+                          <span className={`${styles.resultBadge} ${resultClass(item.result)}`}>
+                            {resultBadge(item.result)}
+                          </span>
+                        </td>
+                        <td>
+                          {item.score != null ? (
+                            <div className={styles.scoreCell}>
+                              <span className={styles.scoreNum} style={{ color: item.result === 'PASS' ? '#4ade80' : '#f87171' }}>
+                                {item.score}
+                              </span>
+                              <span className={styles.scoreMax}>/100</span>
+                            </div>
+                          ) : "—"}
+                        </td>
+                        <td>
+                          <span className={styles.attemptBadge}>{item.attempt}/{3}</span>
+                        </td>
+                        <td>
+                          <span className={styles.dateCell}>{formatDate(item.requestedAt)}</span>
+                        </td>
+                        <td>
+                          <span className={item.status === 'completed' ? styles.statusCompleted : styles.statusRequested}>
+                            {item.status === 'completed' ? '✓ Completed' : '🔄 Requested'}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={styles.reasonText}>
+                            {item.reason.length > 35 ? item.reason.slice(0, 35) + "…" : item.reason}
+                          </span>
+                        </td>
+                        <td>
+                          {item.status === 'completed' && item.scoreAfter != null ? (
+                            <div className={styles.scoreCell}>
+                              <span className={styles.scoreNum} style={{ color: item.resultAfter === 'PASS' ? '#4ade80' : '#f87171' }}>
+                                {item.scoreAfter}
+                              </span>
+                              <span className={styles.scoreMax}>/100 ({item.resultAfter})</span>
+                            </div>
+                          ) : (
+                            <span style={{ color: '#999', fontSize: '12px' }}>—</span>
+                          )}
+                        </td>
+                        <td>
+                          {item.status === 'pending' ? (
+                            <button
+                              onClick={(e) => handleReevaluateDirect(item.interviewId, item.candidateName, e)}
+                              disabled={revaluatingIds.has(item.interviewId)}
+                              style={{
+                                padding: "4px 12px",
+                                fontSize: "12px",
+                                background: revaluatingIds.has(item.interviewId) ? "#9ca3af" : "#f59e0b",
+                                color: "white",
+                                border: "none",
+                                borderRadius: "6px",
+                                cursor: revaluatingIds.has(item.interviewId) ? "not-allowed" : "pointer",
+                                fontWeight: 600,
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {revaluatingIds.has(item.interviewId) ? "⏳ Revaluating..." : "🔄 Re-evaluate"}
+                            </button>
+                          ) : (
+                            <span style={{ color: "#10b981", fontSize: "12px", fontWeight: 600 }}>✓ Done</span>
+                          )}
+                        </td>
+                      </tr>
+                      {expandedId === item.id && (
+                        <ExpandedRow
+                          interviewId={item.interviewId}
+                          candidateId={item.candidateId}
+                          candidateName={item.candidateName}
+                          result={item.result}
+                          messages={item.messages}
+                          evaluation={item.evaluation}
+                          adminApiBase={adminApiBase}
+                          getAdminToken={getAdminToken}
+                          onReevaluate={handleReevaluateReEvalItem}
+                          reEvaluationReason={item.reason}
+                          colSpan={10}
+                        />
+                      )}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import PageSelector from './PageSelector';
 
 interface CandidateRow {
   id: string;
@@ -26,9 +25,6 @@ const PASS_PHASES = ['documents', 'offer', 'signing', 'joining'];
 export default function DocumentsTab({ adminToken }: Props) {
   const [candidates, setCandidates] = useState<CandidateRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(0);
-  const [limit, setLimit] = useState(10);
   const [downloading, setDownloading] = useState<string | null>(null);
 
   const withAuth = useCallback((url: string, opts: RequestInit = {}): Promise<Response> => {
@@ -38,28 +34,6 @@ export default function DocumentsTab({ adminToken }: Props) {
     if (adminToken) headers['X-Admin-Token'] = adminToken;
     return fetch(url, { ...opts, headers, credentials: 'include' });
   }, [adminToken]);
-
-  const loadCandidates = useCallback(async (explicitPage: number) => {
-    setLoading(true);
-    try {
-      const offset = explicitPage * limit;
-      const params = new URLSearchParams({
-        phases: PASS_PHASES.join(','),
-        limit: String(limit),
-        offset: String(offset),
-      });
-      const res = await withAuth(`/api/admin/candidates?${params}`);
-      if (res.ok) {
-        const data = await res.json();
-        setCandidates(data.candidates || []);
-        setTotal(data.total ?? 0);
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  }, [withAuth, limit]);
 
   const downloadZip = useCallback(async (candidateId: string, fullName: string | null) => {
     setDownloading(candidateId);
@@ -93,9 +67,25 @@ export default function DocumentsTab({ adminToken }: Props) {
   }, [withAuth]);
 
   useEffect(() => {
-    loadCandidates(0);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [limit]);
+    const load = async () => {
+      setLoading(true);
+      try {
+        const res = await withAuth('/api/admin/candidates');
+        if (res.ok) {
+          const data = await res.json();
+          const passed = (data.candidates || []).filter(
+            (c: CandidateRow) => PASS_PHASES.includes(c.currentPhase)
+          );
+          setCandidates(passed);
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, [withAuth]);
 
   return (
     <div style={{ padding: '24px' }}>
@@ -103,24 +93,11 @@ export default function DocumentsTab({ adminToken }: Props) {
         Candidate Documents
       </h2>
 
-      {/* Pagination */}
-      <div style={{ marginBottom: '16px' }}>
-        <PageSelector
-          total={total}
-          page={page}
-          limit={limit}
-          onPageChange={p => { setPage(p); loadCandidates(p); }}
-          onLimitChange={l => { setLimit(l); setPage(0); loadCandidates(0); }}
-          loading={loading}
-        />
-      </div>
-
-      {loading && candidates.length === 0 ? (
+      {loading ? (
         <div>Loading...</div>
       ) : candidates.length === 0 ? (
         <div>No candidates found</div>
       ) : (
-        <>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
           <thead>
             <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
@@ -231,7 +208,6 @@ export default function DocumentsTab({ adminToken }: Props) {
             })}
           </tbody>
         </table>
-</>
       )}
     </div>
   );

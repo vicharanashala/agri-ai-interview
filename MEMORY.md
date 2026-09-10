@@ -43,23 +43,19 @@ _Last updated: 2026-06-04_
 
 ---
 
-## Candidate Pipeline — 6 Phases (ACTUAL)
+## Candidate Pipeline — 6 Phases (FINAL)
 
 Agri AI Interview Platform handles end-to-end hiring for an **agri internship** program. Single interview type for all candidates. Fully automated pass/fail evaluation. Anti-cheat system with admin-controlled reset.
 
-The pipeline has **6 phases** (confirmed from backend code):
-
-```python
-_PHASE_MAP = {1: "onboarding", 2: "interview", 3: "summary", 4: "foundation", 5: "documents"}
-```
+The pipeline has exactly **6 phases**:
 
 | # | Phase | Description |
 |---|-------|-------------|
 | 1 | **Onboarding** | Fill form + upload resume → Account activated |
-| 2 | **Interview** | View profile, past attempts, start interview |
+| 2 | **Interview Dashboard** | View profile, past attempts, start interview |
 | 3 | **Summary** | View evaluation result + score |
-| 4 | **Foundation** | Complete foundation course |
-| 5 | **Documents** | Submit required documents |
+| 4 | **Offer Letter** | View & download offer letter |
+| 5 | **Signing** | Accept & sign offer letter |
 | 6 | **Joining** | View joining details |
 
 **Live interview** is part of Phase 2 — clicking [Start Interview] opens the live chat. After interview ends, candidate lands on Phase 3 (Summary).
@@ -199,7 +195,7 @@ After interview ends, LLM evaluates using:
 **Candidate sees:** PASS or FAIL + score + end reason + outcome-specific next steps
 
 **FAIL:** Cooldown countdown shown — "Come after [X] days"
-**PASS:** Message says "Congratulations! Proceed to Foundation Course."
+**PASS:** Message says "Congratulations! Proceed to view your offer letter."
 
 ---
 
@@ -209,35 +205,51 @@ After interview ends, LLM evaluates using:
 |---|---------|----------|
 | ✉ 1 | Account activated (after onboarding) | Welcome message |
 | ✉ 2 | Evaluation complete | Result (PASS/FAIL) + score + end reason + cooldown info for fail |
-| ✉ 3 | Documents submitted | Joining details PDF (attached) |
+| ✉ 3 | Offer letter signed | Offer letter PDF + joining details PDF (attached) |
 
 - Email from address: managed by admin in dashboard
 - Resend button available in admin dashboard for all emails
 
 ---
 
-## Phase 4: Foundation Course
+## Phase 4: Offer Letter
 
-- Candidate completes a foundation course (Vibe platform integration)
-- Flag: `foundation_course_completed` (boolean) — candidate marks as done
-- After completion → proceeds to Phase 5
+(Only shown to PASS candidates)
+
+**Admin manages in dashboard:**
+- Offer letter format (template with placeholders) — admin can preview
+
+**System generates:**
+- Offer letter PDF → preview in candidate portal + downloadable + emailed
+
+**Candidate actions:**
+1. View offer letter PDF in dashboard
+2. Download offer letter PDF
+3. Proceeds to Phase 5
 
 ---
 
-## Phase 5: Documents
+## Phase 5: Signing
 
-- Candidate submits required documents
-- Flag: `documents_submitted` (boolean)
-- After submission → proceeds to Phase 6
+- Candidate clicks [Accept & Sign]
+  - No third-party e-sign service — candidate click = acceptance
+  - Timestamp recorded
+- **Email #3 sent:** Offer letter + joining details PDF attached
+- Proceeds to Phase 6
 
 ---
 
 ## Phase 6: Joining
 
-- Candidate views joining details
-- Flag: `joining_details_visited` (boolean)
-- Joining details managed and previewed by admin in dashboard
-- After viewing → pipeline complete.
+**Admin manages:**
+- Joining details format — admin can preview
+
+**System generates:**
+- Joining details → shown in portal + emailed
+
+**Candidate views joining details** (managed + previewed by admin in dashboard)
+
+After viewing → pipeline complete.
 
 ---
 
@@ -254,6 +266,7 @@ After interview ends, LLM evaluates using:
 - Manage first question (fixed string for all)
 - Manage anti-cheat settings (trigger thresholds)
 - Manage cooldown period (days for all failed candidates)
+- Preview offer letter format
 - Preview joining details format
 - Manage joining details format
 - Manage email from address
@@ -273,12 +286,12 @@ After interview ends, LLM evaluates using:
 - Past interview attempts (status only — no detailed summary)
 - Start interview (3-attempt maximum enforced)
 - After FAIL: Cooldown countdown ("Try after X days")
-- PASS: View foundation course link
-- PASS: Submit documents (Phase 5)
+- PASS: View & download offer letter PDF
+- PASS: Accept & Sign offer letter
 - View joining details (Phase 6)
 - FAQ link
 - Single-device login enforcement
 
 ---
 
-_Last updated: 2026-08-31_
+_Last updated: 2026-06-05_

@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import PageSelector from './PageSelector';
 
 interface CandidateRow {
   id: string;
@@ -21,9 +20,6 @@ interface Props {
 export default function CourseCompletionTab({ adminToken, adminApiBase, onRefreshCandidates }: Props) {
   const [candidates, setCandidates] = useState<CandidateRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(0);
-  const [limit, setLimit] = useState(10);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
   const [confirmModal, setConfirmModal] = useState<{ open: boolean; candidateId: string; candidateName: string } | null>(null);
 
@@ -35,32 +31,34 @@ export default function CourseCompletionTab({ adminToken, adminApiBase, onRefres
     return fetch(`${adminApiBase}${url}`, { ...opts, headers, credentials: 'include' });
   }, [adminToken, adminApiBase]);
 
-  const loadCandidates = useCallback(async (explicitPage: number) => {
+  const loadCandidates = useCallback(async () => {
     setLoading(true);
     try {
-      const offset = explicitPage * limit;
-      const params = new URLSearchParams({
-        phases: 'foundation,documents,offer,signing,joining',
-        limit: String(limit),
-        offset: String(offset),
-      });
-      const res = await withAuth(`/api/admin/candidates?${params}`);
+      const res = await withAuth('/api/admin/candidates');
       if (res.ok) {
         const data = await res.json();
-        setCandidates(data.candidates || []);
-        setTotal(data.total ?? 0);
+        // Filter candidates who are either in 'foundation', 'documents' phase or completed foundation course
+        const filtered = (data.candidates || []).filter(
+          (c: CandidateRow) =>
+            c.currentPhase === 'foundation' ||
+            c.currentPhase === 'documents' ||
+            c.currentPhase === 'offer' ||
+            c.currentPhase === 'signing' ||
+            c.currentPhase === 'joining' ||
+            c.foundationCourseCompleted
+        );
+        setCandidates(filtered);
       }
     } catch (e) {
       console.error('Failed to load candidates for course completion:', e);
     } finally {
       setLoading(false);
     }
-  }, [withAuth, limit]);
+  }, [withAuth]);
 
   useEffect(() => {
-    loadCandidates(0);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [limit]);
+    loadCandidates();
+  }, [loadCandidates]);
 
   const triggerBypassConfirmation = (candidateId: string, candidateName: string | null) => {
     setConfirmModal({
@@ -80,7 +78,7 @@ export default function CourseCompletionTab({ adminToken, adminApiBase, onRefres
         method: 'POST',
       });
       if (res.ok) {
-        await loadCandidates(0);
+        await loadCandidates();
         if (onRefreshCandidates) {
           onRefreshCandidates();
         }
@@ -113,26 +111,13 @@ export default function CourseCompletionTab({ adminToken, adminApiBase, onRefres
         Foundation Course Completion Status
       </h2>
 
-      {/* Pagination */}
-      <div style={{ marginBottom: '16px' }}>
-        <PageSelector
-          total={total}
-          page={page}
-          limit={limit}
-          onPageChange={p => { setPage(p); loadCandidates(p); }}
-          onLimitChange={l => { setLimit(l); setPage(0); loadCandidates(0); }}
-          loading={loading}
-        />
-      </div>
-
-      {loading && candidates.length === 0 ? (
+      {loading ? (
         <div>Loading...</div>
       ) : candidates.length === 0 ? (
         <div style={{ padding: '20px', textAlign: 'center', color: '#6b7280', background: '#f9fafb', borderRadius: '8px' }}>
           No candidates in the foundation course phase.
         </div>
       ) : (
-        <>
         <div style={{ background: 'white', borderRadius: '8px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
             <thead>
@@ -198,7 +183,6 @@ export default function CourseCompletionTab({ adminToken, adminApiBase, onRefres
             </tbody>
           </table>
         </div>
-</>
       )}
 
       {/* ── Custom Confirmation Modal ── */}

@@ -597,3 +597,7 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
             loading={reEvalLoading}
           />
         )}
+      </div>
+    </div>
+  );
+}

@@ -164,11 +164,14 @@ def _candidate_to_response(cand: dict, user_email: Optional[str]) -> CandidateRe
 @router.get("/candidates")
 async def get_candidates(
     phase: Optional[str] = Query(None),
+    phases: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
     state: Optional[str] = Query(None),
     district: Optional[str] = Query(None),
     interviewStatus: Optional[str] = Query(None),
+    limit: int = Query(10, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     _admin=Depends(require_admin_auth),
 ):
     db = get_sync_db()
@@ -176,6 +179,12 @@ async def get_candidates(
     query: Dict[str, Any] = {}
     if phase:
         query["current_phase"] = phase
+    if phases:
+        phase_list = [p.strip() for p in phases.split(",")]
+        query["$or"] = [
+            {"current_phase": {"$in": phase_list}},
+            {"foundation_course_completed": True},
+        ]
     if state:
         query["state"] = {"$regex": state, "$options": "i"}
     if district:
@@ -184,28 +193,128 @@ async def get_candidates(
     cursor = db.candidates.find(query).sort("created_at", -1)
     all_candidates = list(cursor)
 
+    # Bulk fetch users
+    user_ids = [c.get("user_id") for c in all_candidates if c.get("user_id")]
+    users = list(db.users.find({"_id": {"$in": user_ids}}))
+    user_map = {str(u["_id"]): u.get("email") for u in users}
+
+    # Bulk fetch interview sessions
+    cand_id_variants = []
+    for c in all_candidates:
+        cand_id_variants.extend(_get_id_variants(c["_id"]))
+    
+    sessions = list(db.interview_sessions.find({
+        "candidate_id": {"$in": cand_id_variants},
+        "status": "completed",
+        "result": {"$in": ["PASS", "FAIL", "WITHDRAWN"]}
+    }))
+
+    # Group sessions by candidate_id
+    sessions_by_cand = {}
+    for sess in sessions:
+        cid = str(sess["candidate_id"])
+        if cid not in sessions_by_cand:
+            sessions_by_cand[cid] = []
+        sessions_by_cand[cid].append(sess)
+
+    # Bulk fetch re-eval requests
+    session_ids = [str(sess["_id"]) for sess in sessions]
+    re_reqs = list(db.re_evaluation_requests.find({"interview_id": {"$in": session_ids}}))
+    re_req_map = {req["interview_id"]: req for req in re_reqs}
+
     results = []
     for cand in all_candidates:
+        cand_id_str = str(cand["_id"])
         user_email = None
-        user_id = cand.get("user_id")
-        if user_id:
-            user = db.users.find_one({"_id": user_id})
-            if user:
-                user_email = user.get("email")
+        if cand.get("user_id"):
+            user_email = user_map.get(str(cand["user_id"]))
+            
+        raw_full_name = cand.get("full_name") or user_email or "Unknown"
+        current_phase = cand.get("current_phase", "onboarding")
 
-        response = _candidate_to_response(cand, user_email)
+        # Gather variants for this candidate to match sessions
+        c_variants = [str(v) for v in _get_id_variants(cand["_id"])]
+        
+        cand_sessions = []
+        for cv in c_variants:
+            cand_sessions.extend(sessions_by_cand.get(cv, []))
+            
+        attempts_done = len(cand_sessions)
+        
+        # Latest session with PASS or FAIL
+        pf_sessions = [s for s in cand_sessions if s.get("result") in ["PASS", "FAIL"]]
+        pf_sessions.sort(key=lambda x: x.get("started_at"), reverse=True)
+        latest_session = pf_sessions[0] if pf_sessions else None
 
+        # Determine interview status
+        c_interview_status = "not_attended"
+        if latest_session:
+            res = latest_session.get("result")
+            if res == "PASS":
+                c_interview_status = "pass"
+            elif res == "FAIL":
+                re_req = re_req_map.get(str(latest_session["_id"]))
+                if re_req and re_req.get("status") == "pending":
+                    c_interview_status = "requested_revaluation"
+                else:
+                    c_interview_status = "fail"
+                    
+        # Apply interviewStatus filter early if possible
+        if interviewStatus and c_interview_status != interviewStatus:
+            continue
+
+        # Apply search filter early
         if search:
             sl = search.lower()
-            if sl not in (response.fullName or "").lower() and sl not in (response.email or "").lower():
+            if sl not in raw_full_name.lower() and sl not in (user_email or "").lower():
                 continue
 
-        if interviewStatus and response.interviewStatus != interviewStatus:
-            continue
+        foundation_completed = cand.get("foundation_course_completed", False)
+        foundation_status = cand.get("foundation_course_status", "completed" if foundation_completed else "not_started")
+
+        consent_withdrawn = bool(cand.get("consent_withdrawn", False))
+        consent_accepted = bool(cand.get("consent_accepted", False) or (cand.get("documents_submitted") and not consent_withdrawn))
+        if consent_withdrawn:
+            consent_status = "withdrawn"
+        elif consent_accepted:
+            consent_status = "granted"
+        else:
+            consent_status = "pending"
+
+        response = CandidateResponse(
+            id=cand_id_str,
+            fullName=raw_full_name,
+            email=user_email,
+            phone=cand.get("phone"),
+            state=cand.get("state"),
+            district=cand.get("district"),
+            currentRole=cand.get("current_role"),
+            yearsOfExperience=cand.get("years_of_experience"),
+            farmingBackground=cand.get("farming_background"),
+            primaryExpertise=cand.get("primary_expertise"),
+            currentPhase=current_phase,
+            status="active",
+            phases=_build_phases(current_phase),
+            createdAt=cand.get("created_at").isoformat() + "Z" if cand.get("created_at") else datetime.now(timezone.utc).isoformat() + "Z",
+            documentsSubmitted=cand.get("documents_submitted", False),
+            attemptsDone=attempts_done,
+            maxAttempts=3,
+            foundationCourseCompleted=foundation_completed,
+            foundationCourseStatus=foundation_status,
+            interviewStatus=c_interview_status,
+            consentAccepted=consent_accepted,
+            consentWithdrawn=consent_withdrawn,
+            consentStatus=consent_status,
+            consentTimestamp=_format_iso(cand.get("consent_timestamp")),
+            consentWithdrawnAt=_format_iso(cand.get("consent_withdrawn_at")),
+        )
 
         results.append(response)
 
-    return {"candidates": results, "total": len(results)}
+    total = len(results)
+    paginated_results = results[offset : offset + limit]
+
+    return {"candidates": paginated_results, "total": total}
 
 
 @router.get("/candidates/{candidate_id}")
@@ -333,11 +442,24 @@ async def get_active_interviews(_admin=Depends(require_admin_auth)):
         {"status": {"$in": ["active", "interviewing", "paused"]}}
     ).sort("started_at", -1).limit(100))
 
+    cand_ids = [s.get("candidate_id") for s in sessions if s.get("candidate_id")]
+    cand_vars = []
+    for cid in cand_ids: cand_vars.extend(_get_id_variants(cid))
+    candidates = list(db.candidates.find({"_id": {"$in": cand_vars}}))
+    cand_map = {str(c["_id"]): c for c in candidates}
+
+    user_ids = [c.get("user_id") for c in candidates if c.get("user_id")]
+    user_vars = []
+    for uid in user_ids: user_vars.extend(_get_id_variants(uid))
+    users = list(db.users.find({"_id": {"$in": user_vars}}))
+    user_map = {str(u["_id"]): u for u in users}
+
     interviews = []
     for s in sessions:
         interview_data = s.get("interview_data") or {}
         if isinstance(interview_data, str):
             try:
+                import json
                 interview_data = json.loads(interview_data)
             except Exception:
                 interview_data = {}
@@ -347,26 +469,15 @@ async def get_active_interviews(_admin=Depends(require_admin_auth)):
             messages = []
 
         cid = s.get("candidate_id")
-        candidate = None
-        user = None
-        if cid:
-            try:
-                candidate = db.candidates.find_one({"_id": ObjectId(cid)})
-            except Exception:
-                try:
-                    candidate = db.candidates.find_one({"_id": cid})
-                except Exception:
-                    pass
+        candidate = cand_map.get(str(cid)) if cid else None
         
         # Skip stale/mock sessions that don't have an associated candidate profile in the database
         if not candidate:
             continue
         
+        user = None
         if candidate.get("user_id"):
-            try:
-                user = db.users.find_one({"_id": ObjectId(candidate.get("user_id"))})
-            except Exception:
-                pass
+            user = user_map.get(str(candidate.get("user_id")))
 
         candidate_name = ""
         candidate_name = candidate.get("full_name") or ""
@@ -596,20 +707,38 @@ async def get_state_stats(state: str = Query(None), _admin=Depends(require_admin
 
 @router.get("/anti-cheat/violations")
 async def get_anti_cheat_violations(
-    limit: int = Query(100, ge=1, le=500),
+    limit: int = Query(10, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     _admin=Depends(require_admin_auth),
 ):
     from bson import ObjectId
 
     db = get_sync_db()
-    cursor = db.anti_cheat_events.find().sort("created_at", -1).limit(limit)
+    total = db.anti_cheat_events.count_documents({})
+    cursor = db.anti_cheat_events.find().sort("created_at", -1).skip(offset).limit(limit)
+    events = list(cursor)
+
+    cand_ids = [e.get("candidate_id") for e in events if e.get("candidate_id")]
+    cand_vars = []
+    for cid in cand_ids: cand_vars.extend(_get_id_variants(cid))
+    candidates = list(db.candidates.find({"_id": {"$in": cand_vars}}))
+    cand_map = {str(c["_id"]): c for c in candidates}
+
+    user_ids = [c.get("user_id") for c in candidates if c.get("user_id")]
+    user_vars = []
+    for uid in user_ids: user_vars.extend(_get_id_variants(uid))
+    users = list(db.users.find({"_id": {"$in": user_vars}}))
+    user_map = {str(u["_id"]): u for u in users}
+
     violations = []
-    for event in cursor:
+    for event in events:
         cid = event.get("candidate_id")
-        cand = db.candidates.find_one({"_id": ObjectId(cid)}) if cid else None
-        user = db.users.find_one({"_id": ObjectId(cand.get("user_id"))}) if cand and cand.get("user_id") else None
+        cand = cand_map.get(str(cid)) if cid else None
+        user = user_map.get(str(cand.get("user_id"))) if cand and cand.get("user_id") else None
+        
         name = (cand.get("full_name") if cand else None) or (user.get("name") if user else None) or "Unknown"
         email = (user.get("email") if user else None) or "—"
+        
         violations.append({
             "id": event.get("_id"),
             "candidateId": event.get("candidate_id"),
@@ -621,7 +750,7 @@ async def get_anti_cheat_violations(
             "createdAt": event.get("created_at").isoformat() + "Z" if event.get("created_at") else "",
             "autoClosed": event.get("severity") == "critical",
         })
-    return {"violations": violations, "total": len(violations)}
+    return {"violations": violations, "total": total}
 
 
 # ── Update a single candidate field ───────────────────────────────────────────
@@ -686,36 +815,58 @@ async def get_all_evaluations(
     else:
         query["result"] = {"$in": ["PASS", "FAIL"]}
 
-    total = db.interview_sessions.count_documents(query)
+    cursor = db.interview_sessions.find(query).sort("started_at", -1)
+    sessions = list(cursor)
 
-    cursor = db.interview_sessions.find(query).sort("started_at", -1).skip(offset).limit(limit)
+    # Bulk fetches
+    cand_ids = []
+    for s in sessions:
+        if s.get("candidate_id"):
+            cand_ids.extend(_get_id_variants(s.get("candidate_id")))
+    
+    candidates = list(db.candidates.find({"_id": {"$in": cand_ids}}))
+    cand_map = {str(c["_id"]): c for c in candidates}
+
+    user_ids = []
+    for c in candidates:
+        if c.get("user_id"):
+            user_ids.extend(_get_id_variants(c.get("user_id")))
+    users = list(db.users.find({"_id": {"$in": user_ids}}))
+    user_map = {str(u["_id"]): u for u in users}
+
+    session_ids_str = [str(s.get("_id")) for s in sessions]
+    re_reqs = list(db.re_evaluation_requests.find({"interview_id": {"$in": session_ids_str}}))
+    re_req_map = {r["interview_id"]: r for r in re_reqs}
+
+    # For attempts
+    all_cand_sessions = list(db.interview_sessions.find({
+        "candidate_id": {"$in": cand_ids},
+        "status": "completed",
+        "result": {"$in": ["PASS", "FAIL", "WITHDRAWN"]}
+    }))
+    sess_by_cand = {}
+    for cs in all_cand_sessions:
+        cid = str(cs.get("candidate_id"))
+        if cid not in sess_by_cand:
+            sess_by_cand[cid] = []
+        sess_by_cand[cid].append(cs)
 
     evals = []
-    for s in cursor:
+    for s in sessions:
         interview_data = s.get("interview_data") or {}
         if isinstance(interview_data, str):
             try:
+                import json
                 interview_data = json.loads(interview_data)
             except Exception:
                 interview_data = {}
 
         candidate_id = s.get("candidate_id")
-        candidate = None
+        candidate = cand_map.get(str(candidate_id)) if candidate_id else None
+        
         user = None
-        if candidate_id:
-            try:
-                candidate = db.candidates.find_one({"_id": ObjectId(candidate_id)})
-            except Exception:
-                try:
-                    candidate = db.candidates.find_one({"_id": candidate_id})
-                except Exception:
-                    pass
-
         if candidate and candidate.get("user_id"):
-            try:
-                user = db.users.find_one({"_id": ObjectId(candidate.get("user_id"))})
-            except Exception:
-                pass
+            user = user_map.get(str(candidate.get("user_id")))
 
         if candidate:
             candidate_name = candidate.get("full_name") or ""
@@ -729,17 +880,20 @@ async def get_all_evaluations(
             candidate_name = ""
             candidate_email = None
 
+        if search:
+            sl = search.lower()
+            if sl not in candidate_name.lower() and sl not in (candidate_email or "").lower():
+                continue
+
         messages = interview_data.get("messages", [])
         if not isinstance(messages, list):
             messages = []
 
         if candidate_id:
-            attempt_num = db.interview_sessions.count_documents({
-                "candidate_id": candidate_id,
-                "status": "completed",
-                "result": {"$in": ["PASS", "FAIL"]},
-                "started_at": {"$lte": s.get("started_at")},
-            })
+            c_sessions = sess_by_cand.get(str(candidate_id), [])
+            started_at = s.get("started_at")
+            attempt_num = sum(1 for cs in c_sessions if cs.get("started_at") and started_at and cs.get("started_at") <= started_at)
+            if attempt_num == 0: attempt_num = 1
         else:
             attempt_num = 1
 
@@ -748,7 +902,7 @@ async def get_all_evaluations(
         score = raw_score if raw_score is not None else eval_data.get("overall_score")
 
         session_id_str = str(s.get("_id"))
-        re_req = db.re_evaluation_requests.find_one({"interview_id": session_id_str})
+        re_req = re_req_map.get(session_id_str)
 
         evals.append({
             "id": s.get("_id"),
@@ -773,7 +927,10 @@ async def get_all_evaluations(
             "reEvaluationRequestedAt": _format_iso(re_req.get("requested_at")) if re_req else None,
         })
 
-    return {"evaluations": evals, "total": total}
+    total = len(evals)
+    paginated_evals = evals[offset : offset + limit]
+
+    return {"evaluations": paginated_evals, "total": total}
 
 
 # ── Get all re-evaluation requests (admin view) ──────────────────────────────
@@ -786,24 +943,56 @@ async def get_all_re_evaluations(
     _admin=Depends(require_admin_auth),
 ):
     from bson import ObjectId
+    import json
 
     db = get_sync_db()
 
     req_cursor = db.re_evaluation_requests.find().sort("requested_at", -1)
     all_requests = list(req_cursor)
 
+    # Bulk fetches
+    interview_ids = [r.get("interview_id") for r in all_requests if r.get("interview_id")]
+    interview_ids_vars = []
+    for iid in interview_ids:
+        interview_ids_vars.extend(_get_id_variants(iid))
+        
+    sessions = list(db.interview_sessions.find({"_id": {"$in": interview_ids_vars}}))
+    session_map = {str(s["_id"]): s for s in sessions}
+
+    cand_ids = [s.get("candidate_id") for s in sessions if s.get("candidate_id")]
+    cand_ids_vars = []
+    for cid in cand_ids:
+        cand_ids_vars.extend(_get_id_variants(cid))
+        
+    candidates = list(db.candidates.find({"_id": {"$in": cand_ids_vars}}))
+    cand_map = {str(c["_id"]): c for c in candidates}
+
+    user_ids = [c.get("user_id") for c in candidates if c.get("user_id")]
+    user_ids_vars = []
+    for uid in user_ids:
+        user_ids_vars.extend(_get_id_variants(uid))
+        
+    users = list(db.users.find({"_id": {"$in": user_ids_vars}}))
+    user_map = {str(u["_id"]): u for u in users}
+
+    # Attempts bulk
+    all_cand_sessions = list(db.interview_sessions.find({
+        "candidate_id": {"$in": cand_ids_vars},
+        "status": "completed",
+        "result": {"$in": ["PASS", "FAIL", "WITHDRAWN"]}
+    }))
+    sess_by_cand = {}
+    for cs in all_cand_sessions:
+        cid = str(cs.get("candidate_id"))
+        if cid not in sess_by_cand:
+            sess_by_cand[cid] = []
+        sess_by_cand[cid].append(cs)
+
     items = []
     for req_doc in all_requests:
-        interview_id = req_doc.get("interview_id")
-        session = None
-        if interview_id:
-            session = db.interview_sessions.find_one({"_id": interview_id})
-            if not session:
-                try:
-                    session = db.interview_sessions.find_one({"_id": ObjectId(interview_id)})
-                except Exception:
-                    pass
-
+        interview_id = str(req_doc.get("interview_id"))
+        session = session_map.get(interview_id)
+        
         if not session:
             continue
 
@@ -815,20 +1004,11 @@ async def get_all_re_evaluations(
                 interview_data = {}
 
         candidate_id = session.get("candidate_id")
-        candidate = None
+        candidate = cand_map.get(str(candidate_id)) if candidate_id else None
+        
         user = None
-        if candidate_id:
-            cand_vars = _get_id_variants(candidate_id)
-            candidate = db.candidates.find_one({"_id": {"$in": cand_vars}})
-
         if candidate and candidate.get("user_id"):
-            try:
-                user = db.users.find_one({"_id": ObjectId(candidate.get("user_id"))})
-            except Exception:
-                try:
-                    user = db.users.find_one({"_id": candidate.get("user_id")})
-                except Exception:
-                    pass
+            user = user_map.get(str(candidate.get("user_id")))
 
         candidate_name = ""
         if candidate:
@@ -851,12 +1031,10 @@ async def get_all_re_evaluations(
             messages = []
 
         if candidate_id:
-            attempt_num = db.interview_sessions.count_documents({
-                "candidate_id": {"$in": _get_id_variants(candidate_id)},
-                "status": "completed",
-                "result": {"$in": ["PASS", "FAIL", "WITHDRAWN"]},
-                "started_at": {"$lte": session.get("started_at")},
-            })
+            c_sessions = sess_by_cand.get(str(candidate_id), [])
+            started_at = session.get("started_at")
+            attempt_num = sum(1 for cs in c_sessions if cs.get("started_at") and started_at and cs.get("started_at") <= started_at)
+            if attempt_num == 0: attempt_num = 1
         else:
             attempt_num = 1
 
@@ -926,26 +1104,32 @@ async def get_geo_stats(_admin=Depends(require_admin_auth)):
         elif phase in ("interview", "summary", "foundation", "documents"):
             states_map[s]["interviewed"] += row["count"]
 
-    # Get pass/fail per state — Python-side join
+    # Get pass/fail per state
     sessions = list(db.interview_sessions.find(
         {"status": "completed", "result": {"$in": ["PASS", "FAIL"]}},
         {"candidate_id": 1, "result": 1},
     ))
+    
+    cand_ids = [s.get("candidate_id") for s in sessions if s.get("candidate_id")]
+    cand_vars = []
+    for cid in cand_ids: cand_vars.extend(_get_id_variants(cid))
+    candidates = list(db.candidates.find({"_id": {"$in": cand_vars}}, {"state": 1, "district": 1}))
+    cand_map = {str(c["_id"]): c for c in candidates}
+
     pf_map: dict = {}
+    d_pf_map: dict = {}
     for sess in sessions:
-        cid = sess.get("candidate_id")
-        if not cid:
-            continue
-        try:
-            cand = db.candidates.find_one({"_id": ObjectId(cid)}, {"state": 1})
-        except Exception:
-            continue
-        if not cand:
-            continue
+        cid = str(sess.get("candidate_id"))
+        cand = cand_map.get(cid)
+        if not cand: continue
+        
         s = cand.get("state") or "Unknown"
-        if s not in pf_map:
-            pf_map[s] = {"PASS": 0, "FAIL": 0}
+        if s not in pf_map: pf_map[s] = {"PASS": 0, "FAIL": 0}
         pf_map[s][sess["result"]] += 1
+        
+        key = (s, cand.get("district") or "Unknown")
+        if key not in d_pf_map: d_pf_map[key] = {"PASS": 0, "FAIL": 0}
+        d_pf_map[key][sess["result"]] += 1
 
     for s_data in states_map.values():
         pf = pf_map.get(s_data["state"], {"PASS": 0, "FAIL": 0})
@@ -969,23 +1153,6 @@ async def get_geo_stats(_admin=Depends(require_admin_auth)):
         {"$limit": 100},
     ]
     district_rows = list(db.candidates.aggregate(district_pipeline))
-
-    # Get pass/fail per district — Python-side join
-    d_pf_map: dict = {}
-    for sess in sessions:
-        cid = sess.get("candidate_id")
-        if not cid:
-            continue
-        try:
-            cand = db.candidates.find_one({"_id": ObjectId(cid)}, {"state": 1, "district": 1})
-        except Exception:
-            continue
-        if not cand:
-            continue
-        key = (cand.get("state") or "Unknown", cand.get("district") or "Unknown")
-        if key not in d_pf_map:
-            d_pf_map[key] = {"PASS": 0, "FAIL": 0}
-        d_pf_map[key][sess["result"]] += 1
 
     districts_list = []
     for row in district_rows:

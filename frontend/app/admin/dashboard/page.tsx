@@ -9,6 +9,7 @@ import EvaluationsTab from "../../../components/admin/EvaluationsTab";
 import OfferLetterTab from "../../../components/admin/OfferLetterTab";
 import DocumentsTab from "../../../components/admin/DocumentsTab";
 import CourseCompletionTab from "../../../components/admin/CourseCompletionTab";
+import PageSelector from "../../../components/admin/PageSelector";
 
 // Types
 interface Candidate {
@@ -245,12 +246,7 @@ export default function AdminDashboard() {
     loadData(activeTab);
   }, [activeTab]);
 
-  // Reload candidates when filters change
-  useEffect(() => {
-    if (activeTab === "candidates") {
-      loadCandidates();
-    }
-  }, [phaseFilter, stateFilter, districtFilter, interviewStatusFilter]);
+
 
   const loadData = async (tab?: Tab) => {
     const target = tab ?? activeTab;
@@ -329,23 +325,47 @@ export default function AdminDashboard() {
     }
   };
 
-  const loadCandidates = async () => {
+  const [candidatesTotal, setCandidatesTotal] = useState(0);
+  const [candidatesPage, setCandidatesPage] = useState(0);
+  const [candidatesLimit, setCandidatesLimit] = useState(10);
+
+  const loadCandidates = async (resetPage = false) => {
     try {
+      const currentPage = resetPage ? 0 : candidatesPage;
+      if (resetPage) setCandidatesPage(0);
+
       const params = new URLSearchParams();
       if (searchQuery) params.append("search", searchQuery);
       if (phaseFilter) params.append("phase", phaseFilter);
       if (stateFilter) params.append("state", stateFilter);
       if (districtFilter) params.append("district", districtFilter);
       if (interviewStatusFilter) params.append("interviewStatus", interviewStatusFilter);
+      params.append("limit", candidatesLimit.toString());
+      params.append("offset", (currentPage * candidatesLimit).toString());
+
       const res = await withAuth(`/api/admin/candidates?${params}`);
       if (res.ok) {
         const data = await res.json();
         setCandidates(data.candidates || []);
+        setCandidatesTotal(data.total || 0);
       }
     } catch (err) {
       console.error("Failed to load candidates:", err);
     }
   };
+
+  // Reset page when filters change
+  useEffect(() => {
+    if (activeTab === "candidates") {
+      loadCandidates(true);
+    }
+  }, [phaseFilter, stateFilter, districtFilter, interviewStatusFilter, searchQuery, candidatesLimit]);
+
+  useEffect(() => {
+    if (activeTab === "candidates") {
+      loadCandidates(false);
+    }
+  }, [candidatesPage]);
 
   // ── Resume helpers ──────────────────────────────────────────────────────────
 
@@ -511,13 +531,19 @@ export default function AdminDashboard() {
     }
   }, [activeTab, candidates]);
 
+  const [violationsTotal, setViolationsTotal] = useState(0);
+  const [violationsPage, setViolationsPage] = useState(0);
+  const [violationsLimit, setViolationsLimit] = useState(10);
+
   const loadViolations = async () => {
     setViolationsLoading(true);
     try {
-      const res = await withAuth("/api/admin/anti-cheat/violations");
+      const offset = violationsPage * violationsLimit;
+      const res = await withAuth(`/api/admin/anti-cheat/violations?limit=${violationsLimit}&offset=${offset}`);
       if (res.ok) {
         const data = await res.json();
         setViolations(data.violations || []);
+        setViolationsTotal(data.total || 0);
       }
     } catch (err) {
       console.error("Failed to load violations:", err);
@@ -525,6 +551,12 @@ export default function AdminDashboard() {
       setViolationsLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (activeTab === "anti-cheat") {
+      loadViolations();
+    }
+  }, [violationsPage, violationsLimit]);
 
   const loadStateFunnel = async () => {
     try {
@@ -829,7 +861,7 @@ export default function AdminDashboard() {
           className={`${styles.tab} ${activeTab === "candidates" ? styles.activeTab : ""}`}
           onClick={() => setActiveTab("candidates")}
         >
-          👥 All Candidates ({candidates.length})
+          👥 All Candidates ({candidatesTotal})
         </button>
         <button
           className={`${styles.tab} ${activeTab === "analytics" ? styles.activeTab : ""}`}
@@ -936,7 +968,7 @@ export default function AdminDashboard() {
                 <option value="fail">Fail</option>
                 <option value="requested_revaluation">Requested Revaluation</option>
               </select>
-              <button onClick={loadCandidates} className={styles.searchBtn}>Search</button>
+              <button onClick={() => loadCandidates(true)} className={styles.searchBtn}>Search</button>
               <button onClick={handleExportCsv} className={styles.exportBtn} style={{ marginLeft: "auto", background: "#10b981", color: "white", padding: "8px 16px", borderRadius: "6px", border: "none", cursor: "pointer", fontWeight: 600 }}>
                 Export CSV
               </button>
@@ -948,90 +980,100 @@ export default function AdminDashboard() {
                 <p>No candidates found</p>
               </div>
             ) : (
-              <div className={styles.candidatesTable}>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>Email</th>
-                      <th>Phone</th>
-                      <th>State</th>
-                      <th>Current Phase</th>
-                      <th>Phase Progress</th>
-                      <th>Attempts</th>
-                      <th>Resume</th>
-                      <th>Created</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {candidates.map((candidate) => (
-                      <tr key={candidate.id}>
-                        <td>{candidate.fullName || "-"}</td>
-                        <td>{candidate.email || "-"}</td>
-                        <td>{candidate.phone || "-"}</td>
-                        <td>{candidate.state || "-"}</td>
-                        <td>
-                          <span className={styles.phaseBadge}>
-                            {PHASE_LABELS[candidate.currentPhase] || candidate.currentPhase}
-                          </span>
-                        </td>
-                        <td>
-                          <div className={styles.phaseProgress}>
-                            {(candidate.phases || []).map((p, idx) => (
-                              <div
-                                key={idx}
-                                className={`${styles.phaseDot} ${
-                                  p.status === "completed" ? styles.phaseCompleted :
-                                  p.status === "in_progress" ? styles.phaseActive : ""
-                                }`}
-                                title={`${PHASE_LABELS[p.phase] || p.phase}: ${p.status}`}
-                              />
-                            ))}
-                          </div>
-                        </td>
-                        <td>
-                          <span className={styles.phaseBadge}>
-                            {candidate.attemptsDone}/{candidate.maxAttempts}
-                          </span>
-                        </td>
-                        <td>
-                          {candidateResumes[candidate.id] ? (
-                            <div style={{ display: "flex", gap: "4px" }}>
-                              <button
-                                onClick={() => handlePreviewResume(candidateResumes[candidate.id]!)}
-                                style={{ padding: "2px 8px", fontSize: "12px", cursor: "pointer" }}
-                                title="Preview resume"
-                              >
-                                👁 Preview
-                              </button>
-                              <button
-                                onClick={() => candidateResumes[candidate.id]?.parsedData
-                                  ? setMatchModal({ open: true, candidateId: candidate.id, candidateName: candidate.fullName || candidate.email || "", role: "frontend_engineer" })
-                                  : null
-                                }
-                                style={{ padding: "2px 8px", fontSize: "12px", cursor: candidateResumes[candidate.id]?.parsedData ? "pointer" : "not-allowed", opacity: candidateResumes[candidate.id]?.parsedData ? 1 : 0.4 }}
-                                title={candidateResumes[candidate.id]?.parsedData ? "Match skills to a role" : "Resume not yet parsed"}
-                              >
-                                🔗 Match
-                              </button>
-                              <button
-                                onClick={() => handleDownloadResume(candidateResumes[candidate.id]!)}
-                                style={{ padding: "2px 8px", fontSize: "12px", cursor: "pointer" }}
-                                title="Download resume"
-                              >
-                                ⬇ Download
-                              </button>
-                            </div>
-                          ) : (
-                            <span style={{ color: "#999", fontSize: "12px" }}>—</span>
-                          )}
-                        </td>
-                        <td>{candidate.createdAt ? new Date(candidate.createdAt).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }) : "-"}</td>
+              <>
+                <div className={styles.candidatesTable}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                        <th>State</th>
+                        <th>Current Phase</th>
+                        <th>Phase Progress</th>
+                        <th>Attempts</th>
+                        <th>Resume</th>
+                        <th>Created</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {candidates.map((candidate) => (
+                        <tr key={candidate.id}>
+                          <td>{candidate.fullName || "-"}</td>
+                          <td>{candidate.email || "-"}</td>
+                          <td>{candidate.phone || "-"}</td>
+                          <td>{candidate.state || "-"}</td>
+                          <td>
+                            <span className={styles.phaseBadge}>
+                              {PHASE_LABELS[candidate.currentPhase] || candidate.currentPhase}
+                            </span>
+                          </td>
+                          <td>
+                            <div className={styles.phaseProgress}>
+                              {(candidate.phases || []).map((p, idx) => (
+                                <div
+                                  key={idx}
+                                  className={`${styles.phaseDot} ${
+                                    p.status === "completed" ? styles.phaseCompleted :
+                                    p.status === "in_progress" ? styles.phaseActive : ""
+                                  }`}
+                                  title={`${PHASE_LABELS[p.phase] || p.phase}: ${p.status}`}
+                                />
+                              ))}
+                            </div>
+                          </td>
+                          <td>
+                            <span className={styles.phaseBadge}>
+                              {candidate.attemptsDone}/{candidate.maxAttempts}
+                            </span>
+                          </td>
+                          <td>
+                            {candidateResumes[candidate.id] ? (
+                              <div style={{ display: "flex", gap: "4px" }}>
+                                <button
+                                  onClick={() => handlePreviewResume(candidateResumes[candidate.id]!)}
+                                  style={{ padding: "2px 8px", fontSize: "12px", cursor: "pointer" }}
+                                  title="Preview resume"
+                                >
+                                  👁 Preview
+                                </button>
+                                <button
+                                  onClick={() => candidateResumes[candidate.id]?.parsedData
+                                    ? setMatchModal({ open: true, candidateId: candidate.id, candidateName: candidate.fullName || candidate.email || "", role: "frontend_engineer" })
+                                    : null
+                                  }
+                                  style={{ padding: "2px 8px", fontSize: "12px", cursor: candidateResumes[candidate.id]?.parsedData ? "pointer" : "not-allowed", opacity: candidateResumes[candidate.id]?.parsedData ? 1 : 0.4 }}
+                                  title={candidateResumes[candidate.id]?.parsedData ? "Match skills to a role" : "Resume not yet parsed"}
+                                >
+                                  🔗 Match
+                                </button>
+                                <button
+                                  onClick={() => handleDownloadResume(candidateResumes[candidate.id]!)}
+                                  style={{ padding: "2px 8px", fontSize: "12px", cursor: "pointer" }}
+                                  title="Download resume"
+                                >
+                                  ⬇ Download
+                                </button>
+                              </div>
+                            ) : (
+                              <span style={{ color: "#999", fontSize: "12px" }}>—</span>
+                            )}
+                          </td>
+                          <td>{candidate.createdAt ? new Date(candidate.createdAt).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }) : "-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <PageSelector
+                  total={candidatesTotal}
+                  page={candidatesPage}
+                  limit={candidatesLimit}
+                  onPageChange={setCandidatesPage}
+                  onLimitChange={setCandidatesLimit}
+                  loading={loading}
+                />
+              </>
             )}
           </div>
         )}
@@ -1640,44 +1682,54 @@ export default function AdminDashboard() {
             ) : violations.length === 0 ? (
               <p className={styles.noDataMessage}>No violations recorded yet.</p>
             ) : (
-              <div className={styles.violationsTable}>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Candidate</th>
-                      <th>Email</th>
-                      <th>Violation</th>
-                      <th>Severity</th>
-                      <th>Auto-Closed</th>
-                      <th>Time</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {violations.map((v: any) => (
-                      <tr key={v.id}>
-                        <td>{v.candidateName}</td>
-                        <td>{v.email}</td>
-                        <td>
-                          <span className={styles.violationBadge}>
-                            {v.eventType.replace(/_/g, " ")}
-                          </span>
-                        </td>
-                        <td>
-                          <span className={v.severity === "critical" ? styles.severityCritical : styles.severityWarning}>
-                            {v.severity}
-                          </span>
-                        </td>
-                        <td>
-                          <span className={v.autoClosed ? styles.autoClosedYes : styles.autoClosedNo}>
-                            {v.autoClosed ? "🔴 Yes" : "—"}
-                          </span>
-                        </td>
-                        <td>{v.createdAt ? new Date(v.createdAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"}</td>
+              <>
+                <div className={styles.violationsTable}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Candidate</th>
+                        <th>Email</th>
+                        <th>Violation</th>
+                        <th>Severity</th>
+                        <th>Auto-Closed</th>
+                        <th>Time</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {violations.map((v: any) => (
+                        <tr key={v.id}>
+                          <td>{v.candidateName}</td>
+                          <td>{v.email}</td>
+                          <td>
+                            <span className={styles.violationBadge}>
+                              {v.eventType.replace(/_/g, " ")}
+                            </span>
+                          </td>
+                          <td>
+                            <span className={v.severity === "critical" ? styles.severityCritical : styles.severityWarning}>
+                              {v.severity}
+                            </span>
+                          </td>
+                          <td>
+                            <span className={v.autoClosed ? styles.autoClosedYes : styles.autoClosedNo}>
+                              {v.autoClosed ? "🔴 Yes" : "—"}
+                            </span>
+                          </td>
+                          <td>{v.createdAt ? new Date(v.createdAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <PageSelector
+                  total={violationsTotal}
+                  page={violationsPage}
+                  limit={violationsLimit}
+                  onPageChange={setViolationsPage}
+                  onLimitChange={setViolationsLimit}
+                  loading={violationsLoading}
+                />
+              </>
             )}
           </div>
         )}

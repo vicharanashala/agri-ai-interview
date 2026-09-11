@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import PageSelector from "./PageSelector";
 
 interface CandidateRow {
   id: string;
@@ -25,6 +26,9 @@ const PASS_PHASES = ['documents', 'offer', 'signing', 'joining'];
 export default function DocumentsTab({ adminToken }: Props) {
   const [candidates, setCandidates] = useState<CandidateRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
+  const [limit, setLimit] = useState(10);
   const [downloading, setDownloading] = useState<string | null>(null);
 
   const withAuth = useCallback((url: string, opts: RequestInit = {}): Promise<Response> => {
@@ -32,31 +36,23 @@ export default function DocumentsTab({ adminToken }: Props) {
       ...((opts.headers as Record<string, string>) || {}),
     };
     if (adminToken) headers['X-Admin-Token'] = adminToken;
-    return fetch(url, { ...opts, headers, credentials: 'include' });
+    const adminApiBase = process.env.NEXT_PUBLIC_ADMIN_API_URL || '';
+    return fetch(`${adminApiBase}${url}`, { ...opts, headers, credentials: 'include' });
   }, [adminToken]);
 
-  const downloadZip = useCallback(async (candidateId: string, fullName: string | null) => {
-    setDownloading(candidateId);
+  const downloadZip = useCallback(async (id: string, name: string | null) => {
+    setDownloading(id);
     try {
-      const res = await withAuth(`/api/admin/candidates/${candidateId}/documents/zip`);
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        alert(err.detail || 'Download failed');
-        return;
-      }
+      const res = await withAuth(`/api/admin/candidates/${id}/documents/zip`);
+      if (!res.ok) throw new Error('Download failed');
       const blob = await res.blob();
-      const disposition = res.headers.get('content-disposition') || '';
-      const match = disposition.match(/filename="(.+)"/);
-      const filename = match
-        ? match[1]
-        : `${fullName || candidateId}_documents.zip`;
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = filename;
+      a.download = `documents_${name || 'candidate'}.zip`;
       document.body.appendChild(a);
       a.click();
-      document.body.removeChild(a);
+      a.remove();
       URL.revokeObjectURL(url);
     } catch (e) {
       console.error(e);
@@ -70,13 +66,16 @@ export default function DocumentsTab({ adminToken }: Props) {
     const load = async () => {
       setLoading(true);
       try {
-        const res = await withAuth('/api/admin/candidates');
+        const params = new URLSearchParams({ 
+          phases: 'documents,offer,signing,joining',
+          limit: String(limit), 
+          offset: String(page * limit) 
+        });
+        const res = await withAuth(`/api/admin/candidates?${params}`);
         if (res.ok) {
           const data = await res.json();
-          const passed = (data.candidates || []).filter(
-            (c: CandidateRow) => PASS_PHASES.includes(c.currentPhase)
-          );
-          setCandidates(passed);
+          setCandidates(data.candidates || []);
+          setTotal(data.total || 0);
         }
       } catch (e) {
         console.error(e);
@@ -85,7 +84,7 @@ export default function DocumentsTab({ adminToken }: Props) {
       }
     };
     load();
-  }, [withAuth]);
+  }, [withAuth, page, limit]);
 
   return (
     <div style={{ padding: '24px' }}>
@@ -98,6 +97,7 @@ export default function DocumentsTab({ adminToken }: Props) {
       ) : candidates.length === 0 ? (
         <div>No candidates found</div>
       ) : (
+        <>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
           <thead>
             <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
@@ -208,6 +208,15 @@ export default function DocumentsTab({ adminToken }: Props) {
             })}
           </tbody>
         </table>
+        <PageSelector
+          total={total}
+          page={page}
+          limit={limit}
+          onPageChange={setPage}
+          onLimitChange={setLimit}
+          loading={loading}
+        />
+      </>
       )}
     </div>
   );

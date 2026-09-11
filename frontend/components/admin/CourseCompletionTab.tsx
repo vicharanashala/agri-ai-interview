@@ -25,6 +25,7 @@ export default function CourseCompletionTab({ adminToken, adminApiBase, onRefres
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
   const [limit, setLimit] = useState(10);
+  const [searchQuery, setSearchQuery] = useState('');
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
   const [confirmModal, setConfirmModal] = useState<{ open: boolean; candidateId: string; candidateName: string } | null>(null);
 
@@ -44,6 +45,7 @@ export default function CourseCompletionTab({ adminToken, adminApiBase, onRefres
         limit: String(limit), 
         offset: String(page * limit) 
       });
+      if (searchQuery) params.append('search', searchQuery);
       const res = await withAuth(`/api/admin/candidates?${params}`);
       if (res.ok) {
         const data = await res.json();
@@ -55,7 +57,7 @@ export default function CourseCompletionTab({ adminToken, adminApiBase, onRefres
     } finally {
       setLoading(false);
     }
-  }, [withAuth, page, limit]);
+  }, [withAuth, page, limit, searchQuery]);
 
   useEffect(() => {
     loadCandidates();
@@ -109,9 +111,26 @@ export default function CourseCompletionTab({ adminToken, adminApiBase, onRefres
 
   return (
     <div style={{ padding: '24px' }}>
-      <h2 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 20px', color: '#111827' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+      <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#111827' }}>
         Foundation Course Completion Status
       </h2>
+      <div style={{ display: 'flex', gap: '10px' }}>
+        <input 
+          type="text" 
+          placeholder="Search by name or email..." 
+          value={searchQuery}
+          onChange={e => { setSearchQuery(e.target.value); setPage(0); }}
+          style={{
+            padding: '8px 12px',
+            borderRadius: '6px',
+            border: '1px solid #ddd',
+            fontSize: '14px',
+            width: '250px'
+          }}
+        />
+      </div>
+    </div>
 
       {loading ? (
         <div>Loading...</div>

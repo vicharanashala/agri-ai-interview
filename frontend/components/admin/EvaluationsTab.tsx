@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import styles from "./EvaluationsTab.module.css";
+import PageSelector from "./PageSelector";
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -402,13 +403,15 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
   const [resultFilter, setResultFilter] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [page, setPage] = useState(0);
-  const LIMIT = 20;
+  const [evalPage, setEvalPage] = useState(0);
+  const [evalLimit, setEvalLimit] = useState(10);
 
   // Re-evaluations state
   const [reEvaluations, setReEvaluations] = useState<ReEvaluationItem[]>([]);
   const [reEvalLoading, setReEvalLoading] = useState(false);
   const [reEvalTotal, setReEvalTotal] = useState(0);
+  const [reEvalPage, setReEvalPage] = useState(0);
+  const [reEvalLimit, setReEvalLimit] = useState(10);
   const [pendingCount, setPendingCount] = useState(0);
   const [revaluatingIds, setRevaluatingIds] = useState<Set<string>>(new Set());
 
@@ -416,7 +419,9 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
     setLoading(true);
     try {
       const token = getAdminToken();
-      const params = new URLSearchParams({ limit: String(LIMIT), offset: String(resetPage ? 0 : page * LIMIT) });
+      const currentPage = resetPage ? 0 : evalPage;
+      if (resetPage) setEvalPage(0);
+      const params = new URLSearchParams({ limit: String(evalLimit), offset: String(currentPage * evalLimit) });
       if (resultFilter) params.set("result", resultFilter);
       if (searchQuery.trim()) params.set("search", searchQuery.trim());
 
@@ -426,7 +431,7 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
       });
       if (res.ok) {
         const data = await res.json();
-        setEvaluations(resetPage ? data.evaluations : prev => [...prev, ...data.evaluations]);
+        setEvaluations(data.evaluations || []);
         setTotal(data.total);
       }
     } catch (err) {
@@ -436,11 +441,13 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
     }
   };
 
-  const fetchReEvaluations = async () => {
+  const fetchReEvaluations = async (resetPage = false) => {
     setReEvalLoading(true);
     try {
       const token = getAdminToken();
-      const params = new URLSearchParams({ limit: "50", offset: "0" });
+      const currentPage = resetPage ? 0 : reEvalPage;
+      if (resetPage) setReEvalPage(0);
+      const params = new URLSearchParams({ limit: String(reEvalLimit), offset: String(currentPage * reEvalLimit) });
       if (searchQuery.trim()) params.set("search", searchQuery.trim());
 
       const res = await fetch(`${adminApiBase}/api/admin/re-evaluations?${params}`, {
@@ -471,17 +478,23 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resultFilter]);
 
+  useEffect(() => {
+    if (activeSubTab === 'evaluations') fetchEvaluations();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [evalPage, evalLimit]);
+
+  useEffect(() => {
+    if (activeSubTab === 're-evaluations') fetchReEvaluations();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reEvalPage, reEvalLimit]);
+
   const handleSearch = () => {
     fetchEvaluations(true);
-    fetchReEvaluations();
+    fetchReEvaluations(true);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => { if (e.key === "Enter") handleSearch(); };
 
-  const handleLoadMore = () => {
-    setPage(p => p + 1);
-    fetchEvaluations(false);
-  };
 
   const toggleExpand = (id: string) => {
     setExpandedId(prev => prev === id ? null : id);
@@ -691,13 +704,14 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
                   </tbody>
                 </table>
               </div>
-              {evaluations.length < total && (
-                <div style={{ textAlign: "center", marginTop: "16px" }}>
-                  <button onClick={handleLoadMore} className={styles.searchBtn} disabled={loading}>
-                    {loading ? "Loading..." : "Load More"}
-                  </button>
-                </div>
-              )}
+              <PageSelector
+                total={total}
+                page={evalPage}
+                limit={evalLimit}
+                onPageChange={setEvalPage}
+                onLimitChange={setEvalLimit}
+                loading={loading}
+              />
             </>
           )}
         </>
@@ -715,8 +729,9 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
               <p>Candidate requests for interview re-evaluation will appear here</p>
             </div>
           ) : (
-            <div className={styles.tableWrapper}>
-              <table className={styles.table}>
+            <>
+              <div className={styles.tableWrapper}>
+                <table className={styles.table}>
                 <thead>
                   <tr>
                     <th style={{ width: 32 }}></th>
@@ -836,6 +851,15 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
                 </tbody>
               </table>
             </div>
+            <PageSelector
+              total={reEvalTotal}
+              page={reEvalPage}
+              limit={reEvalLimit}
+              onPageChange={setReEvalPage}
+              onLimitChange={setReEvalLimit}
+              loading={reEvalLoading}
+            />
+          </>
           )}
         </>
       )}

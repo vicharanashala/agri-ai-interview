@@ -29,6 +29,7 @@ export default function DocumentsTab({ adminToken }: Props) {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
   const [limit, setLimit] = useState(10);
+  const [searchQuery, setSearchQuery] = useState('');
   const [downloading, setDownloading] = useState<string | null>(null);
 
   const withAuth = useCallback((url: string, opts: RequestInit = {}): Promise<Response> => {
@@ -71,6 +72,7 @@ export default function DocumentsTab({ adminToken }: Props) {
           limit: String(limit), 
           offset: String(page * limit) 
         });
+        if (searchQuery) params.append('search', searchQuery);
         const res = await withAuth(`/api/admin/candidates?${params}`);
         if (res.ok) {
           const data = await res.json();
@@ -84,13 +86,30 @@ export default function DocumentsTab({ adminToken }: Props) {
       }
     };
     load();
-  }, [withAuth, page, limit]);
+  }, [withAuth, page, limit, searchQuery]);
 
   return (
     <div style={{ padding: '24px' }}>
-      <h2 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 20px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+      <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>
         Candidate Documents
       </h2>
+      <div style={{ display: 'flex', gap: '10px' }}>
+        <input 
+          type="text" 
+          placeholder="Search by name or email..." 
+          value={searchQuery}
+          onChange={e => { setSearchQuery(e.target.value); setPage(0); }}
+          style={{
+            padding: '8px 12px',
+            borderRadius: '6px',
+            border: '1px solid #ddd',
+            fontSize: '14px',
+            width: '250px'
+          }}
+        />
+      </div>
+    </div>
 
       {loading ? (
         <div>Loading...</div>

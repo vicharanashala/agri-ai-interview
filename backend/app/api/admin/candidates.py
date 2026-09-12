@@ -613,24 +613,52 @@ async def reevaluate_interview(interview_id: str, _admin=Depends(require_admin_a
 # ── Dashboard Stats ────────────────────────────────────────────────────────────
 
 @router.get("/stats/overview")
-async def get_overview_stats(_admin=Depends(require_admin_auth)):
+async def get_overview_stats(state: str = Query(None), district: str = Query(None), _admin=Depends(require_admin_auth)):
     db = get_sync_db()
 
-    total = db.candidates.count_documents({})
+    cand_query = {}
+    if state and state != "All":
+        cand_query["state"] = state
+    if district and district != "All":
+        cand_query["district"] = district
+
+    total = db.candidates.count_documents(cand_query)
     by_phase = {}
     for phase in PHASES:
-        by_phase[phase] = db.candidates.count_documents({"current_phase": phase})
+        q = cand_query.copy()
+        q["current_phase"] = phase
+        by_phase[phase] = db.candidates.count_documents(q)
 
-    active_interviews = db.interview_sessions.count_documents({
-        "status": {"$in": ["active", "interviewing", "paused"]}
-    })
+    if cand_query:
+        cands = list(db.candidates.find(cand_query, {"_id": 1}))
+        cand_ids = [c["_id"] for c in cands]
+        
+        cand_vars = []
+        for cid in cand_ids:
+            cand_vars.extend(_get_id_variants(cid))
+            
+        sess_query_base = {"candidate_id": {"$in": cand_vars}}
+    else:
+        sess_query_base = {}
 
-    total_completed = db.interview_sessions.count_documents({
-        "status": "completed",
-        "result": {"$in": ["PASS", "FAIL"]},
-    })
-    total_pass = db.interview_sessions.count_documents({"status": "completed", "result": "PASS"})
-    total_fail = db.interview_sessions.count_documents({"status": "completed", "result": "FAIL"})
+    active_query = sess_query_base.copy()
+    active_query["status"] = {"$in": ["active", "interviewing", "paused"]}
+    active_interviews = db.interview_sessions.count_documents(active_query)
+
+    completed_query = sess_query_base.copy()
+    completed_query["status"] = "completed"
+    completed_query["result"] = {"$in": ["PASS", "FAIL"]}
+    total_completed = db.interview_sessions.count_documents(completed_query)
+
+    pass_query = sess_query_base.copy()
+    pass_query["status"] = "completed"
+    pass_query["result"] = "PASS"
+    total_pass = db.interview_sessions.count_documents(pass_query)
+
+    fail_query = sess_query_base.copy()
+    fail_query["status"] = "completed"
+    fail_query["result"] = "FAIL"
+    total_fail = db.interview_sessions.count_documents(fail_query)
 
     return {
         "totalCandidates": total,
@@ -1145,34 +1173,52 @@ async def get_geo_stats(_admin=Depends(require_admin_auth)):
     district_pipeline = [
         {
             "$group": {
-                "_id": {"state": "$state", "district": "$district"},
-                "total": {"$sum": 1},
+                "_id": {
+                    "state": "$state",
+                    "district": "$district",
+                    "phase": "$current_phase",
+                },
+                "count": {"$sum": 1},
             }
-        },
-        {"$sort": {"total": -1}},
-        {"$limit": 100},
+        }
     ]
     district_rows = list(db.candidates.aggregate(district_pipeline))
 
-    districts_list = []
+    districts_map: dict = {}
     for row in district_rows:
         d_state = row["_id"].get("state") or "Unknown"
         d_district = row["_id"].get("district") or "Unknown"
         key = (d_state, d_district)
+        if key not in districts_map:
+            districts_map[key] = {"state": d_state, "district": d_district, "total": 0, "pending": 0, "interviewed": 0}
+        
+        districts_map[key]["total"] += row["count"]
+        phase = row["_id"].get("phase") or "onboarding"
+        if phase == "onboarding":
+            districts_map[key]["pending"] += row["count"]
+        elif phase in ("interview", "summary", "foundation", "documents"):
+            districts_map[key]["interviewed"] += row["count"]
+
+    districts_list = []
+    for key, d_info in districts_map.items():
         pf = d_pf_map.get(key, {"PASS": 0, "FAIL": 0})
         selected = pf["PASS"]
         rejected = pf["FAIL"]
-        total = selected + rejected
-        pass_rate = round(selected / total * 100) if total > 0 else 0
+        total_pf = selected + rejected
+        pass_rate = round(selected / total_pf * 100) if total_pf > 0 else 0
         districts_list.append({
-            "state": d_state,
-            "district": d_district,
-            "total": row["total"],
-            "pending": row["total"],
+            "state": d_info["state"],
+            "district": d_info["district"],
+            "total": d_info["total"],
+            "pending": d_info["pending"],
+            "interviewed": d_info["interviewed"],
             "selected": selected,
             "rejected": rejected,
             "passRate": pass_rate,
         })
+    
+    districts_list.sort(key=lambda x: x["total"], reverse=True)
+    districts_list = districts_list[:100]
 
     return {
         "states": states_list,

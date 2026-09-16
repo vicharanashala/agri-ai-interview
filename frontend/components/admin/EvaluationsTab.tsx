@@ -32,6 +32,7 @@ export interface InterviewEvaluation {
   candidateId: string;
   candidateName: string;
   email?: string;
+  phone?: string;
   result?: string;       // PASS | FAIL
   endReason?: string;    // anti_cheat | withdrawn | question_limit | time_limit
   score?: number;        // 0–100
@@ -51,6 +52,7 @@ export interface ReEvaluationItem {
   candidateId: string;
   candidateName: string;
   email?: string;
+  phone?: string;
   result?: string;
   endReason?: string;
   score?: number;
@@ -249,7 +251,7 @@ function ExpandedRow({
   getAdminToken,
   onReevaluate,
   reEvaluationReason,
-  colSpan = 7,
+  colSpan = 8,
 }: {
   interviewId: string;
   candidateId: string;
@@ -633,6 +635,7 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
                     <tr>
                       <th style={{ width: 32 }}></th>
                       <th>Candidate</th>
+                      <th>Mobile</th>
                       <th>Result</th>
                       <th>Score</th>
                       <th>End Reason</th>
@@ -659,6 +662,9 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
                                 <span className={styles.candidateEmail}>{evaluation.email}</span>
                               )}
                             </div>
+                          </td>
+                          <td>
+                            <span className={styles.candidateEmail}>{evaluation.phone || "—"}</span>
                           </td>
                           <td>
                             <span className={`${styles.resultBadge} ${resultClass(evaluation.result)}`}>
@@ -696,7 +702,7 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
                             adminApiBase={adminApiBase}
                             getAdminToken={getAdminToken}
                             onReevaluate={handleReevaluate}
-                            colSpan={7}
+                            colSpan={8}
                           />
                         )}
                       </React.Fragment>
@@ -736,6 +742,7 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
                   <tr>
                     <th style={{ width: 32 }}></th>
                     <th>Candidate Name</th>
+                    <th>Mobile</th>
                     <th>Result</th>
                     <th>Mark</th>
                     <th>Attempt Number</th>
@@ -763,6 +770,9 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
                             <span className={styles.candidateName}>{item.candidateName}</span>
                             {item.email && <span className={styles.candidateEmail}>{item.email}</span>}
                           </div>
+                        </td>
+                        <td>
+                          <span className={styles.candidateEmail}>{item.phone || "—"}</span>
                         </td>
                         <td>
                           <span className={`${styles.resultBadge} ${resultClass(item.result)}`}>
@@ -843,7 +853,7 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
                           getAdminToken={getAdminToken}
                           onReevaluate={handleReevaluateReEvalItem}
                           reEvaluationReason={item.reason}
-                          colSpan={10}
+                          colSpan={11}
                         />
                       )}
                     </React.Fragment>

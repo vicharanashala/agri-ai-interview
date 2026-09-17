@@ -1286,6 +1286,10 @@ export default function AdminDashboard() {
           <EvaluationsTab
             adminApiBase={ADMIN_API_BASE}
             getAdminToken={getAdminToken}
+            onCandidateClick={(query) => {
+              setSearchQuery(query);
+              setActiveTab("candidates");
+            }}
           />
         )}
 

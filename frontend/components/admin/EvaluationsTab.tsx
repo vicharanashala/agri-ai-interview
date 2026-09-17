@@ -71,6 +71,7 @@ export interface ReEvaluationItem {
 interface EvaluationsTabProps {
   adminApiBase: string;
   getAdminToken: () => string | null;
+  onCandidateClick?: (query: string) => void;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────
@@ -397,7 +398,7 @@ function ExpandedRow({
 
 // ─── Main Component ──────────────────────────────────────────────────
 
-export default function EvaluationsTab({ adminApiBase, getAdminToken }: EvaluationsTabProps) {
+export default function EvaluationsTab({ adminApiBase, getAdminToken, onCandidateClick }: EvaluationsTabProps) {
   const [activeSubTab, setActiveSubTab] = useState<'evaluations' | 're-evaluations'>('evaluations');
   const [evaluations, setEvaluations] = useState<InterviewEvaluation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -656,8 +657,23 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
                             </span>
                           </td>
                           <td>
-                            <div className={styles.candidateCell}>
-                              <span className={styles.candidateName}>{evaluation.candidateName}</span>
+                            <div
+                              className={styles.candidateCell}
+                              onClick={(e) => {
+                                if (onCandidateClick) {
+                                  e.stopPropagation();
+                                  onCandidateClick(evaluation.email || evaluation.candidateName);
+                                }
+                              }}
+                              style={onCandidateClick ? { cursor: "pointer" } : {}}
+                              title={onCandidateClick ? "View candidate details" : undefined}
+                            >
+                              <span
+                                className={styles.candidateName}
+                                style={onCandidateClick ? { color: "#2563eb", textDecoration: "underline" } : {}}
+                              >
+                                {evaluation.candidateName}
+                              </span>
                               {evaluation.email && (
                                 <span className={styles.candidateEmail}>{evaluation.email}</span>
                               )}
@@ -766,8 +782,23 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken }: Evaluati
                           </span>
                         </td>
                         <td>
-                          <div className={styles.candidateCell}>
-                            <span className={styles.candidateName}>{item.candidateName}</span>
+                          <div
+                            className={styles.candidateCell}
+                            onClick={(e) => {
+                              if (onCandidateClick) {
+                                e.stopPropagation();
+                                onCandidateClick(item.email || item.candidateName);
+                              }
+                            }}
+                            style={onCandidateClick ? { cursor: "pointer" } : {}}
+                            title={onCandidateClick ? "View candidate details" : undefined}
+                          >
+                            <span
+                              className={styles.candidateName}
+                              style={onCandidateClick ? { color: "#2563eb", textDecoration: "underline" } : {}}
+                            >
+                              {item.candidateName}
+                            </span>
                             {item.email && <span className={styles.candidateEmail}>{item.email}</span>}
                           </div>
                         </td>

@@ -66,7 +66,7 @@ def _get_candidate_id_with_email_fallback(request: Request) -> str:
     if not email:
         raise HTTPException(status_code=401, detail="Authentication required")
     db = get_sync_db()
-    user = db.users.find_one({"email": email})
+    user = db.users.find_one({"email": email.lower().strip()})
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
     user_id_str = str(user["_id"])
@@ -271,7 +271,7 @@ async def get_candidate_profile(email: Optional[str] = Query(None)):
     from app.db.mongodb import get_sync_db
     db = get_sync_db()
 
-    user = db.users.find_one({"email": email})
+    user = db.users.find_one({"email": email.lower().strip()})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 

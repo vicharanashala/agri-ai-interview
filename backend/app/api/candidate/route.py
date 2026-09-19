@@ -247,12 +247,21 @@ async def upsert_candidate(request: Request, body: OnboardingRequest):
         "updated_at": datetime.now(timezone.utc),
     }
 
+    # Safely get ObjectId variant
+    id_variants = [candidate_id]
+    try:
+        from bson.errors import InvalidId
+        if not isinstance(candidate_id, ObjectId):
+            id_variants.append(ObjectId(candidate_id))
+    except Exception:
+        pass
+
     db.candidates.update_one(
-        {"_id": _to_objectid(candidate_id)},
+        {"_id": {"$in": id_variants}},
         {"$set": updates},
     )
 
-    cand = db.candidates.find_one({"_id": _to_objectid(candidate_id)})
+    cand = db.candidates.find_one({"_id": {"$in": id_variants}})
     if not cand:
         raise HTTPException(status_code=404, detail="Candidate not found")
 

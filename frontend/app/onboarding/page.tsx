@@ -664,7 +664,6 @@ export default function OnboardingPage() {
 
       // Upload resume to backend (server-side async: file on disk + raw text in DB)
       if (resume?.data && candidate?.id) {
-        try {
           // Convert base64 to a File object
           const res = await fetch(resume.data);
           const blob = await res.blob();
@@ -678,10 +677,10 @@ export default function OnboardingPage() {
           formData.append('file', file);
           formData.append('candidateId', candidate.id);
 
-          await fetch('/api/resume', { method: 'POST', body: formData, credentials: 'include' });
-        } catch (uploadErr) {
-          console.error('Resume upload failed (non-blocking):', uploadErr);
-          // Non-fatal — continue even if resume upload fails
+        const resumeRes = await fetch('/api/resume', { method: 'POST', body: formData, credentials: 'include' });
+        if (!resumeRes.ok) {
+          const errorData = await resumeRes.json().catch(() => ({}));
+          throw new Error(errorData.error || 'Failed to upload resume');
         }
       }
 

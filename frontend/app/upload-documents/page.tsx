@@ -29,7 +29,7 @@ const SECTIONS = [
       { key: 'updated_resume', label: 'Updated Resume', required: true, maxSizeMB: 5, multi: false },
       { key: 'marksheet_10', label: '10th Class Marksheet', required: true, maxSizeMB: 10, multi: false },
       { key: 'marksheet_12', label: '12th Class Marksheet', required: true, maxSizeMB: 10, multi: false },
-      { key: 'grad_marksheets', label: 'Graduation mark sheets (all semesters) and Degree Certificate', required: false, maxSizeMB: 10, multi: false },
+      { key: 'grad_marksheets', label: 'Graduation mark sheets (all semesters) and Degree Certificate', required: true, maxSizeMB: 10, multi: false },
       { key: 'pg_marksheets', label: 'Post-Graduation mark sheets (all semesters) and Degree Certificate (if applicable)', required: false, maxSizeMB: 10, multi: false },
       { key: 'noc', label: 'NOC from the institute, if currently pursuing studies', required: false, maxSizeMB: 5, multi: false },
     ],
@@ -106,7 +106,12 @@ export default function UploadDocumentsPage() {
         if (res.ok) {
           const data = await res.json();
           if (data.documents && data.documents.length > 0) {
-            setAlreadySubmitted(true);
+            const requiredFields = ALL_FIELDS.filter((field) => field.required).map((field) => field.key);
+            const uploadedFields = data.documents.map((doc: any) => doc.fieldName);
+            const allUploaded = requiredFields.every((key) => uploadedFields.includes(key));
+            if (allUploaded) {
+              setAlreadySubmitted(true);
+            }
           }
         }
       } catch (_) {}

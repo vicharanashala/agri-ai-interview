@@ -140,65 +140,78 @@ async def upload_documents(
     from app.core.storage import get_storage, candidate_docs_path
 
     uploaded: List[DocumentInfo] = []
+    saved_docs = []
     now = datetime.now(timezone.utc)
 
-    for field_name, file in files_to_save.items():
-        if file is None:
-            continue
+    try:
+        for field_name, file in files_to_save.items():
+            if file is None:
+                continue
 
-        try:
-            file_bytes = _validate_file(file, field_name)
-        except HTTPException:
-            raise
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Invalid file for {field_name}: {str(e)}")
+            try:
+                file_bytes = _validate_file(file, field_name)
+            except HTTPException:
+                raise
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Invalid file for {field_name}: {str(e)}")
 
-        file_type = _guess_file_type(file.filename)
+            file_type = _guess_file_type(file.filename)
 
-        # Get next fileIndex for this field
-        existing_count = db.candidate_documents.count_documents({
-            "candidate_id": candidate_id,
-            "field_name": field_name,
-        })
-        file_index = existing_count + 1
+            # Get next fileIndex for this field
+            existing_count = db.candidate_documents.count_documents({
+                "candidate_id": candidate_id,
+                "field_name": field_name,
+            })
+            file_index = existing_count + 1
 
-        # Write to storage
+            # Write to storage
+            storage = get_storage()
+            safe_filename = f"{uuid.uuid4()}_{file.filename}"
+            storage_path = candidate_docs_path(candidate_id, field_name, safe_filename)
+            content_type_str = _CONTENT_TYPES.get(file_type, "application/octet-stream")
+            try:
+                await storage.write(storage_path, file_bytes, content_type=content_type_str)
+            except Exception as e:
+                import traceback
+                tb = traceback.format_exc()
+                print(f"[DocumentUploadError] Failed to write file to {settings.STORAGE_BACKEND}: {str(e)}\n{tb}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Storage backend ({settings.STORAGE_BACKEND}) write failed for {file.filename}: {str(e)}. Bucket: '{settings.GCS_BUCKET_NAME}'."
+                )
+
+            doc_id = str(uuid.uuid4())
+            doc = {
+                "_id": doc_id,
+                "candidate_id": candidate_id,
+                "field_name": field_name,
+                "file_index": file_index,
+                "file_name": file.filename,
+                "file_type": file_type,
+                "storage_path": storage_path,
+                "created_at": now,
+            }
+            db.candidate_documents.insert_one(doc)
+            saved_docs.append(doc)
+
+            uploaded.append(DocumentInfo(
+                fieldName=field_name,
+                fileIndex=file_index,
+                fileName=file.filename,
+                fileType=file_type,
+                storagePath=storage_path,
+                createdAt=now.isoformat(),
+            ))
+    except Exception as e:
+        # Rollback: delete already saved documents in this request
         storage = get_storage()
-        safe_filename = f"{uuid.uuid4()}_{file.filename}"
-        storage_path = candidate_docs_path(candidate_id, field_name, safe_filename)
-        content_type_str = _CONTENT_TYPES.get(file_type, "application/octet-stream")
-        try:
-            await storage.write(storage_path, file_bytes, content_type=content_type_str)
-        except Exception as e:
-            import traceback
-            tb = traceback.format_exc()
-            print(f"[DocumentUploadError] Failed to write file to {settings.STORAGE_BACKEND}: {str(e)}\n{tb}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Storage backend ({settings.STORAGE_BACKEND}) write failed for {file.filename}: {str(e)}. Bucket: '{settings.GCS_BUCKET_NAME}'."
-            )
-
-        doc_id = str(uuid.uuid4())
-        doc = {
-            "_id": doc_id,
-            "candidate_id": candidate_id,
-            "field_name": field_name,
-            "file_index": file_index,
-            "file_name": file.filename,
-            "file_type": file_type,
-            "storage_path": storage_path,
-            "created_at": now,
-        }
-        db.candidate_documents.insert_one(doc)
-
-        uploaded.append(DocumentInfo(
-            fieldName=field_name,
-            fileIndex=file_index,
-            fileName=file.filename,
-            fileType=file_type,
-            storagePath=storage_path,
-            createdAt=now.isoformat(),
-        ))
+        for doc in saved_docs:
+            try:
+                await storage.delete(doc["storage_path"])
+            except Exception:
+                pass
+            db.candidate_documents.delete_one({"_id": doc["_id"]})
+        raise e
 
     if not uploaded:
         raise HTTPException(status_code=400, detail="No files provided")

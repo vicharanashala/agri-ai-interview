@@ -12,14 +12,18 @@ const ALLOWED_TYPES = [
   'application/pdf',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'image/jpeg',
+  'image/png',
 ];
 
 const SECTIONS = [
   {
     title: 'Identity',
     fields: [
-      { key: 'aadhaar', label: 'Aadhaar Card (Front and Back side)', required: true, maxSizeMB: 5, multi: false },
-      { key: 'pan', label: 'PAN Card (Front and Back side)', required: true, maxSizeMB: 5, multi: false },
+      { key: 'aadhaar_front', label: 'Aadhaar Card (Front side)', required: true, maxSizeMB: 5, multi: false },
+      { key: 'aadhaar_back', label: 'Aadhaar Card (Back side)', required: true, maxSizeMB: 5, multi: false },
+      { key: 'pan_front', label: 'PAN Card (Front side)', required: true, maxSizeMB: 5, multi: false },
+      { key: 'pan_back', label: 'PAN Card (Back side)', required: true, maxSizeMB: 5, multi: false },
       { key: 'bank_details', label: 'Bank Account Details', required: true, maxSizeMB: 5, multi: false },
     ],
   },
@@ -131,9 +135,12 @@ export default function UploadDocumentsPage() {
       !ALLOWED_TYPES.includes(file.type) &&
       !file.name.toLowerCase().endsWith('.pdf') &&
       !file.name.toLowerCase().endsWith('.doc') &&
-      !file.name.toLowerCase().endsWith('.docx')
+      !file.name.toLowerCase().endsWith('.docx') &&
+      !file.name.toLowerCase().endsWith('.jpg') &&
+      !file.name.toLowerCase().endsWith('.jpeg') &&
+      !file.name.toLowerCase().endsWith('.png')
     ) {
-      return 'Only PDF and DOCX files allowed';
+      return 'Only PDF, DOCX, JPG, and PNG files allowed';
     }
 
     if (file.size > field.maxSizeMB * 1024 * 1024) {

@@ -217,11 +217,11 @@ def get_faq_system() -> str:
 
 # ── Interview settings ────────────────────────────────────────────────────────
 
-def get_interview_settings() -> dict:
+def get_interview_settings(role: str = None) -> dict:
     defaults = {
         "max_questions": DEFAULT_MAX_QUESTIONS,
         "max_duration_minutes": 30,
-        "cooldown_days": 3,
+        "cooldown_days": 0,
         "pass_threshold": 60,
         "max_concurrent_interviews": 20,
     }
@@ -242,6 +242,17 @@ def get_interview_settings() -> dict:
             defaults["pass_threshold"] = int(t_val)
         if mc_val:
             defaults["max_concurrent_interviews"] = int(mc_val)
+
+        level_str = _get_setting(db, "interview_level_settings")
+        if level_str:
+            import json
+            levels = json.loads(level_str)
+            defaults["levels"] = levels
+            if role and role in levels:
+                if "max_questions" in levels[role]: defaults["max_questions"] = int(levels[role]["max_questions"])
+                if "max_duration_minutes" in levels[role]: defaults["max_duration_minutes"] = int(levels[role]["max_duration_minutes"])
+                if "pass_threshold" in levels[role]: defaults["pass_threshold"] = int(levels[role]["pass_threshold"])
+                if "cooldown_days" in levels[role]: defaults["cooldown_days"] = int(levels[role]["cooldown_days"])
     except Exception:
         pass
     return defaults
@@ -285,28 +296,43 @@ def get_anti_cheat_settings() -> dict:
 
 # ── Cooldown ──────────────────────────────────────────────────────────────────
 
-def get_cooldown_days() -> int:
+def get_cooldown_days(role: str = None) -> int:
+    defaults = {"cooldown_days": 0}
     try:
         db = get_sync_db()
         val = _get_setting(db, "interview_cooldown_days")
         if val:
-            return int(val)
+            defaults["cooldown_days"] = int(val)
+            
+        level_str = _get_setting(db, "interview_level_settings")
+        if level_str:
+            import json
+            levels = json.loads(level_str)
+            if role and role in levels and "cooldown_days" in levels[role]:
+                defaults["cooldown_days"] = int(levels[role]["cooldown_days"])
     except Exception:
         pass
-    return 3
+    return defaults["cooldown_days"]
 
 
 # ── Evaluation settings ───────────────────────────────────────────────────────
 
-def get_evaluation_settings() -> dict:
+def get_evaluation_settings(role: str = None) -> dict:
+    defaults = {"pass_threshold": 60}
     try:
         db = get_sync_db()
         val = _get_setting(db, "evaluation_pass_threshold")
-        if val:
-            return {"pass_threshold": int(val)}
+        if val: defaults["pass_threshold"] = int(val)
+
+        level_str = _get_setting(db, "interview_level_settings")
+        if level_str:
+            import json
+            levels = json.loads(level_str)
+            if role and role in levels and "pass_threshold" in levels[role]:
+                defaults["pass_threshold"] = int(levels[role]["pass_threshold"])
     except Exception:
         pass
-    return {"pass_threshold": 60}
+    return defaults
 
 
 def get_evaluation_criteria() -> list:

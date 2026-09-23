@@ -22,19 +22,20 @@ class InterviewState:
         self.resume_parsed = resume_parsed
         self.messages: List[Dict[str, Any]] = []  # conversation history
         self.question_count = 0
-        self.max_questions = get_interview_settings()["max_questions"]
-        self.max_duration_minutes = self._get_max_duration_minutes()
+        role = self.candidate_data.get("eligible_role")
+        self.max_questions = get_interview_settings(role)["max_questions"]
+        self.max_duration_minutes = self._get_max_duration_minutes(role)
         self.status = "active"
         self.start_time = datetime.utcnow()
         self.qa_pairs: List[Dict[str, Any]] = []  # [{question, answer, topic}] populated per turn
         self._pending_question: Dict[str, str] = {}  # {question, topic} awaiting the next answer
         self._recent_questions: List[str] = []  # sliding window of last N question texts for dedup
 
-    def _get_max_duration_minutes(self) -> int:
+    def _get_max_duration_minutes(self, role: str = None) -> int:
         """Load max interview duration in minutes from DB settings, falling back to default."""
         try:
             from app.services.settings_service import get_interview_settings
-            return get_interview_settings().get("max_duration_minutes", DEFAULT_MAX_DURATION_MINUTES)
+            return get_interview_settings(role).get("max_duration_minutes", DEFAULT_MAX_DURATION_MINUTES)
         except Exception:
             pass
         return DEFAULT_MAX_DURATION_MINUTES

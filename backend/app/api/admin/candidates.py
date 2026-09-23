@@ -543,9 +543,14 @@ async def reevaluate_interview(interview_id: str, _admin=Depends(require_admin_a
         logging.error(f"[Re-evaluate] LLM evaluation failed for {interview_id}: {e}")
         raise HTTPException(status_code=502, detail="Evaluation service failed. Please try again.")
 
-    threshold = get_evaluation_settings().get("pass_threshold", 60)
+    role = candidate_data.get("eligible_role")
+    threshold = get_evaluation_settings(role).get("pass_threshold", 60)
     overall_score = evaluation.get("overall_score") or 0
-    new_result = "PASS" if overall_score >= threshold else "FAIL"
+    
+    if session.get("end_reason") == "voluntary_withdrawal":
+        new_result = "WITHDRAWN"
+    else:
+        new_result = "PASS" if overall_score >= threshold else "FAIL"
 
     interview_data["evaluation"] = evaluation
     now = datetime.now(timezone.utc)
@@ -932,6 +937,12 @@ async def get_all_evaluations(
         session_id_str = str(s.get("_id"))
         re_req = re_req_map.get(session_id_str)
 
+        level = candidate.get("eligible_role") if candidate else None
+        
+        from app.services.settings_service import get_evaluation_settings
+        eval_settings = get_evaluation_settings(level)
+        pass_threshold = eval_settings.get("pass_threshold", 60)
+
         evals.append({
             "id": s.get("_id"),
             "candidateId": candidate_id,
@@ -954,7 +965,10 @@ async def get_all_evaluations(
             "reEvaluationStatus": re_req.get("status") if re_req else None,
             "reEvaluationReason": re_req.get("reason") if re_req else None,
             "reEvaluationRequestedAt": _format_iso(re_req.get("requested_at")) if re_req else None,
+            "level": level,
+            "passThreshold": pass_threshold,
         })
+
 
     total = len(evals)
     paginated_evals = evals[offset : offset + limit]

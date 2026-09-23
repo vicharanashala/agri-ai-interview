@@ -31,8 +31,7 @@ def _reload_max_concurrent() -> None:
     _MAX_CONCURRENT_INTERVIEWS = settings.get("max_concurrent_interviews", 20)
 
 
-# Backwards-compatible alias — individual SlotManager instances re-resolve via
-# the property, so this constant is only used for initial sanity-checks / imports.
+# Backwards-compatible alias
 MAX_CONCURRENT_INTERVIEWS = 20
 
 
@@ -86,6 +85,20 @@ class SlotManager:
 
     async def start_interview(self, candidate_id: str, candidate_data: dict) -> dict:
         db = get_sync_db()
+        
+        # Merge candidate data from DB so we have eligible_role and other real attributes
+        from bson import ObjectId
+        try:
+            cand = db.candidates.find_one({"_id": ObjectId(candidate_id)})
+        except Exception:
+            cand = db.candidates.find_one({"_id": candidate_id})
+            
+        if cand:
+            candidate_data["eligible_role"] = cand.get("eligible_role")
+            if not candidate_data.get("name"):
+                candidate_data["name"] = cand.get("full_name") or cand.get("name")
+            
+        role = candidate_data.get("eligible_role")
 
         try:
             # 1. Attempts check
@@ -111,7 +124,7 @@ class SlotManager:
                 sort=[("completed_at", -1)],
             )
             if latest_failed and latest_failed.get("completed_at"):
-                cooldown_days = get_cooldown_days()
+                cooldown_days = get_cooldown_days(role)
                 completed_at = latest_failed["completed_at"]
                 if completed_at.tzinfo is None:
                     completed_at = completed_at.replace(tzinfo=timezone.utc)

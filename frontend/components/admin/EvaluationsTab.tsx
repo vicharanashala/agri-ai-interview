@@ -44,6 +44,8 @@ export interface InterviewEvaluation {
   reEvaluationRequested?: boolean;
   reEvaluationReason?: string;
   reEvaluationRequestedAt?: string;
+  level?: string;
+  passThreshold?: number;
 }
 
 export interface ReEvaluationItem {
@@ -637,6 +639,8 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken, onCandidat
                       <th style={{ width: 32 }}></th>
                       <th>Candidate</th>
                       <th>Mobile</th>
+                      <th>Level</th>
+                      <th>Pass Threshold</th>
                       <th>Result</th>
                       <th>Score</th>
                       <th>End Reason</th>
@@ -681,6 +685,12 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken, onCandidat
                           </td>
                           <td>
                             <span className={styles.candidateEmail}>{evaluation.phone || "—"}</span>
+                          </td>
+                          <td>
+                            <span style={{ fontSize: "12px", background: "#f1f5f9", padding: "4px 8px", borderRadius: "12px", color: "#475569" }}>{evaluation.level || "—"}</span>
+                          </td>
+                          <td>
+                            <span className={styles.candidateEmail}>{evaluation.passThreshold != null ? `${evaluation.passThreshold}/100` : "—"}</span>
                           </td>
                           <td>
                             <span className={`${styles.resultBadge} ${resultClass(evaluation.result)}`}>

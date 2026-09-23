@@ -371,7 +371,8 @@ async def _build_evaluate_response(interview_id: str, candidate_data: dict, qa_p
         if default_metric not in metrics:
             metrics[default_metric] = {"score": 75, "details": "Metric pending"}
 
-    threshold = get_evaluation_settings()["pass_threshold"]
+    role = candidate_data.get("eligible_role")
+    threshold = get_evaluation_settings(role)["pass_threshold"]
     overall_score = evaluation.get("overall_score", 75)
     result = "PASS" if overall_score >= threshold else "FAIL"
 
@@ -460,19 +461,6 @@ async def get_interview_evaluation(interview_id: str):
     end_reason_db = interview_data.get("end_reason")
     score = session.get("overall_score")
 
-    # If already evaluated successfully (score > 0), return instantly
-    if evaluation and score is not None and score > 0:
-        threshold = get_evaluation_settings()["pass_threshold"]
-        result = session.get("result") or ("PASS" if score >= threshold else "FAIL")
-        logger.info(f"[evaluation/{interview_id}] status=ready, score={score}, result={result}")
-        return {
-            "status": "ready",
-            "result": result,
-            "overall_score": score,
-            "end_reason": end_reason_db,
-            "evaluation": evaluation,
-        }
-
     # Otherwise, generate/regenerate on-the-fly within this active HTTP request
     try:
         from bson import ObjectId
@@ -485,6 +473,23 @@ async def get_interview_evaluation(interview_id: str):
                 candidate = db.candidates.find_one({"_id": candidate_id})
             if candidate:
                 candidate_data = candidate
+                
+        # Move this down here so we can pass candidate_role
+        if evaluation and score is not None and score > 0:
+            role = candidate_data.get("eligible_role")
+            threshold = get_evaluation_settings(role)["pass_threshold"]
+            if session.get("end_reason") == "voluntary_withdrawal" or end_reason_db == "voluntary_withdrawal":
+                result = "WITHDRAWN"
+            else:
+                result = session.get("result") or ("PASS" if score >= threshold else "FAIL")
+            logger.info(f"[evaluation/{interview_id}] status=ready, score={score}, result={result}")
+            return {
+                "status": "ready",
+                "result": result,
+                "overall_score": score,
+                "end_reason": end_reason_db,
+                "evaluation": evaluation,
+            }
 
         messages = interview_data.get("messages") or []
         qa_pairs = interview_data.get("qa_pairs") or []
@@ -504,8 +509,13 @@ async def get_interview_evaluation(interview_id: str):
 
         if evaluation:
             score = evaluation.get("overall_score", 0)
-            threshold = get_evaluation_settings()["pass_threshold"]
-            result = "PASS" if score >= threshold else "FAIL"
+            role = candidate_data.get("eligible_role")
+            threshold = get_evaluation_settings(role)["pass_threshold"]
+            
+            if session.get("end_reason") == "voluntary_withdrawal" or end_reason_db == "voluntary_withdrawal":
+                result = "WITHDRAWN"
+            else:
+                result = "PASS" if score >= threshold else "FAIL"
 
             # Persist to database
             interview_data["evaluation"] = evaluation

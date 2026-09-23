@@ -173,15 +173,29 @@ class InterviewGraphManager:
 
                     update = {"interview_data": interview_data}
 
+                    candidate_id = session.get("candidate_id")
+
                     # Also write score + result to document root fields (used for cooldown computation)
                     if evaluation and evaluation.get("overall_score") is not None:
-                        threshold = get_evaluation_settings()["pass_threshold"]
+                        # Fetch candidate to get role
+                        from bson import ObjectId
+                        try:
+                            candidate = db.candidates.find_one({"_id": ObjectId(candidate_id)})
+                        except Exception:
+                            candidate = db.candidates.find_one({"_id": candidate_id})
+                        
+                        role = candidate.get("eligible_role") if candidate else None
+                        
+                        threshold = get_evaluation_settings(role)["pass_threshold"]
                         score = evaluation["overall_score"]
                         update["overall_score"] = score
-                        update["result"] = "PASS" if score >= threshold else "FAIL"
+                        
+                        if session.get("end_reason") == "voluntary_withdrawal":
+                            update["result"] = "WITHDRAWN"
+                        else:
+                            update["result"] = "PASS" if score >= threshold else "FAIL"
+                            
                         logger.info(f"[InterviewGraph] {interview_id}: writing result={update['result']} score={score} (threshold={threshold})")
-
-                    candidate_id = session.get("candidate_id")
                 else:
                     logger.warning(f"[InterviewGraph] {interview_id}: session not found in MongoDB for persistence")
             finally:

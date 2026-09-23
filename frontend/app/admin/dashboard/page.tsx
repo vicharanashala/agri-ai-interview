@@ -170,11 +170,19 @@ export default function AdminDashboard() {
   const [guidelineContent, setGuidelineContent] = useState("");
   const [editingCriteria, setEditingCriteria] = useState<string | null>(null);
   const [criteriaForm, setCriteriaForm] = useState<Partial<EvaluationCriteria>>({});
-  const [interviewConfig, setInterviewConfig] = useState<{ max_questions: number; max_duration_minutes: number; cooldown_days: number; pass_threshold: number; max_concurrent_interviews: number }>({ max_questions: 10, max_duration_minutes: 30, cooldown_days: 3, pass_threshold: 60, max_concurrent_interviews: 20 });
-  const [maxQuestionsInput, setMaxQuestionsInput] = useState<number>(10);
-  const [maxDurationInput, setMaxDurationInput] = useState<number>(30);
-  const [cooldownDaysInput, setCooldownDaysInput] = useState<number>(3);
-  const [passThresholdInput, setPassThresholdInput] = useState<number>(60);
+  type LevelConfig = { max_questions: number; max_duration_minutes: number; pass_threshold: number; cooldown_days: number; };
+  type Levels = { YP: LevelConfig; Junior: LevelConfig; Agri: LevelConfig; Senior: LevelConfig; };
+  const DEFAULT_LEVEL: LevelConfig = { max_questions: 10, max_duration_minutes: 30, pass_threshold: 60, cooldown_days: 0 };
+
+  const [interviewConfig, setInterviewConfig] = useState<{ max_concurrent_interviews: number; levels: Levels }>({
+    max_concurrent_interviews: 20,
+    levels: { YP: { ...DEFAULT_LEVEL }, Junior: { ...DEFAULT_LEVEL }, Agri: { ...DEFAULT_LEVEL }, Senior: { ...DEFAULT_LEVEL } }
+  });
+
+  const [levelInputs, setLevelInputs] = useState<Levels>({
+    YP: { ...DEFAULT_LEVEL }, Junior: { ...DEFAULT_LEVEL }, Agri: { ...DEFAULT_LEVEL }, Senior: { ...DEFAULT_LEVEL }
+  });
+  
   const [maxConcurrentInput, setMaxConcurrentInput] = useState<number>(20);
   const [savingConfig, setSavingConfig] = useState(false);
   const [antiCheatConfig, setAntiCheatConfig] = useState<{ idle_threshold_ms: number; platform_idle_ms: number }>({ idle_threshold_ms: 15_000, platform_idle_ms: 15 * 60_000 });
@@ -641,18 +649,24 @@ export default function AdminDashboard() {
       const res = await withAuth("/api/admin/settings/interview");
       if (res.ok) {
         const data = await res.json();
-        setInterviewConfig({
-          max_questions: data.max_questions,
-          max_duration_minutes: data.max_duration_minutes,
-          cooldown_days: data.cooldown_days,
+        const baseLevel = {
+          max_questions: data.max_questions ?? 10,
+          max_duration_minutes: data.max_duration_minutes ?? 30,
           pass_threshold: data.pass_threshold ?? 60,
+          cooldown_days: data.cooldown_days ?? 0
+        };
+        const levels = data.levels || {
+          YP: { ...baseLevel },
+          Junior: { ...baseLevel },
+          Agri: { ...baseLevel },
+          Senior: { ...baseLevel }
+        };
+        setInterviewConfig({ 
           max_concurrent_interviews: data.max_concurrent_interviews ?? 20,
+          levels 
         });
-        setMaxQuestionsInput(data.max_questions);
-        setMaxDurationInput(data.max_duration_minutes ?? 30);
-        setCooldownDaysInput(data.cooldown_days ?? 3);
-        setPassThresholdInput(data.pass_threshold ?? 60);
         setMaxConcurrentInput(data.max_concurrent_interviews ?? 20);
+        setLevelInputs(levels);
       }
     } catch (err) {
       console.error("Failed to load interview config:", err);
@@ -704,27 +718,30 @@ export default function AdminDashboard() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-        max_questions: maxQuestionsInput,
-        max_duration_minutes: maxDurationInput,
-        cooldown_days: cooldownDaysInput,
-        pass_threshold: passThresholdInput,
-        max_concurrent_interviews: maxConcurrentInput,
-      }),
+          max_concurrent_interviews: maxConcurrentInput,
+          levels: levelInputs
+        }),
       });
       if (res.ok) {
         const data = await res.json();
-        setInterviewConfig({
+        const baseLevel = {
           max_questions: data.max_questions ?? 10,
           max_duration_minutes: data.max_duration_minutes ?? 30,
-          cooldown_days: data.cooldown_days ?? 3,
           pass_threshold: data.pass_threshold ?? 60,
+          cooldown_days: data.cooldown_days ?? 0
+        };
+        const levels = data.levels || {
+          YP: { ...baseLevel },
+          Junior: { ...baseLevel },
+          Agri: { ...baseLevel },
+          Senior: { ...baseLevel }
+        };
+        setInterviewConfig({ 
           max_concurrent_interviews: data.max_concurrent_interviews ?? 20,
+          levels 
         });
-        setMaxQuestionsInput(data.max_questions ?? 10);
-        setMaxDurationInput(data.max_duration_minutes ?? 30);
-        setCooldownDaysInput(data.cooldown_days ?? 3);
-        setPassThresholdInput(data.pass_threshold ?? 60);
         setMaxConcurrentInput(data.max_concurrent_interviews ?? 20);
+        setLevelInputs(levels);
       }
     } catch (err) {
       console.error("Failed to save interview config:", err);
@@ -1536,108 +1553,90 @@ export default function AdminDashboard() {
                   Configure interview session limits and candidate cooldown period.
                 </p>
 
-                {/* Max Questions */}
-                <div className={styles.interviewConfigCard}>
-                  <label className={styles.interviewConfigLabel}>Maximum Questions Per Interview</label>
-                  <div className={styles.interviewConfigRow}>
-                    <input
-                      type="number"
-                      min={1}
-                      max={100}
-                      value={maxQuestionsInput}
-                      onChange={(e) => setMaxQuestionsInput(Number(e.target.value))}
-                      className={styles.interviewConfigInput}
-                    />
-                    <button
-                      onClick={handleSaveInterviewConfig}
-                      disabled={savingConfig || maxQuestionsInput === interviewConfig.max_questions}
-                      className={styles.saveBtn}
-                    >
-                      {savingConfig ? "Saving…" : "Save"}
-                    </button>
+                {/* Level-based configurations */}
+                {Object.keys(levelInputs).map((level) => (
+                  <div key={level} className={styles.interviewConfigCard} style={{ marginTop: "1rem" }}>
+                    <h3 style={{ margin: "0 0 1rem 0", fontSize: "1rem", color: "#333", borderBottom: "1px solid #eee", paddingBottom: "0.5rem" }}>
+                      Level: {level === "YP" ? "Young Agriculture Professional (Level 0)" : level === "Junior" ? "Junior Agriculture Professional (Level 1)" : level === "Agri" ? "Agriculture Professional (Level 2)" : "Senior Agriculture Professional (Level 3)"}
+                    </h3>
+                    
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "1rem" }}>
+                      {/* Max Questions */}
+                      <div>
+                        <label className={styles.interviewConfigLabel}>Max Questions</label>
+                        <input
+                          type="number" min={1} max={100}
+                          value={levelInputs[level as keyof Levels].max_questions}
+                          onChange={(e) => setLevelInputs({
+                            ...levelInputs,
+                            [level]: { ...levelInputs[level as keyof Levels], max_questions: Number(e.target.value) }
+                          })}
+                          className={styles.interviewConfigInput}
+                          style={{ width: "100%" }}
+                        />
+                      </div>
+
+                      {/* Max Duration */}
+                      <div>
+                        <label className={styles.interviewConfigLabel}>Max Duration (min)</label>
+                        <input
+                          type="number" min={5} max={120}
+                          value={levelInputs[level as keyof Levels].max_duration_minutes}
+                          onChange={(e) => setLevelInputs({
+                            ...levelInputs,
+                            [level]: { ...levelInputs[level as keyof Levels], max_duration_minutes: Number(e.target.value) }
+                          })}
+                          className={styles.interviewConfigInput}
+                          style={{ width: "100%" }}
+                        />
+                      </div>
+
+                      {/* Pass Threshold */}
+                      <div>
+                        <label className={styles.interviewConfigLabel}>Pass Threshold (/100)</label>
+                        <input
+                          type="number" min={0} max={100}
+                          value={levelInputs[level as keyof Levels].pass_threshold}
+                          onChange={(e) => setLevelInputs({
+                            ...levelInputs,
+                            [level]: { ...levelInputs[level as keyof Levels], pass_threshold: Number(e.target.value) }
+                          })}
+                          className={styles.interviewConfigInput}
+                          style={{ width: "100%" }}
+                        />
+                      </div>
+                      {/* Cooldown Days */}
+                      <div>
+                        <label className={styles.interviewConfigLabel}>Cooldown (days)</label>
+                        <input
+                          type="number" min={0} max={365}
+                          value={levelInputs[level as keyof Levels].cooldown_days ?? 0}
+                          onChange={(e) => setLevelInputs({
+                            ...levelInputs,
+                            [level]: { ...levelInputs[level as keyof Levels], cooldown_days: Number(e.target.value) }
+                          })}
+                          className={styles.interviewConfigInput}
+                          style={{ width: "100%" }}
+                        />
+                      </div>
+                    </div>
                   </div>
-                  <p className={styles.interviewConfigHint}>
-                    Current: <strong>{interviewConfig.max_questions}</strong> questions per session.
-                  </p>
+                ))}
+
+                <div style={{ marginTop: "1.5rem", display: "flex", justifyContent: "flex-end" }}>
+                  <button
+                    onClick={handleSaveInterviewConfig}
+                    disabled={savingConfig}
+                    className={styles.saveBtn}
+                    style={{ width: "200px", padding: "0.75rem", fontSize: "1rem" }}
+                  >
+                    {savingConfig ? "Saving Levels…" : "Save Level Configs"}
+                  </button>
                 </div>
 
-                {/* Max Duration */}
-                <div className={styles.interviewConfigCard} style={{ marginTop: "1rem" }}>
-                  <label className={styles.interviewConfigLabel}>Maximum Interview Duration</label>
-                  <div className={styles.interviewConfigRow}>
-                    <input
-                      type="number"
-                      min={5}
-                      max={120}
-                      value={maxDurationInput}
-                      onChange={(e) => setMaxDurationInput(Number(e.target.value))}
-                      className={styles.interviewConfigInput}
-                    />
-                    <span style={{ fontSize: "0.875rem", color: "#666", marginRight: "0.5rem" }}>minutes</span>
-                    <button
-                      onClick={handleSaveInterviewConfig}
-                      disabled={savingConfig || maxDurationInput === (interviewConfig.max_duration_minutes ?? 30)}
-                      className={styles.saveBtn}
-                    >
-                      {savingConfig ? "Saving…" : "Save"}
-                    </button>
-                  </div>
-                  <p className={styles.interviewConfigHint}>
-                    Current: <strong>{interviewConfig.max_duration_minutes ?? 30}</strong> minutes per session.
-                  </p>
-                </div>
-
-                {/* Cooldown Days */}
-                <div className={styles.interviewConfigCard} style={{ marginTop: "1rem" }}>
-                  <label className={styles.interviewConfigLabel}>Cooldown Period After Fail / Withdrawn</label>
-                  <div className={styles.interviewConfigRow}>
-                    <input
-                      type="number"
-                      min={0}
-                      max={365}
-                      value={cooldownDaysInput}
-                      onChange={(e) => setCooldownDaysInput(Number(e.target.value))}
-                      className={styles.interviewConfigInput}
-                    />
-                    <span style={{ fontSize: "0.875rem", color: "#666", marginRight: "0.5rem" }}>days</span>
-                    <button
-                      onClick={handleSaveInterviewConfig}
-                      disabled={savingConfig || cooldownDaysInput === (interviewConfig.cooldown_days ?? 3)}
-                      className={styles.saveBtn}
-                    >
-                      {savingConfig ? "Saving…" : "Save"}
-                    </button>
-                  </div>
-                  <p className={styles.interviewConfigHint}>
-                    Current: <strong>{interviewConfig.cooldown_days ?? 3}</strong> days. Set to 0 to disable.
-                  </p>
-                </div>
-
-                {/* Pass Threshold */}
-                <div className={styles.interviewConfigCard} style={{ marginTop: "1rem" }}>
-                  <label className={styles.interviewConfigLabel}>Pass Threshold (Score out of 100)</label>
-                  <div className={styles.interviewConfigRow}>
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={passThresholdInput}
-                      onChange={(e) => setPassThresholdInput(Number(e.target.value))}
-                      className={styles.interviewConfigInput}
-                    />
-                    <span style={{ fontSize: "0.875rem", color: "#666", marginRight: "0.5rem" }}>/ 100</span>
-                    <button
-                      onClick={handleSaveInterviewConfig}
-                      disabled={savingConfig || passThresholdInput === (interviewConfig.pass_threshold ?? 60)}
-                      className={styles.saveBtn}
-                    >
-                      {savingConfig ? "Saving…" : "Save"}
-                    </button>
-                  </div>
-                  <p className={styles.interviewConfigHint}>
-                    Current: <strong>{interviewConfig.pass_threshold ?? 60}</strong>. Candidates scoring below this are marked FAIL.
-                  </p>
-                </div>
+                <hr style={{ margin: "2rem 0", borderTop: "1px solid #ddd" }} />
+                
+                <h3 style={{ marginBottom: "1rem" }}>Global Settings</h3>
 
                 {/* Max Concurrent Interviews */}
                 <div className={styles.interviewConfigCard} style={{ marginTop: "1rem" }}>
@@ -1646,7 +1645,6 @@ export default function AdminDashboard() {
                     <input
                       type="number"
                       min={1}
-                      max={100}
                       value={maxConcurrentInput}
                       onChange={(e) => setMaxConcurrentInput(Number(e.target.value))}
                       className={styles.interviewConfigInput}

@@ -18,15 +18,6 @@ def _candidate_by_email(db, email: str):
     return candidate, user.get("email")
 
 
-def _cooldown_days(db) -> int:
-    """Read admin-set cooldown days from settings collection."""
-    setting = db.settings.find_one({"key": "interview_cooldown_days"})
-    if setting:
-        try:
-            return int(str(setting.get("value", "3")))
-        except (ValueError, TypeError):
-            pass
-    return 3
 
 
 def _token_candidate_id(request: Request) -> str | None:
@@ -61,7 +52,18 @@ async def get_attempts(request: Request, email: str = Query(default=None)):
     if not candidate_id:
         raise HTTPException(status_code=401, detail="Authentication required")
 
-    cooldown_days = _cooldown_days(db)
+    candidate_role = None
+    if candidate_id:
+        try:
+            from bson import ObjectId
+            cand = db.candidates.find_one({"_id": ObjectId(candidate_id)})
+        except:
+            cand = db.candidates.find_one({"_id": str(candidate_id)})
+        if cand:
+            candidate_role = cand.get("eligible_role")
+
+    from app.services.settings_service import get_cooldown_days
+    cooldown_days = get_cooldown_days(candidate_role)
 
     # Get all completed sessions for this candidate
     sessions = list(db.interview_sessions.find({
@@ -127,7 +129,17 @@ async def get_latest_session_summary(request: Request):
             "interview_id": None,
         }
 
-    cooldown_days = _cooldown_days(db)
+    candidate_role = None
+    try:
+        from bson import ObjectId
+        cand = db.candidates.find_one({"_id": ObjectId(candidate_id)})
+    except:
+        cand = db.candidates.find_one({"_id": str(candidate_id)})
+    if cand:
+        candidate_role = cand.get("eligible_role")
+
+    from app.services.settings_service import get_cooldown_days
+    cooldown_days = get_cooldown_days(candidate_role)
     cooldown_rem = None
 
     if session.get("result") == "FAIL" and session.get("completed_at"):

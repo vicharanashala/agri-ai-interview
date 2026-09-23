@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 from app.db.mongodb import get_sync_db
-from app.services.queue_manager import slot_manager, MAX_CONCURRENT_INTERVIEWS
+from app.services.queue_manager import slot_manager
 
 router = APIRouter(prefix="/api/interview/queue", tags=["interview-queue"])
 

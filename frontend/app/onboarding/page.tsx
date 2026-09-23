@@ -326,6 +326,7 @@ export default function OnboardingPage() {
   // 11. M.Sc. Seed Science & Technology
   // 12. Diploma in Agriculture
   const STANDALONE_QUALIFYING_MSC_DISCIPLINES = [
+    'Agriculture',
     'Agronomy',
     'Soil Science',
     'Entomology',
@@ -348,16 +349,16 @@ export default function OnboardingPage() {
     );
     if (hasDiplomaAgri) return true;
 
-    // 2. B.Sc. (Hons.) Agriculture (Completed) — normal B.Sc. is NOT allowed
-    const hasBScHonsAgri = eduList.some(
+    // 2. B.Sc. and B.Sc. (Hons.) Agriculture (Completed)
+    const hasBScAgri = eduList.some(
       (e) =>
-        e.level === 'B.Sc. (Hons.)' &&
+        (e.level === 'B.Sc.' || e.level === 'B.Sc. (Hons.)') &&
         e.discipline === 'Agriculture' &&
         e.status === 'Completed'
     );
-    if (hasBScHonsAgri) return true;
+    if (hasBScAgri) return true;
 
-    // 3. M.Sc. Horticulture (with a B.Sc. Agriculture background, both Completed)
+    // 3. M.Sc. Horticulture (with a B.Sc. / Diploma Agriculture background, both Completed)
     const hasMScHorticulture = eduList.some(
       (e) =>
         (e.level === 'M.Sc.' || e.level === 'Ph.D.') &&
@@ -384,14 +385,60 @@ export default function OnboardingPage() {
     return false;
   };
 
-  const isEligibleForYP = hasCompletedQualifyingDegree(education);
-
   const hasFilledEducationDetails = education.some(
     (e) => Boolean(e.level && e.discipline && e.status)
   );
 
-  // Declaration box ONLY appears if they have chosen discipline & status AND do not have any completed qualifying degree
-  const needsConsent = hasFilledEducationDetails && !isEligibleForYP;
+  type EligibleRole = 'Intern' | 'YP' | 'Junior' | 'Agri' | 'Senior' | null;
+
+  const getEligibleRole = (): EligibleRole => {
+    if (!hasFilledEducationDetails) return null;
+    
+    if (!hasCompletedQualifyingDegree(education)) return 'Intern';
+    
+    // Determine maximum role allowed based on education level
+    let maxRole: EligibleRole = 'YP';
+    
+    const hasBScAgri = education.some(
+      (e) => (e.level === 'B.Sc.' || e.level === 'B.Sc. (Hons.)') && e.discipline === 'Agriculture' && e.status === 'Completed'
+    );
+    const hasMScHorticulture = education.some(
+      (e) => (e.level === 'M.Sc.' || e.level === 'Ph.D.') && e.discipline === 'Horticulture' && e.status === 'Completed'
+    );
+    const hasBScOrDiplomaAgriBg = education.some(
+      (e) => (e.level === 'B.Sc.' || e.level === 'B.Sc. (Hons.)' || e.level === 'Diploma') && e.discipline === 'Agriculture' && e.status === 'Completed'
+    );
+    const hasAdvancedAgri = education.some(
+      (e) => (e.level === 'M.Sc.' || e.level === 'Ph.D.' || e.level === 'Postdoctoral') && STANDALONE_QUALIFYING_MSC_DISCIPLINES.includes(e.discipline) && e.status === 'Completed'
+    ) || (hasMScHorticulture && hasBScOrDiplomaAgriBg);
+
+    if (hasAdvancedAgri) {
+      maxRole = 'Senior';
+    } else if (hasBScAgri) {
+      maxRole = 'Agri';
+    } else {
+      maxRole = 'YP'; // Diploma
+    }
+    
+    const exp = formData.yearsOfExperience ? parseFloat(formData.yearsOfExperience) : 0;
+    
+    let rawRole: EligibleRole = 'YP';
+    if (exp < 2) rawRole = 'YP';
+    else if (exp >= 2 && exp < 3) rawRole = 'Junior';
+    else if (exp >= 3 && exp < 5) rawRole = 'Agri';
+    else if (exp >= 5) rawRole = 'Senior';
+    
+    const roleLevels = { 'Intern': 0, 'YP': 1, 'Junior': 2, 'Agri': 3, 'Senior': 4 };
+    
+    if (roleLevels[rawRole as keyof typeof roleLevels] > roleLevels[maxRole as keyof typeof roleLevels]) {
+      return maxRole;
+    }
+    
+    return rawRole;
+  };
+
+  const eligibleRole = getEligibleRole();
+  const needsConsent = eligibleRole !== null;
   const isBelowDisabled = needsConsent && !formData.nonAgriConsent;
 
   const validatePhone = (value: string): boolean => {
@@ -589,7 +636,7 @@ export default function OnboardingPage() {
     }
 
     if (needsConsent && !formData.nonAgriConsent) {
-      setError('Please acknowledge and tick the internship declaration to proceed');
+      setError('Please acknowledge and tick the role declaration to proceed');
       return;
     }
 
@@ -637,8 +684,9 @@ export default function OnboardingPage() {
         discipline: highestEdu.discipline || '',
         disciplineOther: highestEdu.disciplineOther || '',
         education: education.map(({ id, ...rest }) => rest),
+        eligibleRole: eligibleRole,
         nonAgriConsent: formData.nonAgriConsent,
-        isInternshipConsent: needsConsent ? formData.nonAgriConsent : false,
+        isInternshipConsent: eligibleRole === 'Intern' ? formData.nonAgriConsent : false,
         yearsOfExperience: formData.yearsOfExperience ? parseFloat(formData.yearsOfExperience) : undefined,
         district: districtToSubmit || formData.district,
       };
@@ -1243,15 +1291,29 @@ export default function OnboardingPage() {
             </button>
           </section>
 
-          {/* ─── Internship Eligibility & Declaration (Compact) ─── */}
+          {/* ─── Role Eligibility & Declaration (Compact) ─── */}
           {needsConsent && (
             <div className={styles.declarationCard}>
               <div className={styles.declarationHeader}>
                 <span className={styles.declarationIcon}>⚠️</span>
-                <h3 className={styles.declarationTitle}>Internship Program Eligibility & Declaration</h3>
+                <h3 className={styles.declarationTitle}>Role Eligibility & Declaration</h3>
               </div>
               <p className={styles.declarationNotice}>
-                Based on your qualifications, you are eligible for the <strong>Internship Program</strong> (minimum 3-month commitment, 3 hours/day, ₹5,000/month stipend). Please check our <a href="/faq" target="_blank" rel="noopener noreferrer" className={styles.faqLink}>FAQs</a> for full details.
+                {eligibleRole === 'Intern' && (
+                  <>Based on your qualifications, you are eligible for the <strong>Internship Program</strong> (minimum 3-month commitment, 3 hours/day, ₹5,000/month stipend). Please check our <a href="/faq" target="_blank" rel="noopener noreferrer" className={styles.faqLink}>FAQs</a> for full details.</>
+                )}
+                {eligibleRole === 'YP' && (
+                  <>Based on your qualifications and experience, you are eligible for the <strong>Young Agriculture Professional</strong> role (₹20,000 per month / 2.40 - 3.00 LPA).</>
+                )}
+                {eligibleRole === 'Junior' && (
+                  <>Based on your qualifications and experience, you are eligible for the <strong>Junior Agriculture Professional</strong> role (₹30,000 per month / 3.00 - 4.50 LPA).</>
+                )}
+                {eligibleRole === 'Agri' && (
+                  <>Based on your qualifications and experience, you are eligible for the <strong>Agriculture Professional</strong> role (₹45,000 per month / 4.50 - 6.00 LPA).</>
+                )}
+                {eligibleRole === 'Senior' && (
+                  <>Based on your qualifications and experience, you are eligible for the <strong>Senior Agriculture Professional</strong> role (₹70,000 per month / 8.40 - 10.00 LPA).</>
+                )}
               </p>
 
               <label className={styles.consentCheckboxLabel}>
@@ -1266,7 +1328,7 @@ export default function OnboardingPage() {
                   required
                 />
                 <span className={styles.consentCheckboxText}>
-                  I accept the internship terms and wish to proceed with the application. <span className={styles.required}>*</span>
+                  I accept the terms for this role and wish to proceed with the application. <span className={styles.required}>*</span>
                 </span>
               </label>
             </div>
@@ -1275,7 +1337,7 @@ export default function OnboardingPage() {
           {/* ─── Remaining Sections (Disabled until Declaration is accepted if non-eligible) ─── */}
           {isBelowDisabled && (
             <div className={styles.lockNoticeBanner}>
-              🔒 Please accept the Internship Declaration above to unlock and complete the remaining sections.
+              🔒 Please accept the Role Declaration above to unlock and complete the remaining sections.
             </div>
           )}
 

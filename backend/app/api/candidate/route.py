@@ -117,6 +117,7 @@ class OnboardingRequest(BaseModel):
     cropsGrown: str
     farmSize: Optional[str] = None
     primaryExpertise: str
+    eligibleRole: Optional[str] = None
 
 
 class CandidateProfileResponse(BaseModel):
@@ -142,6 +143,7 @@ class CandidateProfileResponse(BaseModel):
     cropsGrown: Optional[str] = None
     farmSize: Optional[str] = None
     primaryExpertise: Optional[str] = None
+    eligibleRole: Optional[str] = None
     currentPhase: str = "onboarding"
     userId: Optional[str] = None
     resumeName: Optional[str] = None
@@ -244,6 +246,7 @@ async def upsert_candidate(request: Request, body: OnboardingRequest):
         "crops_grown": body.cropsGrown,
         "farm_size": body.farmSize,
         "primary_expertise": body.primaryExpertise,
+        "eligible_role": body.eligibleRole,
         "updated_at": datetime.now(timezone.utc),
     }
 
@@ -327,6 +330,7 @@ async def get_candidate_profile(email: Optional[str] = Query(None)):
         cropsGrown=cand.get("crops_grown"),
         farmSize=cand.get("farm_size"),
         primaryExpertise=cand.get("primary_expertise"),
+        eligibleRole=cand.get("eligible_role"),
         currentPhase=cand.get("current_phase", "onboarding"),
         userId=str(user["_id"]),
         resumeName=resume_name,

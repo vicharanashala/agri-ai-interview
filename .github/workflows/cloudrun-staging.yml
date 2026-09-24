@@ -98,6 +98,7 @@ jobs:
           region: ${{ env.GCP_REGION }}
           image: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }}
           project_id: ${{ env.GCP_PROJECT_ID }}
+          flags: '--memory=2Gi'
           env_vars: |
             MONGO_URI=${{ secrets.MONGO_URI_STAGING }}
             MONGO_DB_NAME=${{ vars.MONGO_DB_NAME_STAGING }}

@@ -165,6 +165,8 @@ export default function UploadDocumentsPage() {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  const [validatingFields, setValidatingFields] = useState<Record<string, boolean>>({});
+
   const handleFileChange = async (fieldKey: string, fileList: FileList | null) => {
     const file = fileList?.[0];
     if (!file) return;
@@ -176,30 +178,62 @@ export default function UploadDocumentsPage() {
       return;
     }
 
-    const [base64, sizeStr] = await Promise.all([
-      fileToBase64(file),
-      Promise.resolve(formatSize(file.size)),
-    ]);
+    // Call instant backend AI validation
+    setValidatingFields((prev) => ({ ...prev, [fieldKey]: true }));
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
 
-    const uploaded: UploadedFile = {
-      name: file.name,
-      size: sizeStr,
-      type: file.type || 'application/octet-stream',
-      data: base64,
-      file,
-    };
+      const rt = sessionStorage.getItem('candidate_session_token');
+      const headers: HeadersInit = rt ? { 'x-redis-token': rt } : {};
+      const res = await fetch(`/api/candidate/documents/validate?field_name=${fieldKey}`, {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+        headers,
+      });
 
-    setFiles((prev) =>
-      field.multi
-        ? { ...prev, [fieldKey]: [...prev[fieldKey], uploaded] }
-        : { ...prev, [fieldKey]: [uploaded] }
-    );
-    setErrors((prev) => {
-      const next = { ...prev };
-      delete next[fieldKey];
-      delete next._form;
-      return next;
-    });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        let errMsg = data.error || data.detail || 'Invalid document type';
+        if (typeof errMsg === 'object') {
+          errMsg = JSON.stringify(errMsg);
+        }
+        throw new Error(errMsg);
+      }
+      
+      const [base64, sizeStr] = await Promise.all([
+        fileToBase64(file),
+        Promise.resolve(formatSize(file.size)),
+      ]);
+
+      const uploaded: UploadedFile = {
+        name: file.name,
+        size: sizeStr,
+        type: file.type || 'application/octet-stream',
+        data: base64,
+        file,
+      };
+
+      setFiles((prev) =>
+        field.multi
+          ? { ...prev, [fieldKey]: [...prev[fieldKey], uploaded] }
+          : { ...prev, [fieldKey]: [uploaded] }
+      );
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next[fieldKey];
+        delete next._form;
+        return next;
+      });
+    } catch (err: any) {
+      setErrors((prev) => ({ ...prev, [fieldKey]: err.message || 'Validation failed' }));
+      if (fileInputRefs.current[fieldKey]) {
+        fileInputRefs.current[fieldKey]!.value = '';
+      }
+    } finally {
+      setValidatingFields((prev) => ({ ...prev, [fieldKey]: false }));
+    }
   };
 
   const handleRemove = (fieldKey: string, index: number) => {
@@ -231,7 +265,7 @@ export default function UploadDocumentsPage() {
 
       const rt = sessionStorage.getItem('candidate_session_token');
       const headers: HeadersInit = rt ? { 'x-redis-token': rt } : {};
-      const res = await fetch('/api/candidate/documents', {
+      const res = await fetch('/api/candidate/documents?skip_ai=true', {
         method: 'POST',
         body: formData,
         credentials: 'include',
@@ -240,7 +274,7 @@ export default function UploadDocumentsPage() {
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail || 'Upload failed.');
+        throw new Error(data.error || data.detail || 'Upload failed.');
       }
 
       await syncPhaseToDb(5, {
@@ -385,11 +419,20 @@ export default function UploadDocumentsPage() {
                           </div>
                         </div>
 
-                        <label className={styles.chooseButton}>
-                          <span>{fieldFiles.length === 0 ? 'Choose file' : field.multi ? 'Add more' : 'Replace'}</span>
+                        <label className={`${styles.chooseButton} ${validatingFields[field.key] ? styles.disabled : ''}`}>
+                          <span>
+                            {validatingFields[field.key] 
+                              ? 'Validating AI...' 
+                              : fieldFiles.length === 0 
+                                ? 'Choose file' 
+                                : field.multi 
+                                  ? 'Add more' 
+                                  : 'Replace'
+                            }
+                          </span>
                           <input
                             type="file"
-                            accept=".pdf,.doc,.docx"
+                            accept=".pdf,.doc,.docx,image/png,image/jpeg"
                             ref={(el) => {
                               fileInputRefs.current[field.key] = el;
                             }}
@@ -492,7 +535,23 @@ export default function UploadDocumentsPage() {
             disabled={isLoading || !allRequiredUploaded || !consentAccepted}
             className={styles.primaryButton}
           >
-            {isLoading ? 'Submitting...' : 'Submit Documents'}
+            {isLoading ? (
+              <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="2" x2="12" y2="6"></line>
+                  <line x1="12" y1="18" x2="12" y2="22"></line>
+                  <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line>
+                  <line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line>
+                  <line x1="2" y1="12" x2="6" y2="12"></line>
+                  <line x1="18" y1="12" x2="22" y2="12"></line>
+                  <line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line>
+                  <line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line>
+                </svg>
+                Validating documents via AI...
+              </span>
+            ) : (
+              'Submit Documents'
+            )}
           </button>
         </div>
       </div>

@@ -1,5 +1,12 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
 fastapi
 python-multipart
+pytesseract==0.3.13
+tesserocr==2.10.0
+pymupdf==1.28.0
+pillow==12.3.0
+sentence-transformers==6.0.0
+torch==2.13.0+cpu
 uvicorn[standard]
 pymongo
 motor

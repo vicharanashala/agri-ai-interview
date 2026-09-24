@@ -27,9 +27,9 @@ RUN pip install torch==2.13.0+cpu sentence-transformers==6.0.0 --extra-index-url
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy app code and references
+# Copy app code and the safe AI brain
 COPY app/ ./app/
-COPY references/ ./references/
+COPY references.npz .
 
 # Create empty .env if not exists
 RUN touch .env

@@ -1,6 +1,7 @@
 services:
   agri-interview-backend:
     image: vicharanashala/agri-interview-backend:${IMAGE_TAG:-latest}
+    build: ./backend
     container_name: agri-interview-backend
     restart: unless-stopped
 
@@ -30,6 +31,7 @@ services:
 
   agri-interview-frontend:
     image: vicharanashala/agri-interview-frontend:${IMAGE_TAG:-latest}
+    build: ./frontend
     container_name: agri-interview-frontend
     restart: unless-stopped
 

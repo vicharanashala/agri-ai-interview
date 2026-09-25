@@ -1,7 +1,7 @@
 """
 Candidate Document Upload, List & Download Endpoints — Storage + MongoDB metadata.
 """
-from fastapi import APIRouter, HTTPException, UploadFile, File, Depends, Request, Response
+from fastapi import APIRouter, HTTPException, UploadFile, File, Depends, Request, Response, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, timezone
@@ -18,6 +18,8 @@ ALLOWED_CONTENT_TYPES = {
     "application/pdf",
     "application/msword",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "image/jpeg",
+    "image/png",
 }
 
 MAX_SIZES = {
@@ -41,18 +43,23 @@ _CONTENT_TYPES = {
     "pdf": "application/pdf",
     "doc": "application/msword",
     "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "png": "image/png",
 }
 
 
 def _guess_file_type(filename: str) -> str:
     ext = filename.lower().split(".")[-1]
+    if ext in ["jpg", "jpeg"]: return "jpg"
+    if ext == "png": return "png"
     return "docx" if ext == "docx" else ("doc" if ext == "doc" else "pdf")
 
 
 def _validate_file(file: UploadFile, field_name: str) -> bytes:
     content_type = file.content_type or ""
-    if content_type not in ALLOWED_CONTENT_TYPES and not file.filename.lower().endswith((".pdf", ".doc", ".docx")):
-        raise HTTPException(status_code=400, detail=f"Only PDF and DOCX files are allowed for {field_name}")
+    if content_type not in ALLOWED_CONTENT_TYPES and not file.filename.lower().endswith((".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png")):
+        raise HTTPException(status_code=400, detail=f"Only PDF, DOCX, and Image files are allowed for {field_name}")
 
     file_bytes = file.file.read()
     max_size = MAX_SIZES.get(field_name, 5 * 1024 * 1024)
@@ -70,6 +77,7 @@ class DocumentInfo(BaseModel):
     fileType: str
     storagePath: str
     createdAt: str
+    aiValidation: Optional[dict] = None
 
 
 class DocumentsListResponse(BaseModel):
@@ -84,9 +92,94 @@ class DocumentsUploadResponse(BaseModel):
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
 
+@router.post("/documents/validate")
+async def validate_document(
+    request: Request,
+    field_name: str,
+    file: UploadFile = File(...)
+):
+    """
+    Lightweight endpoint to instantly validate a single document using AI
+    without saving it to the database or cloud storage.
+    """
+    file_bytes = await file.read()
+    
+    # 1. Basic format validation
+    content_type = file.content_type or ""
+    if content_type not in ALLOWED_CONTENT_TYPES and not file.filename.lower().endswith((".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png")):
+        raise HTTPException(status_code=400, detail="Invalid file type")
+
+    max_size = MAX_SIZES.get(field_name, 5 * 1024 * 1024)
+    if len(file_bytes) > max_size:
+        raise HTTPException(status_code=400, detail=f"File exceeds {max_size // (1024 * 1024)}MB limit")
+
+    # 2. AI Validation
+    try:
+        from app.services.doc_validation.task import get_classifier
+        classifier = get_classifier()
+        
+        expected_type = None
+        field_mapping = {
+            'aadhaar_front': 'aadhaar_front',
+            'aadhaar_back': 'aadhaar_back',
+            'pan_front': 'pan_front',
+            'pan_back': 'pan_back',
+            'marksheet_10': 'marksheet_10',
+            'marksheet_12': 'marksheet_12',
+            'grad_marksheets': 'degree_certificate',
+            'grad_certificate': 'degree_certificate',
+            'pg_marksheets': 'degree_certificate',
+            'pg_certificate': 'degree_certificate',
+            'bank_details': 'bank_proof'
+        }
+        
+        if field_name in field_mapping:
+            expected_type = field_mapping[field_name]
+
+        try:
+            result = classifier.classify(file_bytes, file.filename)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise HTTPException(status_code=400, detail=f"The AI engine could not process this specific file format or it was corrupted. Please try taking a screenshot of the document and uploading the image instead. (Error: {str(e)})")
+            
+        if expected_type:
+            is_valid_match = (result.doc_type == expected_type)
+            education_docs = ['marksheet_10', 'marksheet_12', 'degree_certificate']
+            identity_aadhaar = ['aadhaar_front', 'aadhaar_back']
+            identity_pan = ['pan_front', 'pan_back']
+            
+            if expected_type in education_docs and result.doc_type in education_docs:
+                is_valid_match = True
+            elif expected_type in identity_aadhaar and result.doc_type in identity_aadhaar:
+                is_valid_match = True
+            elif expected_type in identity_pan and result.doc_type in identity_pan:
+                is_valid_match = True
+                
+            if not is_valid_match:
+                display_names = {
+                    'aadhaar_front': 'Aadhaar Card (Front side)',
+                    'aadhaar_back': 'Aadhaar Card (Back side)',
+                    'pan_front': 'PAN Card (Front side)',
+                    'pan_back': 'PAN Card (Back side)',
+                    'marksheet_10': '10th Class Marksheet',
+                    'marksheet_12': '12th Class Marksheet',
+                    'degree_certificate': 'Degree Certificate or Marksheet',
+                    'bank_proof': 'Bank Account Document'
+                }
+                display_expected = display_names.get(expected_type, expected_type.replace('_', ' ').title())
+                
+                raise HTTPException(status_code=400, detail=f"The uploaded file is not a valid {display_expected}.")
+                    
+    except ImportError:
+        pass
+        
+    return {"valid": True, "message": "Document passed AI validation"}
+
 @router.post("/documents", response_model=DocumentsUploadResponse)
 async def upload_documents(
     request: Request,
+    skip_ai: bool = False,
     updated_resume: Optional[UploadFile] = File(None),
     marksheet_10: Optional[UploadFile] = File(None),
     marksheet_12: Optional[UploadFile] = File(None),
@@ -168,6 +261,85 @@ async def upload_documents(
             })
             file_index = existing_count + 1
 
+            # --- AI Validation Check (Synchronous) ---
+            ai_val_status = "pending"
+            
+            if skip_ai:
+                ai_validation_data = {"status": "skipped_due_to_frontend_pre_validation"}
+            else:
+                try:
+                    from app.services.doc_validation.task import get_classifier
+                    classifier = get_classifier()
+                    
+                    # Determine what document type we expect based on the field name
+                    expected_type = None
+                    
+                    # Map exact field names to expected document categories
+                    field_mapping = {
+                        'aadhaar_front': 'aadhaar_front',
+                        'aadhaar_back': 'aadhaar_back',
+                        'pan_front': 'pan_front',
+                        'pan_back': 'pan_back',
+                        'marksheet_10': 'marksheet_10',
+                        'marksheet_12': 'marksheet_12',
+                        'grad_marksheets': 'degree_certificate',
+                        'grad_certificate': 'degree_certificate',
+                        'pg_marksheets': 'degree_certificate',
+                        'pg_certificate': 'degree_certificate',
+                        'bank_details': 'bank_proof'
+                    }
+                    
+                    if field_name in field_mapping:
+                        expected_type = field_mapping[field_name]
+
+                    result = classifier.classify(file_bytes, file.filename)
+                    
+                    if expected_type:
+                        is_valid_match = (result.doc_type == expected_type)
+                        education_docs = ['marksheet_10', 'marksheet_12', 'degree_certificate']
+                        identity_aadhaar = ['aadhaar_front', 'aadhaar_back']
+                        identity_pan = ['pan_front', 'pan_back']
+                        
+                        if expected_type in education_docs and result.doc_type in education_docs:
+                            is_valid_match = True
+                        elif expected_type in identity_aadhaar and result.doc_type in identity_aadhaar:
+                            is_valid_match = True
+                        elif expected_type in identity_pan and result.doc_type in identity_pan:
+                            is_valid_match = True
+                            
+                        if is_valid_match:
+                            ai_val_status = "valid"
+                        else:
+                            display_names = {
+                                'aadhaar_front': 'Aadhaar Card (Front side)',
+                                'aadhaar_back': 'Aadhaar Card (Back side)',
+                                'pan_front': 'PAN Card (Front side)',
+                                'pan_back': 'PAN Card (Back side)',
+                                'marksheet_10': '10th Class Marksheet',
+                                'marksheet_12': '12th Class Marksheet',
+                                'degree_certificate': 'Degree Certificate or Marksheet',
+                                'bank_proof': 'Bank Account Document'
+                            }
+                            display_expected = display_names.get(expected_type, expected_type.replace('_', ' ').title())
+                            
+                            raise HTTPException(
+                                status_code=400,
+                                detail=f"The uploaded file is not a valid {display_expected}."
+                            )
+                    else:
+                        ai_val_status = "matched_other" if result.doc_type else "unknown"
+                        
+                    ai_validation_data = {
+                        "doc_type": result.doc_type,
+                        "confidence": round(result.confidence, 4) if result else 0,
+                        "method": result.method if result else "none",
+                        "status": ai_val_status
+                    }
+                except ImportError:
+                    print("[Warning] AI validation dependencies not found. Skipping validation.")
+                    ai_validation_data = {"status": "skipped"}
+            # -----------------------------------------
+
             # Write to storage
             storage = get_storage()
             safe_filename = f"{uuid.uuid4()}_{file.filename}"
@@ -194,6 +366,7 @@ async def upload_documents(
                 "file_type": file_type,
                 "storage_path": storage_path,
                 "created_at": now,
+                "ai_validation": ai_validation_data
             }
             db.candidate_documents.insert_one(doc)
             saved_docs.append(doc)
@@ -206,6 +379,7 @@ async def upload_documents(
                 storagePath=storage_path,
                 createdAt=now.isoformat(),
             ))
+            
     except Exception as e:
         # Rollback: delete already saved documents in this request
         storage = get_storage()
@@ -242,6 +416,7 @@ async def list_documents(request: Request):
             fileType=doc.get("file_type", ""),
             storagePath=doc.get("storage_path", ""),
             createdAt=doc.get("created_at").isoformat() + "Z" if doc.get("created_at") else "",
+            aiValidation=doc.get("ai_validation")
         )
         for doc in cursor
     ])

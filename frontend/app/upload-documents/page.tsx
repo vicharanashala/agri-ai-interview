@@ -252,7 +252,7 @@ export default function UploadDocumentsPage() {
         throw new Error(data.detail || 'Upload failed.');
       }
 
-      await syncPhaseToDb(5, {
+      await syncPhaseToDb(6, {
         documentsSubmitted: true,
         consentAccepted: true,
         consentTimestamp: new Date().toISOString(),

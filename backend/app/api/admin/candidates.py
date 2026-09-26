@@ -1,4 +1,4 @@
-"""
+﻿"""
 Admin Candidates & Interviews API Endpoints — MongoDB.
 """
 import json
@@ -14,7 +14,7 @@ from app.api.admin.middleware import require_admin_auth
 
 router = APIRouter(prefix="/api/admin", tags=["admin-candidates"])
 
-PHASES = ["onboarding", "interview", "summary", "foundation", "documents"]
+PHASES = ["onboarding", "interview", "summary", "foundation", "module", "documents"]
 PHASE_ORDER = {p: i for i, p in enumerate(PHASES)}
 
 
@@ -721,7 +721,7 @@ async def get_state_stats(state: str = Query(None), _admin=Depends(require_admin
         phase = row["_id"]["phase"] or "onboarding"
         if phase == "onboarding":
             state_data[s]["onboarding"] += row["count"]
-        elif phase in ("interview", "summary", "foundation", "documents"):
+        elif phase in ("interview", "summary", "foundation", "module", "documents"):
             state_data[s]["interviewed"] += row["count"]
 
     for s, data in state_data.items():
@@ -1145,7 +1145,7 @@ async def get_geo_stats(_admin=Depends(require_admin_auth)):
         phase = row["_id"]["phase"] or "onboarding"
         if phase == "onboarding":
             states_map[s]["pending"] += row["count"]
-        elif phase in ("interview", "summary", "foundation", "documents"):
+        elif phase in ("interview", "summary", "foundation", "module", "documents"):
             states_map[s]["interviewed"] += row["count"]
 
     # Get pass/fail per state
@@ -1212,7 +1212,7 @@ async def get_geo_stats(_admin=Depends(require_admin_auth)):
         phase = row["_id"].get("phase") or "onboarding"
         if phase == "onboarding":
             districts_map[key]["pending"] += row["count"]
-        elif phase in ("interview", "summary", "foundation", "documents"):
+        elif phase in ("interview", "summary", "foundation", "module", "documents"):
             districts_map[key]["interviewed"] += row["count"]
 
     districts_list = []
@@ -1281,7 +1281,7 @@ async def bypass_candidate_course(candidate_id: str, _admin=Depends(require_admi
     current_phase = cand.get("current_phase", "onboarding")
     new_phase = current_phase
     if current_phase in ["onboarding", "interview", "summary", "foundation"]:
-        new_phase = "documents"
+        new_phase = "module"
         
     db.candidates.update_one(
         {"_id": {"$in": _get_id_variants(candidate_id)}},

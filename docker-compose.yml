@@ -1,4 +1,4 @@
-services:
+﻿services:
   agri-interview-backend:
     image: vicharanashala/agri-interview-backend:${IMAGE_TAG:-latest}
     container_name: agri-interview-backend
@@ -16,6 +16,9 @@ services:
       LLM_BASE_URL: ${LLM_BASE_URL}
       LLM_API_KEY: ${LLM_API_KEY}
       LLM_MODEL: ${LLM_MODEL}
+
+      QC_API_URL: ${QC_API_URL}
+      ANVESHAN_ANNADATHA_AUTH_KEY: ${ANVESHAN_ANNADATHA_AUTH_KEY}
 
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
       ADMIN_SECRET: ${ADMIN_SECRET}
@@ -45,6 +48,7 @@ services:
 
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
       NEXT_PUBLIC_ADMIN_API_URL: ${NEXT_PUBLIC_ADMIN_API_URL}
+      NEXT_PUBLIC_QC_URL: ${NEXT_PUBLIC_QC_URL}
 
       BACKEND_URL: http://agri-interview-backend:8000
 

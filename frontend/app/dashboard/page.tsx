@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -8,7 +8,7 @@ import HowToUseModal from '@/components/HowToUseModal';
 import BrandLogos from '@/components/BrandLogos';
 import ProfileNavButton from '@/components/ProfileNavButton';
 
-type Phase = 1 | 2 | 3 | 4 | 5;
+type Phase = 1 | 2 | 3 | 4 | 5 | 6;
 
 interface PhaseInfo {
   id: Phase;
@@ -237,14 +237,20 @@ export default function DashboardPage() {
     {
       id: 4,
       name: 'Foundation Course',
-      description: 'Complete the foundation course to unlock document upload',
+      description: 'Complete the foundation course to unlock module phase',
       status: currentPhase > 4 ? 'completed' : currentPhase === 4 ? 'current' : 'locked',
     },
     {
       id: 5,
+      name: 'Module phase',
+      description: 'Complete the tasks on Question collection to unlock document upload',
+      status: currentPhase > 5 ? 'completed' : currentPhase === 5 ? 'current' : 'locked',
+    },
+    {
+      id: 6,
       name: 'Upload Documents',
       description: 'Submit required documents to complete the process',
-      status: documentsSubmitted ? 'completed' : currentPhase === 5 ? 'current' : 'locked',
+      status: documentsSubmitted ? 'completed' : currentPhase === 6 ? 'current' : 'locked',
     },
   ];
 
@@ -291,8 +297,11 @@ export default function DashboardPage() {
           router.push('/foundation-course');
           break;
         case 5:
-          router.push('/upload-documents');
-          break;
+            router.push('/module');
+            break;
+          case 6:
+            router.push('/upload-documents');
+            break;
       }
     }
   };
@@ -315,15 +324,17 @@ export default function DashboardPage() {
  const getCompletionPercentage = () => {
   if (documentsSubmitted) return 100;
 
-  if (currentPhase === 5) return 75;
+  if (currentPhase === 6) return 80;
 
-  if (currentPhase === 4) return 50;
+  if (currentPhase === 5) return 60;
+
+  if (currentPhase === 4) return 40;
 
   if (currentPhase === 3) {
-    return hasPassed ? 50 : 25;
+    return hasPassed ? 40 : 20;
   }
 
-  if (currentPhase === 2) return 25;
+  if (currentPhase === 2) return 20;
 
   return 0;
 };
@@ -365,7 +376,7 @@ const completionPercentage = getCompletionPercentage();
   const handleAdvancePhase = (completedPhase: Phase) => {
     // Only advance if the current phase is completed
     // This is called by child pages when they finish their tasks
-    if (completedPhase === currentPhase && currentPhase < 5) {
+    if (completedPhase === currentPhase && currentPhase < 6) {
       const nextPhase = (currentPhase + 1) as Phase;
       setCurrentPhase(nextPhase);
       sessionStorage.setItem('interviewPhase', String(nextPhase));

@@ -8,6 +8,7 @@ export interface Candidate {
   createdAt: Date
   updatedAt: Date
   foundationCourseCompleted?: boolean
+  moduleCompleted?: boolean
 }
 
 export interface InterviewSession {

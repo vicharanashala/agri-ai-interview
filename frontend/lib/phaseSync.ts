@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Sync candidate's current phase + milestone flags to the Prisma database.
  * Call this whenever the candidate advances to a new phase or reaches a milestone.
  *
@@ -7,18 +7,20 @@
  *   2 = interview    → "interview"
  *   3 = summary      → "summary"
  *   4 = foundation   → "foundation"
- *   5 = documents    → "documents"
+ *   5 = module       → "module"
+ *   6 = documents    → "documents"
  *
  * Milestone flags:
  *   passedAndVisitedSummary  → user has seen their summary
  *   foundationCourseCompleted → user has completed the foundation course (Phase 4)
- *   documentsSubmitted       → user has submitted documents (Phase 5)
+ *   documentsSubmitted       → user has submitted documents (Phase 6)
  */
 export async function syncPhaseToDb(
   phase: number,
   flags?: {
     passedAndVisitedSummary?: boolean
     foundationCourseCompleted?: boolean
+    moduleCompleted?: boolean
     documentsSubmitted?: boolean
     consentAccepted?: boolean
     consentTimestamp?: string

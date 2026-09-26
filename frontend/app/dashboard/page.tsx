@@ -88,14 +88,17 @@ export default function DashboardPage() {
         // 3. Pull milestone flags from DB and localStorage
         const docsSubmitted       = !!candidate.documentsSubmitted;
         const foundationCompleted = lsFoundationCompleted || !!candidate.foundationCourseCompleted;
+        const lsModuleCompleted   = localStorage.getItem('moduleCompleted') === 'true' || localStorage.getItem('moduleCompleted') === 'completed';
+        const moduleCompleted     = lsModuleCompleted || !!candidate.moduleCompleted;
         setDocumentsSubmitted(docsSubmitted);
 
         // 4. Reconstruct actual phase from DB phase + flags
         let actualPhase: Phase = dbPhaseNum;
 
-        if (summaryVisited       && actualPhase < 3) actualPhase = 3;
-        if (foundationCompleted  && actualPhase < 4) actualPhase = 4;
-        if (docsSubmitted        && actualPhase < 5) actualPhase = 5;
+        if (summaryVisited       && actualPhase < 4) actualPhase = 4;
+        if (foundationCompleted  && actualPhase < 5) actualPhase = 5;
+        if (moduleCompleted      && actualPhase < 6) actualPhase = 6;
+        if (docsSubmitted        && actualPhase < 6) actualPhase = 6;
 
         setCurrentPhase(actualPhase);
         setHasCompletedInterview(actualPhase >= 3);
@@ -111,6 +114,12 @@ export default function DashboardPage() {
           localStorage.setItem('foundationCourseCompleted', 'completed');
         } else if (!lsFoundationCompleted) {
           localStorage.removeItem('foundationCourseCompleted');
+        }
+
+        if (candidate.moduleCompleted) {
+          localStorage.setItem('moduleCompleted', 'completed');
+        } else if (!lsModuleCompleted) {
+          localStorage.removeItem('moduleCompleted');
         }
 
         // Persist candidate info in sessionStorage for downstream pages (offer letter, etc.)

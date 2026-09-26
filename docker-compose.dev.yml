@@ -18,6 +18,8 @@ services:
       LLM_BASE_URL: ${LLM_BASE_URL}
       LLM_API_KEY: ${LLM_API_KEY}
       LLM_MODEL: ${LLM_MODEL}
+      QC_API_URL: ${QC_API_URL}
+      ANVESHAN_ANNADATHA_AUTH_KEY: ${ANVESHAN_ANNADATHA_AUTH_KEY}
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
     restart: unless-stopped
     networks:

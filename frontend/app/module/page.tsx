@@ -8,7 +8,7 @@ import styles from './page.module.css';
 import BrandLogos from '@/components/BrandLogos';
 import ProfileNavButton from '@/components/ProfileNavButton';
 
-const QC_URL = process.env.NEXT_PUBLIC_QC_URL || 'https://annadatha.annam.ai/login';
+const QC_URL = process.env.NEXT_PUBLIC_QC_URL || 'https://question-collection-staging-239934307367.asia-south1.run.app';
 
 interface Requirements {
   questions: { required: number; submitted: number; met: boolean };

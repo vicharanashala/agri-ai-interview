@@ -65,7 +65,7 @@ async def check_qc_completion(request: Request):
 
     mobile_number = _get_candidate_mobile_from_db(candidate_id)
     url = f"{settings.QC_API_URL}/api/v1/users/{mobile_number}/anveshan/check-completion"
-    headers = {"x-api-key": settings.ANVESHAN_ANNADATHA_AUTH_KEY}
+    headers = {"x-api-key": settings.ANVESHAN_ANNADATHA_AUTH_KEY.strip()}
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:

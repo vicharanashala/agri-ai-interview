@@ -1,4 +1,4 @@
-﻿"""
+"""
 Question Collection module completion verification.
 
 GET /api/candidate/question-collection/completion-check
@@ -64,7 +64,7 @@ async def check_qc_completion(request: Request):
         return {"completed": True, "alreadyVerified": True}
 
     mobile_number = _get_candidate_mobile_from_db(candidate_id)
-    url = f"{settings.QC_API_URL}/api/v1/users/{mobile_number}/anveshan/check-completion"
+    url = f"{settings.QC_API_URL.strip()}/api/v1/users/{mobile_number}/anveshan/check-completion"
     headers = {"x-api-key": settings.ANVESHAN_ANNADATHA_AUTH_KEY.strip()}
 
     try:
@@ -76,7 +76,7 @@ async def check_qc_completion(request: Request):
             response.raise_for_status()
             data = response.json()
     except Exception as e:
-        return {"completed": False, "apiError": True, "details": str(e)}
+        return {"completed": False, "apiError": True, "details": repr(e)}
 
     is_completed = data.get("isCompleted", False)
     

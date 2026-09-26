@@ -1,4 +1,4 @@
-﻿"""
+"""
 Candidate Onboarding & Phase Sync — MongoDB.
 
 POST /api/candidate        — create/update onboarding data

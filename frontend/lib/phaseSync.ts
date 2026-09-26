@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Sync candidate's current phase + milestone flags to the Prisma database.
  * Call this whenever the candidate advances to a new phase or reaches a milestone.
  *

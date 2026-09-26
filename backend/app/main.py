@@ -1,4 +1,4 @@
-﻿"""
+"""
 AI Interview Platform — FastAPI Backend
 Main application entry point with all route registrations.
 """

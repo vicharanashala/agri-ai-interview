@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -398,7 +398,7 @@ export default function UploadDocumentsPage() {
         )}
 
         <div className={styles.notice}>
-          Please upload all documents only in .pdf, .doc, or .docx format (Max 5MB/10MB per file). Only attach one document per field.
+          Please upload all documents in .jpg, .jpeg, .png, .pdf, or .docx format (Max 5MB/10MB per file). Only attach one document per field.
         </div>
 
         <div className={styles.sections}>
@@ -424,7 +424,7 @@ export default function UploadDocumentsPage() {
 
                         <label className={styles.chooseButton} style={{ opacity: validatingFields[field.key] ? 0.7 : 1 }}>
                           {validatingFields[field.key] ? (
-                            <span>Validating... ⏳</span>
+                            <span>Validating...</span>
                           ) : (
                             <span>{fieldFiles.length === 0 ? 'Choose file' : field.multi ? 'Add more' : 'Replace'}</span>
                           )}

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -246,12 +246,12 @@ export default function DashboardPage() {
     {
       id: 4,
       name: 'Foundation Course',
-      description: 'Complete the foundation course to unlock module phase',
+      description: 'Complete the foundation course to unlock Ground Truth Module',
       status: currentPhase > 4 ? 'completed' : currentPhase === 4 ? 'current' : 'locked',
     },
     {
       id: 5,
-      name: 'Module phase',
+      name: 'Ground Truth Module',
       description: 'Complete the tasks on Question collection to unlock document upload',
       status: currentPhase > 5 ? 'completed' : currentPhase === 5 ? 'current' : 'locked',
     },

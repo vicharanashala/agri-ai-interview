@@ -144,9 +144,9 @@ export default function ModulePage() {
 
       <div className={styles.content}>
         <div className={styles.pageHeader}>
-          <h1 className={styles.title}>Question Collection Module</h1>
+          <h1 className={styles.title}>Ground Truth Module</h1>
           <p className={styles.subtitle}>
-            Complete the mandatory Question Collection Module on Anveshan before uploading your documents.
+            Complete the mandatory Ground Truth Module on Anveshan before uploading your documents.
           </p>
           <div className={`${styles.statusBadge} ${courseStatus === 'completed' ? styles.statusCompleted : styles.statusPending}`}>
             <span className={styles.statusDot} />
@@ -161,7 +161,7 @@ export default function ModulePage() {
                 <div className={styles.cardIcon}>QC</div>
                 <h2 className={styles.cardTitle}>Ready to Begin?</h2>
                 <p className={styles.cardText}>
-                  Launch the Question Collection Module and complete all required tasks. Once done, come back and check your completion status.
+                  Launch the Question Collection Application and complete all required tasks. Once done, come back and check your completion status.
                 </p>
                 <div className={styles.actions}>
                   <button onClick={handleLaunchCourse} className={styles.primaryButton}>

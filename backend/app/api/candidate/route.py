@@ -261,10 +261,17 @@ async def upsert_candidate(request: Request, body: OnboardingRequest):
     except Exception:
         pass
 
-    db.candidates.update_one(
-        {"_id": {"$in": id_variants}},
-        {"$set": updates},
-    )
+    try:
+        from pymongo.errors import DuplicateKeyError
+        db.candidates.update_one(
+            {"_id": {"$in": id_variants}},
+            {"$set": updates},
+        )
+    except DuplicateKeyError:
+        raise HTTPException(
+            status_code=400,
+            detail="Phone number is already in use by another candidate."
+        )
 
     cand = db.candidates.find_one({"_id": {"$in": id_variants}})
     if not cand:

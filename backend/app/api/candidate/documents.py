@@ -84,6 +84,47 @@ class DocumentsUploadResponse(BaseModel):
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
 
+import httpx
+import base64
+from fastapi import Form
+
+@router.post("/validate-single")
+async def validate_single_document(file: UploadFile = File(...), field_name: str = Form(...)):
+    file_bytes = await file.read()
+    
+    # TODO: Waiting on exact JSON schema.
+    # Converting to base64 for now as a placeholder.
+    base64_file = base64.b64encode(file_bytes).decode('utf-8')
+    
+    vm_payload = {
+        # Waiting for exact keys (e.g., is it "image", "file", "messages"?)
+        "document": base64_file,
+        "prompt": f"Is this a valid {field_name}?"
+    }
+    
+    try:
+        # Pointing to the VM address.
+        async with httpx.AsyncClient() as client:
+            response = await client.post("http://100.100.108.44:8013/", json=vm_payload, timeout=45.0)
+            
+            # If the VM responds, we parse it.
+            # (We will update this once we know what the VM actually returns)
+            if response.status_code == 200:
+                ai_data = response.json()
+                if ai_data.get("is_valid", True):  # Defaulting to True during mock phase
+                    return {"success": True}
+                else:
+                    return {"success": False, "reason": "AI rejected this document."}
+            else:
+                # If network works but AI errors out, let it pass for now so it doesn't block testing
+                return {"success": True, "reason": f"VM returned {response.status_code}"}
+                
+    except Exception as e:
+        # If the VM is completely unreachable (e.g., no VPN), we mock a SUCCESS
+        print(f"Validation skipped (VM unreachable): {e}")
+        return {"success": True, "mocked": True}
+
+
 @router.post("/documents", response_model=DocumentsUploadResponse)
 async def upload_documents(
     request: Request,

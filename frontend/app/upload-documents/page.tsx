@@ -66,6 +66,7 @@ export default function UploadDocumentsPage() {
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [validatingFields, setValidatingFields] = useState<Record<string, boolean>>({});
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [alreadySubmitted, setAlreadySubmitted] = useState(false);
   const [foundationCompleted, setFoundationCompleted] = useState(false);
@@ -170,36 +171,72 @@ export default function UploadDocumentsPage() {
     if (!file) return;
 
     const field = ALL_FIELDS.find((item) => item.key === fieldKey)!;
-    const error = validateFile(file, fieldKey);
-    if (error) {
-      setErrors((prev) => ({ ...prev, [fieldKey]: error }));
+    
+    // 1. Local validation (size, type)
+    const localError = validateFile(file, fieldKey);
+    if (localError) {
+      setErrors((prev) => ({ ...prev, [fieldKey]: localError }));
       return;
     }
 
-    const [base64, sizeStr] = await Promise.all([
-      fileToBase64(file),
-      Promise.resolve(formatSize(file.size)),
-    ]);
-
-    const uploaded: UploadedFile = {
-      name: file.name,
-      size: sizeStr,
-      type: file.type || 'application/octet-stream',
-      data: base64,
-      file,
-    };
-
-    setFiles((prev) =>
-      field.multi
-        ? { ...prev, [fieldKey]: [...prev[fieldKey], uploaded] }
-        : { ...prev, [fieldKey]: [uploaded] }
-    );
+    // 2. Set UI to "Validating..." for this specific field
+    setValidatingFields((prev) => ({ ...prev, [fieldKey]: true }));
     setErrors((prev) => {
       const next = { ...prev };
-      delete next[fieldKey];
+      delete next[fieldKey]; // Clear previous errors while validating
       delete next._form;
       return next;
     });
+
+    try {
+      // 3. Send to backend for AI validation
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('field_name', fieldKey);
+
+      const rt = sessionStorage.getItem('candidate_session_token');
+      const headers: HeadersInit = rt ? { 'x-redis-token': rt } : {};
+      
+      const res = await fetch('/api/candidate/validate-single', {
+        method: 'POST',
+        body: formData,
+        headers,
+      });
+      
+      const data = await res.json();
+
+      if (!data.success) {
+        // AI Rejected it! Set the error and DO NOT add the file to state.
+        setErrors((prev) => ({ ...prev, [fieldKey]: `Validation Failed: ${data.reason}` }));
+        return;
+      }
+
+      // 4. AI Approved! Convert to Base64 and add to UI state
+      const [base64, sizeStr] = await Promise.all([
+        fileToBase64(file),
+        Promise.resolve(formatSize(file.size)),
+      ]);
+
+      const uploaded: UploadedFile = {
+        name: file.name,
+        size: sizeStr,
+        type: file.type || 'application/octet-stream',
+        data: base64,
+        file,
+      };
+
+      setFiles((prev) =>
+        field.multi
+          ? { ...prev, [fieldKey]: [...prev[fieldKey], uploaded] }
+          : { ...prev, [fieldKey]: [uploaded] }
+      );
+      
+    } catch (err) {
+      setErrors((prev) => ({ ...prev, [fieldKey]: 'Failed to connect to validation service.' }));
+    } finally {
+      // 5. Remove the "Validating..." spinner
+      setValidatingFields((prev) => ({ ...prev, [fieldKey]: false }));
+    }
   };
 
   const handleRemove = (fieldKey: string, index: number) => {
@@ -385,11 +422,16 @@ export default function UploadDocumentsPage() {
                           </div>
                         </div>
 
-                        <label className={styles.chooseButton}>
-                          <span>{fieldFiles.length === 0 ? 'Choose file' : field.multi ? 'Add more' : 'Replace'}</span>
+                        <label className={styles.chooseButton} style={{ opacity: validatingFields[field.key] ? 0.7 : 1 }}>
+                          {validatingFields[field.key] ? (
+                            <span>Validating... ⏳</span>
+                          ) : (
+                            <span>{fieldFiles.length === 0 ? 'Choose file' : field.multi ? 'Add more' : 'Replace'}</span>
+                          )}
                           <input
                             type="file"
-                            accept=".pdf,.doc,.docx"
+                            accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                            disabled={validatingFields[field.key]}
                             ref={(el) => {
                               fileInputRefs.current[field.key] = el;
                             }}
@@ -489,10 +531,10 @@ export default function UploadDocumentsPage() {
           </button>
           <button
             onClick={handleSubmit}
-            disabled={isLoading || !allRequiredUploaded || !consentAccepted}
+            disabled={isLoading || !allRequiredUploaded || !consentAccepted || Object.values(validatingFields).some(Boolean)}
             className={styles.primaryButton}
           >
-            {isLoading ? 'Submitting...' : 'Submit Documents'}
+            {isLoading ? 'Submitting...' : Object.values(validatingFields).some(Boolean) ? 'Validating Docs...' : 'Submit Documents'}
           </button>
         </div>
       </div>

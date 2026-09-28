@@ -26,7 +26,7 @@ import uuid
 
 router = APIRouter(prefix="/api/candidate", tags=["candidate"])
 
-_PHASE_MAP = {1: "onboarding", 2: "interview", 3: "summary", 4: "foundation", 5: "documents"}
+_PHASE_MAP = {1: "onboarding", 2: "interview", 3: "summary", 4: "foundation", 5: "module", 6: "documents"}
 
 
 # ── Auth helper ───────────────────────────────────────────────────────────────
@@ -150,6 +150,7 @@ class CandidateProfileResponse(BaseModel):
     resumeId: Optional[str] = None
     resumeStatus: Optional[str] = None
     foundationCourseCompleted: Optional[bool] = False
+    moduleCompleted: Optional[bool] = False
     passedAndVisitedSummary: Optional[bool] = False
     documentsSubmitted: Optional[bool] = False
     consentAccepted: Optional[bool] = False
@@ -165,6 +166,7 @@ class CandidatePatchRequest(BaseModel):
     joiningDetailsVisited: Optional[bool] = None
     documentsSubmitted: Optional[bool] = None
     foundationCourseCompleted: Optional[bool] = None
+    moduleCompleted: Optional[bool] = None
     consentAccepted: Optional[bool] = None
     consentTimestamp: Optional[str] = None
     consentWithdrawn: Optional[bool] = None
@@ -259,10 +261,17 @@ async def upsert_candidate(request: Request, body: OnboardingRequest):
     except Exception:
         pass
 
-    db.candidates.update_one(
-        {"_id": {"$in": id_variants}},
-        {"$set": updates},
-    )
+    try:
+        from pymongo.errors import DuplicateKeyError
+        db.candidates.update_one(
+            {"_id": {"$in": id_variants}},
+            {"$set": updates},
+        )
+    except DuplicateKeyError:
+        raise HTTPException(
+            status_code=400,
+            detail="Phone number is already in use by another candidate."
+        )
 
     cand = db.candidates.find_one({"_id": {"$in": id_variants}})
     if not cand:
@@ -337,6 +346,7 @@ async def get_candidate_profile(email: Optional[str] = Query(None)):
         resumeId=resume_id,
         resumeStatus=resume_status,
         foundationCourseCompleted=cand.get("foundation_course_completed", False),
+        moduleCompleted=cand.get("module_completed", False),
         passedAndVisitedSummary=cand.get("passed_and_visited_summary", False),
         documentsSubmitted=cand.get("documents_submitted", False),
         consentAccepted=cand.get("consent_accepted", False),
@@ -431,6 +441,8 @@ async def patch_candidate(request: Request, body: CandidatePatchRequest):
         updates["documents_submitted"] = body.documentsSubmitted
     if body.foundationCourseCompleted is not None:
         updates["foundation_course_completed"] = body.foundationCourseCompleted
+    if body.moduleCompleted is not None:
+        updates["module_completed"] = body.moduleCompleted
     if body.consentAccepted is not None:
         updates["consent_accepted"] = body.consentAccepted
         if body.consentAccepted:

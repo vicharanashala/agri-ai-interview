@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     VIBE_API_URL: str = "https://vibe.vicharanashala.ai"
     VIBE_COURSE_ID: str = "6a2be954ca990e71be4e3752"
 
+    # Anveshan / Question Collection integration
+    QC_API_URL: str = ""
+    ANVESHAN_ANNADATHA_AUTH_KEY: str = ""
+
     # SMTP / Email settings
     EMAIL_SMTP_HOST: str = "smtp.zoho.in"
     EMAIL_SMTP_PORT: int = 465

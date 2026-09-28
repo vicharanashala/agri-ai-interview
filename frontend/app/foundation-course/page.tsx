@@ -59,7 +59,7 @@ export default function FoundationCoursePage() {
         await syncPhaseToDb(4, { foundationCourseCompleted: true });
         setFeedback({
           type: 'success',
-          text: 'Foundation Course verified successfully. You can now proceed to Upload Documents.',
+          text: 'Foundation Course verified successfully. You can now proceed to the Next Module.',
         });
       } else if (data.vibeError) {
         setFeedback({
@@ -157,10 +157,10 @@ export default function FoundationCoursePage() {
               <div className={styles.cardIcon}>OK</div>
               <h2 className={styles.cardTitle}>Course Completed!</h2>
               <p className={styles.cardText}>
-                You have completed the Foundation Course. You can now proceed to upload your documents.
+                You have completed the Foundation Course. You can now proceed to the next module.
               </p>
-              <button onClick={() => router.push('/upload-documents')} className={styles.primaryButton}>
-                Proceed to Upload Documents
+              <button onClick={() => router.push('/module')} className={styles.primaryButton}>
+                proceed to the Next Module
               </button>
             </>
           )}

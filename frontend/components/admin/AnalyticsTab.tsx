@@ -250,6 +250,7 @@ export default function AnalyticsTab({
     { name: "Interview", value: phaseStats?.byPhase?.interview || 0 },
     { name: "Selected", value: phaseStats?.totalPass || 0 },
     { name: "Course", value: phaseStats?.byPhase?.foundation || 0 },
+    { name: "Module", value: phaseStats?.byPhase?.module || 0 },
     { name: "Rejected", value: phaseStats?.totalFail || 0 },
   ];
 
@@ -341,6 +342,11 @@ export default function AnalyticsTab({
             <span className={styles.kpiIconSmall}>📎</span>
             <div className={styles.kpiLabelSmall}>Docs Submission</div>
             <div className={styles.kpiValueSmall}>{kpiStats?.byPhase?.documents || 0}</div>
+          </div>
+          <div className={styles.kpiCard}>
+            <span className={styles.kpiIconSmall}>📋</span>
+            <div className={styles.kpiLabelSmall}>Module Phase</div>
+            <div className={styles.kpiValueSmall}>{kpiStats?.byPhase?.module || 0}</div>
           </div>
         </div>
       </div>

@@ -257,7 +257,7 @@ export default function ModuleCompletionTab({ adminToken, adminApiBase, onRefres
                 justifyContent: 'center',
                 fontSize: '20px'
               }}>
-                âš ï¸
+                ⚠️
               </div>
               <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#111827' }}>
                 Bypass Question Collection module

@@ -18,3 +18,5 @@ httpx
 pdfplumber
 python-docx
 google-cloud-storage
+pdf2image
+Pillow

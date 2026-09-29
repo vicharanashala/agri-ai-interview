@@ -105,7 +105,7 @@ async def validate_single_document(file: UploadFile = File(...), field_name: str
                 "content": [
                     {
                         "type": "text", 
-                        "text": f"You are a strict document validator. The candidate uploaded this for the '{field_name}' field. Is this a valid {field_name}? Reply strictly with a JSON object: {{\"is_valid\": true or false, \"reason\": \"short reason\"}}"
+                        "text": f"You are a helpful document classifier. The candidate uploaded this for the '{field_name}' field. Verify if the image generally appears to be a {field_name}. Do NOT reject the document for being slightly blurry, low quality, or a sample/template. If it looks like the correct type of document, accept it. Reply strictly with a JSON object: {{\"is_valid\": true or false, \"reason\": \"short reason\"}}"
                     },
                     {
                         "type": "image_url",

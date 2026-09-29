@@ -84,6 +84,75 @@ class DocumentsUploadResponse(BaseModel):
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
 
+import httpx
+import base64
+from fastapi import Form
+
+@router.post("/validate-single")
+async def validate_single_document(file: UploadFile = File(...), field_name: str = Form(...)):
+    file_bytes = await file.read()
+    
+    # Convert to base64 for the OpenAI Vision payload
+    base64_file = base64.b64encode(file_bytes).decode('utf-8')
+    mime_type = file.content_type if file.content_type else "image/jpeg"
+    
+    # Standard OpenAI/vLLM Vision Payload
+    vm_payload = {
+        "model": "gemma4-26b",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text", 
+                        "text": f"You are a strict document validator. The candidate uploaded this for the '{field_name}' field. Is this a valid {field_name}? Reply strictly with a JSON object: {{\"is_valid\": true or false, \"reason\": \"short reason\"}}"
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{mime_type};base64,{base64_file}"
+                        }
+                    }
+                ]
+            }
+        ],
+        "temperature": 0.1,
+        "max_tokens": 150
+    }
+    
+    try:
+        import json
+        # Point to the exact path the Lead provided
+        async with httpx.AsyncClient() as client:
+            response = await client.post("http://100.100.108.44:8013/v1/chat/completions", json=vm_payload, timeout=45.0)
+            
+            if response.status_code == 200:
+                ai_data = response.json()
+                
+                # Extract the text reply from OpenAI format
+                ai_text = ai_data["choices"][0]["message"]["content"]
+                
+                try:
+                    # Clean markdown formatting in case the AI wraps it in ```json
+                    clean_text = ai_text.strip("`").replace("json\n", "")
+                    result = json.loads(clean_text)
+                    
+                    if result.get("is_valid"):
+                        return {"success": True}
+                    else:
+                        return {"success": False, "reason": result.get("reason", "AI rejected this document.")}
+                except json.JSONDecodeError:
+                    # Fallback if AI doesn't return perfect JSON
+                    print("Failed to parse AI JSON:", ai_text)
+                    return {"success": True, "reason": "Could not parse AI response, bypassing."}
+            else:
+                return {"success": True, "reason": f"VM returned {response.status_code}"}
+                
+    except Exception as e:
+        print(f"AI Validation connection failed: {e}")
+        return {"success": False, "reason": "AI Validation service is temporarily unavailable. Please try again."}
+
+
 @router.post("/documents", response_model=DocumentsUploadResponse)
 async def upload_documents(
     request: Request,

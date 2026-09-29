@@ -96,6 +96,28 @@ async def validate_single_document(file: UploadFile = File(...), field_name: str
     base64_file = base64.b64encode(file_bytes).decode('utf-8')
     mime_type = file.content_type if file.content_type else "image/jpeg"
     
+    # Define field-specific rules to act as few-shot guides
+    field_rules = {
+        "Aadhaar Card (Front side)": "Look for 'Aadhaar', Government of India, a portrait photo, and a 12-digit number. MUST be the FRONT side (with photo). Do NOT accept PAN cards.",
+        "Aadhaar Card (Back side)": "Look for an address block and a barcode/QR code. MUST be the BACK side (no large portrait photo).",
+        "PAN Card (Front side)": "Look for 'INCOME TAX DEPARTMENT', 'Permanent Account Number', and a 10-character alphanumeric string. Do NOT accept Aadhaar cards.",
+        "10th Class Marksheet": "Look for 'Secondary School', 'Class X', '10th', or 'Matriculation'. If it says 'Class XII', '12th', or 'Senior Secondary', REJECT IT.",
+        "12th Class Marksheet": "Look for 'Senior Secondary', 'Class XII', '12th', or 'Intermediate'. If it says 'Class X', '10th', or 'Matriculation', REJECT IT.",
+        "Bank Proof": "Look for a Bank Logo, Account Number, IFSC code, or 'Passbook' / 'Cheque'. Do NOT accept PAN or Aadhaar cards here."
+    }
+    
+    specific_rule = field_rules.get(field_name, f"Verify that the document clearly matches the category: {field_name}.")
+    
+    prompt_text = (
+        f"You are an expert document classification AI.\n"
+        f"The candidate uploaded this image for the '{field_name}' field.\n\n"
+        f"Specific Rules for this field:\n{specific_rule}\n\n"
+        f"General Rules:\n"
+        f"1. Read the text on the document. If it is the wrong document entirely (e.g., uploading Aadhaar for PAN, or 10th for 12th), you MUST reject it.\n"
+        f"2. Do NOT reject the document for being slightly blurry, low quality, or a sample/template. If it looks like the correct type of document, accept it.\n\n"
+        f"Reply strictly with a JSON object exactly like this: {{\"is_valid\": true or false, \"reason\": \"Short explanation of exactly what you saw.\"}}"
+    )
+    
     # Standard OpenAI/vLLM Vision Payload
     vm_payload = {
         "model": "google/gemma-4-26B-A4B-it",
@@ -105,7 +127,7 @@ async def validate_single_document(file: UploadFile = File(...), field_name: str
                 "content": [
                     {
                         "type": "text", 
-                        "text": f"You are a helpful document classifier. The candidate uploaded this for the '{field_name}' field. Verify if the image generally appears to be a {field_name}. Do NOT reject the document for being slightly blurry, low quality, or a sample/template. If it looks like the correct type of document, accept it. Reply strictly with a JSON object: {{\"is_valid\": true or false, \"reason\": \"short reason\"}}"
+                        "text": prompt_text
                     },
                     {
                         "type": "image_url",

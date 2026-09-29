@@ -122,8 +122,11 @@ async def validate_single_document(file: UploadFile = File(...), field_name: str
     
     try:
         import json
-        # Point to the exact path the Lead provided
-        async with httpx.AsyncClient() as client:
+        from app.core.config import settings
+        ts_proxy = "http://127.0.0.1:1056" if not getattr(settings, "API_DEBUG", False) else None
+        
+        # Pass the proxy to the HTTPX client!
+        async with httpx.AsyncClient(proxy=ts_proxy) as client:
             response = await client.post("http://100.100.108.44:8013/v1/chat/completions", json=vm_payload, timeout=45.0)
             
             if response.status_code == 200:

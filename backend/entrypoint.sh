@@ -37,6 +37,9 @@ tailscale up \
 echo "=== LOCKING DERP REGION ==="
 tailscale set --derp-region=blr || echo "DERP region lock failed"
 
+echo "=== TAILSCALE STATUS ==="
+tailscale status || echo "Could not fetch Tailscale status"
+
 echo "=== STARTING FASTAPI BACKEND ==="
 # Cloud Run injects the PORT environment variable dynamically
 exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}

@@ -122,12 +122,12 @@ async def validate_single_document(file: UploadFile = File(...), field_name: str
     
     # Define field-specific rules to act as few-shot guides
     field_rules = {
-        "Aadhaar Card (Front side)": "Checklist: 1) Has a PORTRAIT PHOTO of a face. 2) Has the word 'Aadhaar'. 3) Has the person's Name. CRITICAL RULE: If there is NO portrait photo of a face, it is the back side, so you MUST REJECT IT.",
-        "Aadhaar Card (Back side)": "Checklist: 1) Has an ADDRESS block. 2) Has a Barcode or QR Code. CRITICAL RULE: If you see a large portrait photo of a person's face, it is the front side, so you MUST REJECT IT.",
-        "PAN Card (Front side)": "Checklist: 1) Has 'INCOME TAX DEPARTMENT'. 2) Has a portrait photo. 3) Has a 10-character alphanumeric PAN. CRITICAL RULE: If you see the word Aadhaar or an address block, REJECT IT.",
-        "10th Class Marksheet": "Checklist: 1) Says 'Secondary School', 'Class X', '10th', or 'Matriculation'. CRITICAL RULE: If it says 'Class XII', '12th', or 'Senior Secondary', REJECT IT.",
-        "12th Class Marksheet": "Checklist: 1) Says 'Senior Secondary', 'Class XII', '12th', or 'Intermediate'. CRITICAL RULE: If it says 'Class X', '10th', or 'Matriculation', REJECT IT.",
-        "Bank Proof": "Checklist: 1) Has a Bank Logo or Name. 2) Has an Account Number. 3) Has an IFSC code. CRITICAL RULE: Do NOT accept PAN or Aadhaar cards here."
+        "Aadhaar Card (Front side)": "Rule 1: Look for a PORTRAIT PHOTO of a face. Rule 2: Look for the person's Name. CRITICAL: If the image does NOT have a portrait photo of a face, it is the BACK side. You MUST reject it.",
+        "Aadhaar Card (Back side)": "Rule 1: Look for an ADDRESS block. Rule 2: Look for a Barcode/QR Code. CRITICAL: If the image HAS a portrait photo of a face, it is the FRONT side. You MUST reject it.",
+        "PAN Card (Front side)": "Rule 1: Look for 'INCOME TAX DEPARTMENT'. Rule 2: Look for a face photo and PAN number. CRITICAL: Do not accept Aadhaar cards or back sides without a photo.",
+        "10th Class Marksheet": "Rule 1: Look for 'Secondary School', 'Class X', or '10th'. CRITICAL: Reject if it says 'Class XII', '12th', or 'Senior Secondary'.",
+        "12th Class Marksheet": "Rule 1: Look for 'Senior Secondary', 'Class XII', or '12th'. CRITICAL: Reject if it says 'Class X' or '10th'.",
+        "Bank Proof": "Rule 1: Look for a Bank Logo, Account Number, and IFSC code. CRITICAL: Do NOT accept PAN or Aadhaar cards here."
     }
     
     specific_rule = field_rules.get(field_name, f"Verify that the document clearly matches the category: {field_name}.")
@@ -137,9 +137,14 @@ async def validate_single_document(file: UploadFile = File(...), field_name: str
         f"The candidate uploaded this image for the '{field_name}' field.\n\n"
         f"Specific Rules for this field:\n{specific_rule}\n\n"
         f"General Rules:\n"
-        f"1. Read the text on the document. If it is the wrong document entirely (e.g., uploading Aadhaar for PAN, or 10th for 12th), you MUST reject it.\n"
-        f"2. Do NOT reject the document for being slightly blurry, low quality, or a sample/template. If it looks like the correct type of document, accept it.\n\n"
-        f"Reply strictly with a JSON object exactly like this: {{\"is_valid\": true or false, \"reason\": \"Short explanation of exactly what you saw.\"}}"
+        f"1. You MUST carefully distinguish between FRONT and BACK sides based on the presence of a face photo.\n"
+        f"2. Do NOT reject the document for being slightly blurry, low quality, or a sample/template.\n\n"
+        f"You MUST use Chain-of-Thought reasoning. Reply strictly with a JSON object exactly like this:\n"
+        f"{{\n"
+        f"  \"step_by_step_analysis\": \"First, explicitly state if you see a portrait photo of a face. Then state if you see an address block. Finally, conclude if it matches the specific rules for {field_name}.\",\n"
+        f"  \"is_valid\": true or false,\n"
+        f"  \"reason\": \"Short final conclusion.\"\n"
+        f"}}"
     )
     
     # Standard OpenAI/vLLM Vision Payload

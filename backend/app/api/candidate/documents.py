@@ -122,8 +122,11 @@ async def validate_single_document(file: UploadFile = File(...), field_name: str
     
     try:
         import json
-        from app.core.config import settings
-        ts_proxy = "http://127.0.0.1:1056" if not getattr(settings, "API_DEBUG", False) else None
+        import os
+        
+        # We detect if the Tailscale entrypoint script is running by checking the env var it sets.
+        # If it is running, we MUST send our request through the local HTTP proxy on port 1056.
+        ts_proxy = "http://127.0.0.1:1056" if os.environ.get("TS_DEBUG_ALWAYS_USE_DERP") else None
         
         # Pass the proxy to the HTTPX client!
         async with httpx.AsyncClient(proxy=ts_proxy) as client:

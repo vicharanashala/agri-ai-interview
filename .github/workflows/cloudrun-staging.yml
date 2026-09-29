@@ -99,6 +99,7 @@ jobs:
           image: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }}
           project_id: ${{ env.GCP_PROJECT_ID }}
           env_vars: |
+            TAILSCALE_AUTHKEY=${{ secrets.TAILSCALE_AUTHKEY }}
             MONGO_URI=${{ secrets.MONGO_URI_STAGING }}
             MONGO_DB_NAME=${{ vars.MONGO_DB_NAME_STAGING }}
             CORS_ORIGINS=${{ vars.CORS_ORIGINS_STAGING }}

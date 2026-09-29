@@ -20,21 +20,23 @@ until [ -S /var/run/tailscale/tailscaled.sock ]; do
     WAIT_COUNT=$((WAIT_COUNT + 1))
     if [ $WAIT_COUNT -gt 15 ]; then
         echo "ERROR: tailscaled.sock was not created within 15 seconds!"
-        exit 1
+        # Do not exit instantly, let the app start anyway so we can see logs
+        break
     fi
     sleep 1
 done
 
 echo "=== AUTHENTICATING TAILSCALE ==="
-# TAILSCALE_AUTHKEY is automatically injected from your GitHub Actions Secrets!
+# We add || true so the container doesn't instantly crash if the key is invalid
 tailscale up \
   --reset \
   --authkey=${TAILSCALE_AUTHKEY} \
   --hostname=${TS_HOSTNAME:-agri-backend-client} \
-  --accept-routes
+  --accept-routes || echo "WARNING: Tailscale up failed. Key might be invalid."
 
 echo "=== LOCKING DERP REGION ==="
 tailscale set --derp-region=blr || echo "DERP region lock failed"
 
 echo "=== STARTING FASTAPI BACKEND ==="
-exec uvicorn app.main:app --host 0.0.0.0 --port 8080
+# Cloud Run injects the PORT environment variable dynamically
+exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}

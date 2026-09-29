@@ -98,7 +98,7 @@ async def validate_single_document(file: UploadFile = File(...), field_name: str
     
     # Standard OpenAI/vLLM Vision Payload
     vm_payload = {
-        "model": "gemma4-26b",
+        "model": "google/gemma-4-26B-A4B-it",
         "messages": [
             {
                 "role": "user",

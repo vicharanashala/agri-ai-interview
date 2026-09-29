@@ -152,7 +152,10 @@ async def validate_single_document(file: UploadFile = File(...), field_name: str
                     print("Failed to parse AI JSON:", ai_text)
                     return {"success": True, "reason": "Could not parse AI response, bypassing."}
             else:
-                return {"success": True, "reason": f"VM returned {response.status_code}"}
+                # Get the exact error message from vLLM so we stop guessing!
+                error_body = response.text
+                print(f"vLLM Error (Status {response.status_code}): {error_body}")
+                return {"success": True, "reason": f"VM returned {response.status_code}: {error_body}"}
                 
     except Exception as e:
         print(f"AI Validation connection failed: {e}")

@@ -91,19 +91,34 @@ from fastapi import Form
 @router.post("/validate-single")
 async def validate_single_document(file: UploadFile = File(...), field_name: str = Form(...)):
     file_bytes = await file.read()
+    mime_type = file.content_type if file.content_type else "image/jpeg"
     
+    # If the file is a PDF, convert the first page to an image for the Vision AI
+    if mime_type == "application/pdf" or file.filename.lower().endswith(".pdf"):
+        try:
+            import io
+            from pdf2image import convert_from_bytes
+            images = convert_from_bytes(file_bytes, first_page=1, last_page=1)
+            if images:
+                img_byte_arr = io.BytesIO()
+                images[0].save(img_byte_arr, format='JPEG')
+                file_bytes = img_byte_arr.getvalue()
+                mime_type = "image/jpeg"
+        except Exception as e:
+            print(f"Failed to convert PDF to image: {e}")
+            return {"success": False, "reason": "System missing PDF libraries. Please upload a .jpg or .png image instead."}
+            
     # Convert to base64 for the OpenAI Vision payload
     base64_file = base64.b64encode(file_bytes).decode('utf-8')
-    mime_type = file.content_type if file.content_type else "image/jpeg"
     
     # Define field-specific rules to act as few-shot guides
     field_rules = {
-        "Aadhaar Card (Front side)": "Look for 'Aadhaar', Government of India, a portrait photo, and a 12-digit number. MUST be the FRONT side (with photo). Do NOT accept PAN cards.",
-        "Aadhaar Card (Back side)": "Look for an address block and a barcode/QR code. MUST be the BACK side (no large portrait photo).",
-        "PAN Card (Front side)": "Look for 'INCOME TAX DEPARTMENT', 'Permanent Account Number', and a 10-character alphanumeric string. Do NOT accept Aadhaar cards.",
-        "10th Class Marksheet": "Look for 'Secondary School', 'Class X', '10th', or 'Matriculation'. If it says 'Class XII', '12th', or 'Senior Secondary', REJECT IT.",
-        "12th Class Marksheet": "Look for 'Senior Secondary', 'Class XII', '12th', or 'Intermediate'. If it says 'Class X', '10th', or 'Matriculation', REJECT IT.",
-        "Bank Proof": "Look for a Bank Logo, Account Number, IFSC code, or 'Passbook' / 'Cheque'. Do NOT accept PAN or Aadhaar cards here."
+        "Aadhaar Card (Front side)": "Checklist: 1) Has a PORTRAIT PHOTO of a face. 2) Has the word 'Aadhaar'. 3) Has the person's Name. CRITICAL RULE: If there is NO portrait photo of a face, it is the back side, so you MUST REJECT IT.",
+        "Aadhaar Card (Back side)": "Checklist: 1) Has an ADDRESS block. 2) Has a Barcode or QR Code. CRITICAL RULE: If you see a large portrait photo of a person's face, it is the front side, so you MUST REJECT IT.",
+        "PAN Card (Front side)": "Checklist: 1) Has 'INCOME TAX DEPARTMENT'. 2) Has a portrait photo. 3) Has a 10-character alphanumeric PAN. CRITICAL RULE: If you see the word Aadhaar or an address block, REJECT IT.",
+        "10th Class Marksheet": "Checklist: 1) Says 'Secondary School', 'Class X', '10th', or 'Matriculation'. CRITICAL RULE: If it says 'Class XII', '12th', or 'Senior Secondary', REJECT IT.",
+        "12th Class Marksheet": "Checklist: 1) Says 'Senior Secondary', 'Class XII', '12th', or 'Intermediate'. CRITICAL RULE: If it says 'Class X', '10th', or 'Matriculation', REJECT IT.",
+        "Bank Proof": "Checklist: 1) Has a Bank Logo or Name. 2) Has an Account Number. 3) Has an IFSC code. CRITICAL RULE: Do NOT accept PAN or Aadhaar cards here."
     }
     
     specific_rule = field_rules.get(field_name, f"Verify that the document clearly matches the category: {field_name}.")

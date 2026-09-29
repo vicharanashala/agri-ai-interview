@@ -2,9 +2,9 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system deps and Tailscale
+# Install system deps, Tailscale, and poppler-utils for PDF processing
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc curl ca-certificates \
+    gcc curl ca-certificates poppler-utils \
     && curl -fsSL https://tailscale.com/install.sh | sh \
     && rm -rf /var/lib/apt/lists/*
 

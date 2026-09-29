@@ -18,6 +18,9 @@ ALLOWED_CONTENT_TYPES = {
     "application/pdf",
     "application/msword",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
 }
 
 MAX_SIZES = {
@@ -41,18 +44,24 @@ _CONTENT_TYPES = {
     "pdf": "application/pdf",
     "doc": "application/msword",
     "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "png": "image/png",
 }
 
 
 def _guess_file_type(filename: str) -> str:
     ext = filename.lower().split(".")[-1]
+    if ext in ["jpg", "jpeg"]: return "jpg"
+    if ext == "png": return "png"
     return "docx" if ext == "docx" else ("doc" if ext == "doc" else "pdf")
 
 
 def _validate_file(file: UploadFile, field_name: str) -> bytes:
     content_type = file.content_type or ""
-    if content_type not in ALLOWED_CONTENT_TYPES and not file.filename.lower().endswith((".pdf", ".doc", ".docx")):
-        raise HTTPException(status_code=400, detail=f"Only PDF and DOCX files are allowed for {field_name}")
+    allowed_exts = (".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png")
+    if content_type not in ALLOWED_CONTENT_TYPES and not file.filename.lower().endswith(allowed_exts):
+        raise HTTPException(status_code=400, detail=f"Only PDF, DOCX, JPG, and PNG files are allowed for {field_name}")
 
     file_bytes = file.file.read()
     max_size = MAX_SIZES.get(field_name, 5 * 1024 * 1024)

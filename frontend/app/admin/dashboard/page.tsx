@@ -809,7 +809,7 @@ export default function AdminDashboard() {
 
 
 
-  if (loading) {
+  if (!adminData) {
     return <div className={styles.loading}>Loading...</div>;
   }
   const handleExportCsv = () => {
@@ -977,7 +977,40 @@ export default function AdminDashboard() {
             </div>
 
             {/* Candidates Table */}
-            {candidates.length === 0 ? (
+            {loading ? (
+                <div className={styles.candidatesTable}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                        <th>State</th>
+                        <th>Current Phase</th>
+                        <th>Phase Progress</th>
+                        <th>Attempts</th>
+                        <th>Resume</th>
+                        <th>Created</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Array.from({ length: candidatesLimit }).map((_, i) => (
+                        <tr key={i}>
+                          <td><div className={styles.skeletonBox} style={{ width: 120, height: 16 }} /></td>
+                          <td><div className={styles.skeletonBox} style={{ width: 150, height: 16 }} /></td>
+                          <td><div className={styles.skeletonBox} style={{ width: 100, height: 16 }} /></td>
+                          <td><div className={styles.skeletonBox} style={{ width: 80, height: 16 }} /></td>
+                          <td><div className={styles.skeletonBox} style={{ width: 100, height: 24, borderRadius: 12 }} /></td>
+                          <td><div className={styles.skeletonBox} style={{ width: 120, height: 12, borderRadius: 6 }} /></td>
+                          <td><div className={styles.skeletonBox} style={{ width: 40, height: 20, borderRadius: 10 }} /></td>
+                          <td><div className={styles.skeletonBox} style={{ width: 60, height: 24, borderRadius: 4 }} /></td>
+                          <td><div className={styles.skeletonBox} style={{ width: 100, height: 16 }} /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+            ) : candidates.length === 0 ? (
               <div className={styles.emptyState}>
                 <p>No candidates found</p>
               </div>
@@ -1328,8 +1361,33 @@ export default function AdminDashboard() {
         {activeTab === "anti-cheat" && (
           <div className={styles.antiCheatContainer}>
             <h2 className={styles.antiCheatTitle}>🛡️ Anti-Cheat Violations</h2>
-            {violationsLoading && violations.length === 0 ? (
-              <p>Loading...</p>
+            {violationsLoading ? (
+              <div className={styles.violationsTable}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Candidate</th>
+                      <th>Email</th>
+                      <th>Violation</th>
+                      <th>Severity</th>
+                      <th>Auto-Closed</th>
+                      <th>Time</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Array.from({ length: violationsLimit }).map((_, i) => (
+                      <tr key={i}>
+                        <td><div className={styles.skeletonBox} style={{ width: 120, height: 16 }} /></td>
+                        <td><div className={styles.skeletonBox} style={{ width: 150, height: 16 }} /></td>
+                        <td><div className={styles.skeletonBox} style={{ width: 200, height: 16 }} /></td>
+                        <td><div className={styles.skeletonBox} style={{ width: 60, height: 24, borderRadius: 12 }} /></td>
+                        <td><div className={styles.skeletonBox} style={{ width: 40, height: 20 }} /></td>
+                        <td><div className={styles.skeletonBox} style={{ width: 140, height: 16 }} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             ) : violations.length === 0 ? (
               <p className={styles.noDataMessage}>No violations recorded yet.</p>
             ) : (

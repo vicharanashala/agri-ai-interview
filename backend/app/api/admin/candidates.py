@@ -190,6 +190,22 @@ async def get_candidates(
     if district:
         query["district"] = {"$regex": district, "$options": "i"}
 
+    if search:
+        sl = search.lower()
+        matched_users = list(db.users.find({"email": {"$regex": search, "$options": "i"}}, {"_id": 1}))
+        matched_user_ids = [u["_id"] for u in matched_users]
+        
+        search_or = [
+            {"full_name": {"$regex": search, "$options": "i"}},
+            {"user_id": {"$in": matched_user_ids}}
+        ]
+        
+        # Merge with existing $or if it exists (from phases)
+        if "$or" in query:
+            query["$and"] = [{"$or": query.pop("$or")}, {"$or": search_or}]
+        else:
+            query["$or"] = search_or
+
     cursor = db.candidates.find(query).sort("created_at", -1)
     all_candidates = list(cursor)
 
@@ -262,12 +278,6 @@ async def get_candidates(
         # Apply interviewStatus filter early if possible
         if interviewStatus and c_interview_status != interviewStatus:
             continue
-
-        # Apply search filter early
-        if search:
-            sl = search.lower()
-            if sl not in raw_full_name.lower() and sl not in (user_email or "").lower():
-                continue
 
         foundation_completed = cand.get("foundation_course_completed", False)
         foundation_status = cand.get("foundation_course_status", "completed" if foundation_completed else "not_started")
@@ -848,7 +858,23 @@ async def get_all_evaluations(
     else:
         query["result"] = {"$in": ["PASS", "FAIL"]}
 
-    cursor = db.interview_sessions.find(query).sort("started_at", -1)
+    if search:
+        sl = search.lower()
+        matched_users = list(db.users.find({"email": {"$regex": search, "$options": "i"}}, {"_id": 1}))
+        matched_user_ids = [u["_id"] for u in matched_users]
+        cand_query = {"$or": [
+            {"full_name": {"$regex": search, "$options": "i"}},
+            {"user_id": {"$in": matched_user_ids}}
+        ]}
+        matched_cands = list(db.candidates.find(cand_query, {"_id": 1}))
+        matched_cand_ids = [c["_id"] for c in matched_cands]
+        # Also, string versions of object ids
+        matched_cand_ids_str = [str(i) for i in matched_cand_ids]
+        matched_cand_ids.extend(matched_cand_ids_str)
+        query["candidate_id"] = {"$in": matched_cand_ids}
+
+    total = db.interview_sessions.count_documents(query)
+    cursor = db.interview_sessions.find(query).sort("started_at", -1).skip(offset).limit(limit)
     sessions = list(cursor)
 
     # Bulk fetches
@@ -970,8 +996,7 @@ async def get_all_evaluations(
         })
 
 
-    total = len(evals)
-    paginated_evals = evals[offset : offset + limit]
+    paginated_evals = evals
 
     return {"evaluations": paginated_evals, "total": total}
 

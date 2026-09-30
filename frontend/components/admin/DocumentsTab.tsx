@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import styles from './EvaluationsTab.module.css';
 import PageSelector from "./PageSelector";
 
 interface CandidateRow {
@@ -112,7 +113,28 @@ export default function DocumentsTab({ adminToken }: Props) {
     </div>
 
       {loading ? (
-        <div>Loading...</div>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
+                <th style={{ padding: '8px 12px', textAlign: 'left', color: '#6b7280', fontWeight: 500, fontSize: 12 }}>Name</th>
+                <th style={{ padding: '8px 12px', textAlign: 'left', color: '#6b7280', fontWeight: 500, fontSize: 12 }}>Email</th>
+                <th style={{ padding: '8px 12px', textAlign: 'left', color: '#6b7280', fontWeight: 500, fontSize: 12 }}>Documents</th>
+                <th style={{ padding: '8px 12px', textAlign: 'left', color: '#6b7280', fontWeight: 500, fontSize: 12 }}>Data Access Consent</th>
+                <th style={{ padding: '8px 12px', textAlign: 'left', color: '#6b7280', fontWeight: 500, fontSize: 12 }}>Download</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Array.from({ length: limit }).map((_, i) => (
+                <tr key={i} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                  <td style={{ padding: '12px' }}><div className={styles.skeletonBox} style={{ width: '120px', height: '16px' }} /></td>
+                  <td style={{ padding: '12px' }}><div className={styles.skeletonBox} style={{ width: '150px', height: '16px' }} /></td>
+                  <td style={{ padding: '12px' }}><div className={styles.skeletonBox} style={{ width: '80px', height: '24px', borderRadius: '12px' }} /></td>
+                  <td style={{ padding: '12px' }}><div className={styles.skeletonBox} style={{ width: '100px', height: '16px' }} /></td>
+                  <td style={{ padding: '12px' }}><div className={styles.skeletonBox} style={{ width: '90px', height: '20px' }} /></td>
+                </tr>
+              ))}
+            </tbody>
+        </table>
       ) : candidates.length === 0 ? (
         <div>No candidates found</div>
       ) : (

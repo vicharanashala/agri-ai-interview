@@ -622,8 +622,44 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken, onCandidat
       {/* Main Evaluations Table */}
       {activeSubTab === 'evaluations' && (
         <>
-          {loading && evaluations.length === 0 ? (
-            <div className={styles.loading}>Loading evaluations…</div>
+          {loading ? (
+             <div className={styles.tableWrapper}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th style={{ width: 32 }}></th>
+                      <th>Candidate</th>
+                      <th>Mobile</th>
+                      <th>Level</th>
+                      <th>Pass Threshold</th>
+                      <th>Result</th>
+                      <th>Score</th>
+                      <th>End Reason</th>
+                      <th>Attempt</th>
+                      <th>Completed</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Array.from({ length: evalLimit }).map((_, i) => (
+                      <tr key={i} className={styles.row}>
+                        <td><div className={styles.skeletonBox} style={{ width: 16, height: 16 }} /></td>
+                        <td>
+                          <div className={styles.skeletonBox} style={{ width: 120, height: 16, marginBottom: 4 }} />
+                          <div className={styles.skeletonBox} style={{ width: 160, height: 12 }} />
+                        </td>
+                        <td><div className={styles.skeletonBox} style={{ width: 100, height: 16 }} /></td>
+                        <td><div className={styles.skeletonBox} style={{ width: 60, height: 16 }} /></td>
+                        <td><div className={styles.skeletonBox} style={{ width: 50, height: 16 }} /></td>
+                        <td><div className={styles.skeletonBox} style={{ width: 60, height: 24, borderRadius: 12 }} /></td>
+                        <td><div className={styles.skeletonBox} style={{ width: 40, height: 20 }} /></td>
+                        <td><div className={styles.skeletonBox} style={{ width: 120, height: 24, borderRadius: 12 }} /></td>
+                        <td><div className={styles.skeletonBox} style={{ width: 40, height: 24, borderRadius: 12 }} /></td>
+                        <td><div className={styles.skeletonBox} style={{ width: 140, height: 16 }} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
           ) : evaluations.length === 0 ? (
             <div className={styles.empty}>
               <div className={styles.emptyIcon}>📋</div>
@@ -753,7 +789,45 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken, onCandidat
       {activeSubTab === 're-evaluations' && (
         <>
           {reEvalLoading ? (
-            <div className={styles.loading}>Loading re-evaluation requests…</div>
+             <div className={styles.tableWrapper}>
+                <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th style={{ width: 32 }}></th>
+                    <th>Candidate Name</th>
+                    <th>Mobile</th>
+                    <th>Result</th>
+                    <th>Mark</th>
+                    <th>Attempt Number</th>
+                    <th>Requested Date</th>
+                    <th>Revaluation Status</th>
+                    <th>Reason for Revaluation</th>
+                    <th>Result After Revaluation</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.from({ length: reEvalLimit }).map((_, i) => (
+                    <tr key={i} className={styles.row}>
+                      <td><div className={styles.skeletonBox} style={{ width: 16, height: 16 }} /></td>
+                      <td>
+                        <div className={styles.skeletonBox} style={{ width: 120, height: 16, marginBottom: 4 }} />
+                        <div className={styles.skeletonBox} style={{ width: 160, height: 12 }} />
+                      </td>
+                      <td><div className={styles.skeletonBox} style={{ width: 100, height: 16 }} /></td>
+                      <td><div className={styles.skeletonBox} style={{ width: 60, height: 24, borderRadius: 12 }} /></td>
+                      <td><div className={styles.skeletonBox} style={{ width: 40, height: 20 }} /></td>
+                      <td><div className={styles.skeletonBox} style={{ width: 40, height: 24, borderRadius: 12 }} /></td>
+                      <td><div className={styles.skeletonBox} style={{ width: 140, height: 16 }} /></td>
+                      <td><div className={styles.skeletonBox} style={{ width: 80, height: 24, borderRadius: 12 }} /></td>
+                      <td><div className={styles.skeletonBox} style={{ width: 150, height: 16 }} /></td>
+                      <td><div className={styles.skeletonBox} style={{ width: 60, height: 24, borderRadius: 12 }} /></td>
+                      <td><div className={styles.skeletonBox} style={{ width: 100, height: 32, borderRadius: 6 }} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+                </table>
+             </div>
           ) : reEvaluations.length === 0 ? (
             <div className={styles.empty}>
               <div className={styles.emptyIcon}>🔄</div>

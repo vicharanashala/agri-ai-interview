@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
+import FullPageSkeleton from '@/components/FullPageSkeleton';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 function PostLoginContent() {
@@ -52,7 +53,7 @@ function PostLoginContent() {
         if (res.ok) return res.json();
         throw new Error('No candidate');
       })
-      .then(async (candidate: { id?: string; currentPhase?: string }) => {
+      .then(async (candidate: { id?: string; currentPhase?: string; declarationAccepted?: boolean }) => {
         console.log('[post-login] candidate found:', candidate?.id, 'phase:', candidate?.currentPhase);
         const phase = candidate?.currentPhase;
 
@@ -115,32 +116,14 @@ function PostLoginContent() {
   }, [session, status, callbackUrl, router]);
 
   return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      height: '100vh',
-      fontFamily: 'system-ui, sans-serif',
-      color: '#666',
-    }}>
-      Redirecting...
-    </div>
+    <FullPageSkeleton />
   );
 }
 
 export default function PostLoginPage() {
   return (
     <Suspense fallback={
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: '100vh',
-        fontFamily: 'system-ui, sans-serif',
-        color: '#666',
-      }}>
-        Loading...
-      </div>
+      <FullPageSkeleton />
     }>
       <PostLoginContent />
     </Suspense>

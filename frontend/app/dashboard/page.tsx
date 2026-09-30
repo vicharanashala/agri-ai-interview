@@ -1,5 +1,6 @@
 'use client';
 
+import FullPageSkeleton from '@/components/FullPageSkeleton';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
@@ -396,9 +397,7 @@ const completionPercentage = getCompletionPercentage();
 
   if (isLoading) {
     return (
-      <main className={styles.container}>
-        <div className={styles.loading}>Loading...</div>
-      </main>
+      <FullPageSkeleton />
     );
   }
 

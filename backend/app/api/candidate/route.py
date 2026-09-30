@@ -156,6 +156,7 @@ class CandidateProfileResponse(BaseModel):
     consentTimestamp: Optional[str] = None
     consentWithdrawn: Optional[bool] = False
     consentWithdrawnAt: Optional[str] = None
+    declarationAccepted: Optional[bool] = False
 
 
 class CandidatePatchRequest(BaseModel):
@@ -169,6 +170,7 @@ class CandidatePatchRequest(BaseModel):
     consentTimestamp: Optional[str] = None
     consentWithdrawn: Optional[bool] = None
     consentWithdrawnAt: Optional[str] = None
+    declarationAccepted: Optional[bool] = None
 
 
 class CandidatePatchResponse(BaseModel):
@@ -289,7 +291,11 @@ async def get_candidate_profile(email: Optional[str] = Query(None)):
 
     cand = db.candidates.find_one({"user_id": str(user["_id"])})
     if not cand:
-        raise HTTPException(status_code=404, detail="Candidate not found")
+        return CandidateProfileResponse(
+            id="",
+            email=user["email"],
+            declarationAccepted=user.get("declarationAccepted", False)
+        )
 
     # Fetch latest resume for this candidate.
     # candidates._id is stored as ObjectId; resumes.candidate_id is stored as
@@ -343,6 +349,7 @@ async def get_candidate_profile(email: Optional[str] = Query(None)):
         consentTimestamp=cand.get("consent_timestamp"),
         consentWithdrawn=cand.get("consent_withdrawn", False),
         consentWithdrawnAt=cand.get("consent_withdrawn_at"),
+        declarationAccepted=user.get("declarationAccepted", False),
     )
 
 
@@ -445,6 +452,8 @@ async def patch_candidate(request: Request, body: CandidatePatchRequest):
             updates["consent_status"] = "withdrawn"
     if body.consentWithdrawnAt is not None:
         updates["consent_withdrawn_at"] = body.consentWithdrawnAt
+    if body.declarationAccepted is not None:
+        updates["declarationAccepted"] = body.declarationAccepted
 
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")
@@ -566,3 +575,18 @@ async def reset_password(body: ResetPasswordRequest):
     )
 
     return {"success": True, "message": "Password reset successfully."}
+class DeclarationRequest(BaseModel):
+    declarationAccepted: bool
+
+@router.post('/declaration', response_model=dict)
+async def accept_declaration(request: Request, body: DeclarationRequest):
+    email = request.headers.get('x-user-email')
+    if not email:
+        raise HTTPException(401, 'Unauthorized')
+    db = get_sync_db()
+    user = db.users.find_one({'email': email.lower().strip()})
+    if not user:
+        raise HTTPException(404, 'User not found')
+        
+    db.users.update_one({'_id': user['_id']}, {'$set': {'declarationAccepted': body.declarationAccepted}})
+    return {'success': True}

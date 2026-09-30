@@ -254,7 +254,19 @@ export default function AnalyticsTab({
   ];
 
   if (loading) {
-    return <div className={styles.loading}>Loading Analytics Dashboard...</div>;
+    return (
+      <div className={styles.dashboardContainer}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className={styles.skeletonBox} style={{ height: '120px', borderRadius: '12px' }} />
+          ))}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+          <div className={styles.skeletonBox} style={{ height: '300px', borderRadius: '12px' }} />
+          <div className={styles.skeletonBox} style={{ height: '300px', borderRadius: '12px' }} />
+        </div>
+      </div>
+    );
   }
 
   return (

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import styles from './OfferLetterTab.module.css';
+import evalStyles from './EvaluationsTab.module.css';
 
 interface OfferLetterConfig {
   companyName: string;
@@ -182,7 +183,12 @@ export default function OfferLetterTab({ adminToken }: Props) {
   // ── Render ───────────────────────────────────────────────────────────────
 
   if (loading) {
-    return <div className={styles.loading}>Loading offer letter config…</div>;
+    return (
+      <div className={styles.container}>
+        <div style={{ height: '80px', marginBottom: '24px' }} className={evalStyles.skeletonBox} />
+        <div style={{ height: '400px' }} className={evalStyles.skeletonBox} />
+      </div>
+    );
   }
 
   return (

@@ -93,7 +93,10 @@ function PostLoginContent() {
           console.log('[post-login] No candidate.id or no email — skipping session creation');
         }
 
-        if (phase === 'onboarding' || !phase) {
+        if (!candidate.declarationAccepted) {
+          console.log('[post-login] Candidate must accept declaration first');
+          router.replace('/declaration');
+        } else if (phase === 'onboarding' || !phase || !candidate.id) {
           console.log('[post-login] Force navigating new candidate to /onboarding');
           router.replace('/onboarding');
         } else if (callbackUrl) {

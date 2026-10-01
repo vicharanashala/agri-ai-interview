@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import styles from "./dashboard.module.css";
@@ -165,6 +165,9 @@ export default function AdminDashboard() {
   const [matchModal, setMatchModal] = useState<{ open: boolean; candidateId: string; candidateName: string; role: string }>({ open: false, candidateId: "", candidateName: "", role: "" });
   const [matchData, setMatchData] = useState<SkillMatchData | null>(null);
   const [matchLoading, setMatchLoading] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; candidateId: string } | null>(null);
+  const [deletingCandidate, setDeletingCandidate] = useState(false);
+  const [deleteConfirmModal, setDeleteConfirmModal] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [editingGuideline, setEditingGuideline] = useState<string | null>(null);
   const [guidelineContent, setGuidelineContent] = useState("");
@@ -338,6 +341,30 @@ export default function AdminDashboard() {
   const [candidatesPage, setCandidatesPage] = useState(0);
   const [candidatesLimit, setCandidatesLimit] = useState(10);
 
+  const handleDeleteCandidate = async (candidateId: string) => {
+    setDeletingCandidate(true);
+    setDeleteConfirmModal(null);
+    setContextMenu(null);
+    try {
+      const res = await fetch(`/api/admin/candidates/${candidateId}`, {
+        method: "DELETE",
+        headers: {
+          "Authorization": `Bearer ${localStorage.getItem("adminToken")}`
+        }
+      });
+      if (!res.ok) {
+        throw new Error("Failed to delete candidate");
+      }
+      // Reload candidates
+      loadCandidates();
+    } catch (err) {
+      console.error(err);
+      alert("Error deleting candidate");
+    } finally {
+      setDeletingCandidate(false);
+    }
+  };
+
   const loadCandidates = async (resetPage = false) => {
     try {
       const currentPage = resetPage ? 0 : candidatesPage;
@@ -375,6 +402,12 @@ export default function AdminDashboard() {
       loadCandidates(false);
     }
   }, [candidatesPage]);
+
+  useEffect(() => {
+    const handleClick = () => setContextMenu(null);
+    document.addEventListener("click", handleClick);
+    return () => document.removeEventListener("click", handleClick);
+  }, []);
 
   // ── Resume helpers ──────────────────────────────────────────────────────────
 
@@ -1033,7 +1066,13 @@ export default function AdminDashboard() {
                     </thead>
                     <tbody>
                       {candidates.map((candidate) => (
-                        <tr key={candidate.id}>
+                        <tr 
+                          key={candidate.id}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            setContextMenu({ x: e.clientX, y: e.clientY, candidateId: candidate.id });
+                          }}
+                        >
                           <td>{candidate.fullName || "-"}</td>
                           <td>{candidate.email || "-"}</td>
                           <td>{candidate.phone || "-"}</td>
@@ -1787,6 +1826,110 @@ export default function AdminDashboard() {
           </div>
         )}
       </div>
+
+      {contextMenu && (
+        <div
+          style={{
+            position: 'fixed',
+            top: contextMenu.y,
+            left: contextMenu.x,
+            background: 'white',
+            border: '1px solid #ccc',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+            zIndex: 9999,
+            padding: '8px 0',
+            borderRadius: '4px',
+            minWidth: '150px'
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              width: '100%',
+              padding: '8px 16px',
+              textAlign: 'left',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: '#9c0606',
+              fontWeight: 'bold',
+              fontSize: '14px'
+            }}
+            onClick={() => {
+              setDeleteConfirmModal(contextMenu.candidateId);
+              setContextMenu(null);
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8d7da'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px' }}>
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              <line x1="10" y1="11" x2="10" y2="17"></line>
+              <line x1="14" y1="11" x2="14" y2="17"></line>
+            </svg>
+            Remove
+          </button>
+        </div>
+      )}
+
+      {deleteConfirmModal && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: 10000
+          }}
+          onClick={() => setDeleteConfirmModal(null)}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: "8px",
+              padding: "24px",
+              width: "100%",
+              maxWidth: "400px",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.15)"
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ marginTop: 0, marginBottom: '16px', color: '#800000', display: 'flex', alignItems: 'center' }}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px' }}>
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                <line x1="10" y1="11" x2="10" y2="17"></line>
+                <line x1="14" y1="11" x2="14" y2="17"></line>
+              </svg>
+              Confirm Removal
+            </h3>
+            <p style={{ margin: "0 0 24px 0", lineHeight: "1.5", color: "#333" }}>
+              Are you sure you want to completely remove this candidate? This will delete all their data including interviews and documents. This cannot be undone.
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <button 
+                onClick={() => setDeleteConfirmModal(null)} 
+                style={{ padding: '8px 16px', borderRadius: '4px', border: '1px solid #ccc', background: 'white', cursor: 'pointer' }}
+                disabled={deletingCandidate}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={() => deleteConfirmModal && handleDeleteCandidate(deleteConfirmModal)} 
+                style={{ padding: '8px 16px', borderRadius: '4px', border: 'none', background: '#800000', color: 'white', cursor: 'pointer', fontWeight: 'bold' }}
+                disabled={deletingCandidate}
+              >
+                {deletingCandidate ? 'Removing...' : 'Remove'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

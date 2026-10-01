@@ -1,4 +1,4 @@
-"""
+﻿"""
 Admin Candidates & Interviews API Endpoints — MongoDB.
 """
 import json
@@ -177,6 +177,16 @@ async def get_candidates(
     db = get_sync_db()
 
     query: Dict[str, Any] = {}
+
+    if status == "trash":
+
+        query["is_deleted"] = True
+
+    else:
+
+        query["is_deleted"] = {"$ne": True}
+
+
     if phase:
         query["current_phase"] = phase
     if phases:
@@ -1321,51 +1331,46 @@ async def bypass_candidate_course(candidate_id: str, _admin=Depends(require_admi
 @router.delete("/candidates/{candidate_id}")
 def delete_candidate(candidate_id: str, db=Depends(get_sync_db), admin=Depends(require_admin_auth)):
     try:
-        # Resolve candidate ID
         from app.utils.helpers import _get_id_variants
     except ImportError:
         def _get_id_variants(val):
-            try:
-                return [val, ObjectId(val)]
-            except:
-                return [val]
-
+            try: return [val, ObjectId(val)]
+            except: return [val]
     try:
         cand = db.candidates.find_one({"_id": {"$in": _get_id_variants(candidate_id)}})
         if not cand:
             raise HTTPException(status_code=404, detail="Candidate not found")
+        
+        db.candidates.update_one(
+            {"_id": cand["_id"]},
+            {"$set": {"is_deleted": True, "deleted_at": datetime.now(timezone.utc).isoformat()}}
+        )
+        return {"success": True, "message": "Candidate moved to trash"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
-        actual_candidate_id = str(cand["_id"])
-        user_id = str(cand.get("user_id")) if cand.get("user_id") else None
-
-        # Delete from candidates
-        db.candidates.delete_one({"_id": cand["_id"]})
-
-        # Delete from users and related sessions
-        if user_id:
-            db.users.delete_one({"_id": {"$in": _get_id_variants(user_id)}})
-            db.sessions.delete_many({"user_id": {"$in": _get_id_variants(user_id)}})
-
-        # Delete interview sessions
-        interview_sessions = list(db.interview_sessions.find({"candidate_id": {"$in": _get_id_variants(actual_candidate_id)}}))
-        session_ids = [str(s["_id"]) for s in interview_sessions]
-
-        db.interview_sessions.delete_many({"candidate_id": {"$in": _get_id_variants(actual_candidate_id)}})
-
-        if session_ids:
-            db.re_evaluation_requests.delete_many({"interview_id": {"$in": session_ids}})
-            db.anti_cheat_events.delete_many({"interview_id": {"$in": session_ids}})
-            # Also clean up state_snapshots if any are tracked by interview_id
-            db.state_snapshots.delete_many({"interview_id": {"$in": session_ids}})
-
-        # Also cleanup by candidate_id in case they directly reference it
-        db.anti_cheat_events.delete_many({"candidate_id": {"$in": _get_id_variants(actual_candidate_id)}})
-        db.queue_entries.delete_many({"candidate_id": {"$in": _get_id_variants(actual_candidate_id)}})
-        db.candidate_documents.delete_many({"candidate_id": {"$in": _get_id_variants(actual_candidate_id)}})
-        db.resumes.delete_many({"candidate_id": {"$in": _get_id_variants(actual_candidate_id)}})
-        db.signed_offer_letters.delete_many({"candidate_id": {"$in": _get_id_variants(actual_candidate_id)}})
-
-        return {"success": True, "message": "Candidate deleted successfully"}
+@router.post("/candidates/{candidate_id}/restore")
+def restore_candidate(candidate_id: str, db=Depends(get_sync_db), admin=Depends(require_admin_auth)):
+    try:
+        from app.utils.helpers import _get_id_variants
+    except ImportError:
+        def _get_id_variants(val):
+            try: return [val, ObjectId(val)]
+            except: return [val]
+    try:
+        cand = db.candidates.find_one({"_id": {"$in": _get_id_variants(candidate_id)}})
+        if not cand:
+            raise HTTPException(status_code=404, detail="Candidate not found")
+        
+        db.candidates.update_one(
+            {"_id": cand["_id"]},
+            {"$set": {"is_deleted": False}, "$unset": {"deleted_at": ""}}
+        )
+        return {"success": True, "message": "Candidate restored successfully"}
     except HTTPException:
         raise
     except Exception as e:

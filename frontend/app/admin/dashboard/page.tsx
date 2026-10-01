@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import styles from "./dashboard.module.css";
@@ -103,7 +103,7 @@ interface Guidelines {
 }
 
 // Tabs
-type Tab = "live" | "candidates" | "analytics" | "evaluations" | "course-completion" | "anti-cheat" | "settings" | "documents";
+type Tab = "live" | "candidates" | "analytics" | "evaluations" | "course-completion" | "anti-cheat" | "settings" | "documents" | "trash";
 type SettingsTab = "guidelines" | "criteria" | "interview-config" | "anti-cheat" | "offer-letter";
 
 // Chart colors
@@ -270,10 +270,10 @@ export default function AdminDashboard() {
           loadStats().catch(err => console.error("loadStats error:", err)),
           loadActiveInterviews().catch(err => console.error("loadActiveInterviews error:", err)),
         );
-      } else if (target === "candidates") {
+      } else if (target === "candidates" || target === "trash") {
         calls.push(
           loadStats().catch(err => console.error("loadStats error:", err)),
-          loadCandidates().catch(err => console.error("loadCandidates error:", err)),
+          loadCandidates(false, target).catch(err => console.error("loadCandidates error:", err)),
         );
       } else if (target === "analytics") {
         calls.push(
@@ -288,7 +288,7 @@ export default function AdminDashboard() {
       } else if (target === "course-completion") {
         calls.push(
           loadStats().catch(err => console.error("loadStats error:", err)),
-          loadCandidates().catch(err => console.error("loadCandidates error:", err)),
+          loadCandidates(false, target).catch(err => console.error("loadCandidates error:", err)),
         );
       } else if (target === "anti-cheat") {
         calls.push(
@@ -362,7 +362,26 @@ export default function AdminDashboard() {
     }
   };
 
-  const loadCandidates = async (resetPage = false) => {
+    const handleRestoreCandidate = async (candidateId: string) => {
+    setDeletingCandidate(true);
+    setContextMenu(null);
+    try {
+      const res = await withAuth(`/api/admin/candidates/${candidateId}/restore`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        throw new Error("Failed to restore candidate");
+      }
+      loadCandidates();
+    } catch (err) {
+      console.error(err);
+      alert("Error restoring candidate");
+    } finally {
+      setDeletingCandidate(false);
+    }
+  };
+
+  const loadCandidates = async (resetPage = false, targetTab = activeTab) => {
     try {
       const currentPage = resetPage ? 0 : candidatesPage;
       if (resetPage) setCandidatesPage(0);
@@ -373,6 +392,7 @@ export default function AdminDashboard() {
       if (stateFilter) params.append("state", stateFilter);
       if (districtFilter) params.append("district", districtFilter);
       if (interviewStatusFilter) params.append("interviewStatus", interviewStatusFilter);
+      if (targetTab === "trash") params.append("status", "trash");
       params.append("limit", candidatesLimit.toString());
       params.append("offset", (currentPage * candidatesLimit).toString());
 
@@ -389,13 +409,13 @@ export default function AdminDashboard() {
 
   // Reset page when filters change
   useEffect(() => {
-    if (activeTab === "candidates") {
+    if (activeTab === "candidates" || activeTab === "trash") {
       loadCandidates(true);
     }
   }, [phaseFilter, stateFilter, districtFilter, interviewStatusFilter, searchQuery, candidatesLimit]);
 
   useEffect(() => {
-    if (activeTab === "candidates") {
+    if (activeTab === "candidates" || activeTab === "trash") {
       loadCandidates(false);
     }
   }, [candidatesPage]);
@@ -565,7 +585,7 @@ export default function AdminDashboard() {
 
   // Load resumes when candidates tab is active
   useEffect(() => {
-    if (activeTab === "candidates" && candidates.length > 0) {
+    if ((activeTab === "candidates" || activeTab === "trash") && candidates.length > 0) {
       loadResumesForAllCandidates(candidates);
     }
   }, [activeTab, candidates]);
@@ -925,6 +945,7 @@ export default function AdminDashboard() {
         >
           📎 Documents
         </button>
+        <button className={`${styles.tab} ${activeTab === "trash" ? styles.activeTab : ""}`} onClick={() => setActiveTab("trash")}>??? Trash</button>
         <button
           className={`${styles.tab} ${activeTab === "settings" ? styles.activeTab : ""}`}
           onClick={() => setActiveTab("settings")}
@@ -945,7 +966,7 @@ export default function AdminDashboard() {
         )}
 
         {/* Candidates Tab */}
-        {activeTab === "candidates" && (
+        {(activeTab === "candidates" || activeTab === "trash") && (
           <div className={styles.candidatesContainer}>
             {/* Filters */}
             <div className={styles.filters}>
@@ -1840,35 +1861,43 @@ export default function AdminDashboard() {
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          <button
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              width: '100%',
-              padding: '8px 16px',
-              textAlign: 'left',
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              color: '#9c0606',
-              fontWeight: 'bold',
-              fontSize: '14px'
-            }}
-            onClick={() => {
-              setDeleteConfirmModal(contextMenu.candidateId);
-              setContextMenu(null);
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8d7da'}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px' }}>
-              <polyline points="3 6 5 6 21 6"></polyline>
-              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-              <line x1="10" y1="11" x2="10" y2="17"></line>
-              <line x1="14" y1="11" x2="14" y2="17"></line>
-            </svg>
-            Remove
-          </button>
+                    {activeTab === "trash" ? (
+            <button
+              style={{ display: 'flex', alignItems: 'center', width: '100%', padding: '8px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', color: '#006400', fontWeight: 'bold', fontSize: '14px' }}
+              onClick={() => {
+                handleRestoreCandidate(contextMenu.candidateId);
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#d4edda'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px' }}>
+                <polyline points="9 11 12 8 15 11"></polyline>
+                <line x1="12" y1="8" x2="12" y2="14"></line>
+                <path d="M22 12c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2a9.938 9.938 0 0 1 7.07 2.93L22 8"></path>
+                <line x1="16" y1="8" x2="22" y2="8"></line>
+                <line x1="22" y1="2" x2="22" y2="8"></line>
+              </svg>
+              Restore
+            </button>
+          ) : (
+            <button
+              style={{ display: 'flex', alignItems: 'center', width: '100%', padding: '8px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', color: '#9c0606', fontWeight: 'bold', fontSize: '14px' }}
+              onClick={() => {
+                setDeleteConfirmModal(contextMenu.candidateId);
+                setContextMenu(null);
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8d7da'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px' }}>
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                <line x1="10" y1="11" x2="10" y2="17"></line>
+                <line x1="14" y1="11" x2="14" y2="17"></line>
+              </svg>
+              Remove
+            </button>
+          )}
         </div>
       )}
 

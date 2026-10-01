@@ -99,6 +99,11 @@ from fastapi import Form
 
 @router.post("/validate-single")
 async def validate_single_document(file: UploadFile = File(...), field_name: str = Form(...)):
+    # Immediately block unsupported extensions like HEIC
+    allowed_exts = (".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png")
+    if not file.filename.lower().endswith(allowed_exts):
+        return {"success": False, "reason": "Invalid file format. Please upload PDF, DOCX, JPG, or PNG."}
+
     file_bytes = await file.read()
     mime_type = file.content_type if file.content_type else "image/jpeg"
     
@@ -120,28 +125,52 @@ async def validate_single_document(file: UploadFile = File(...), field_name: str
     # Convert to base64 for the OpenAI Vision payload
     base64_file = base64.b64encode(file_bytes).decode('utf-8')
     
-    # Define field-specific rules to act as few-shot guides
+    # Define extremely rigorous field-specific rules
     field_rules = {
-        "Aadhaar Card (Front side)": "Rule 1: Look for a PORTRAIT PHOTO of a face. Rule 2: Look for the person's Name. CRITICAL: If the image does NOT have a portrait photo of a face, it is the BACK side. You MUST reject it.",
-        "Aadhaar Card (Back side)": "Rule 1: Look for an ADDRESS block. Rule 2: Look for a Barcode/QR Code. CRITICAL: If the image HAS a portrait photo of a face, it is the FRONT side. You MUST reject it.",
-        "PAN Card (Front side)": "Rule 1: Look for 'INCOME TAX DEPARTMENT'. Rule 2: Look for a face photo and PAN number. CRITICAL: Do not accept Aadhaar cards or back sides without a photo.",
-        "10th Class Marksheet": "Rule 1: Look for 'Secondary School', 'Class X', or '10th'. CRITICAL: Reject if it says 'Class XII', '12th', or 'Senior Secondary'.",
-        "12th Class Marksheet": "Rule 1: Look for 'Senior Secondary', 'Class XII', or '12th'. CRITICAL: Reject if it says 'Class X' or '10th'.",
-        "Bank Proof": "Rule 1: Look for a Bank Logo, Account Number, and IFSC code. CRITICAL: Do NOT accept PAN or Aadhaar cards here."
+        "Aadhaar Card (Front side)": (
+            "Rule 1: MUST clearly contain the exact word 'Aadhaar' or the Government of India emblem.\n"
+            "Rule 2: MUST contain a clearly visible PORTRAIT PHOTO of a face.\n"
+            "Rule 3: MUST NOT have a large address block. If there is a full address block, it is the BACK side -> REJECT.\n"
+            "CRITICAL: If it is a blank template with no real photo or says '0000 0000 0000', REJECT."
+        ),
+        "Aadhaar Card (Back side)": (
+            "Rule 1: MUST contain an ADDRESS block.\n"
+            "Rule 2: MUST NOT contain a large portrait photo of a face. If there is a face photo, it is the FRONT side -> REJECT.\n"
+            "Rule 3: Should contain the word Aadhaar or a QR code."
+        ),
+        "PAN Card (Front side)": (
+            "Rule 1: MUST clearly say 'INCOME TAX DEPARTMENT'.\n"
+            "Rule 2: MUST contain a portrait photo and a 10-character alphanumeric PAN.\n"
+            "CRITICAL: Reject Aadhaar cards or anything without a photo."
+        ),
+        "10th Class Marksheet": (
+            "Rule 1: MUST contain words like 'Secondary School', 'Class X', '10th', or 'Matriculation'.\n"
+            "CRITICAL: If it says 'Class XII', '12th', or 'Senior Secondary', REJECT IT immediately."
+        ),
+        "12th Class Marksheet": (
+            "Rule 1: MUST contain words like 'Senior Secondary', 'Class XII', '12th', or 'Intermediate'.\n"
+            "CRITICAL: If it says 'Class X', '10th', or 'Matriculation', REJECT IT immediately."
+        ),
+        "Bank Proof": (
+            "Rule 1: MUST contain a Bank Logo/Name, Account Number, and IFSC code.\n"
+            "CRITICAL: Reject PAN cards, Aadhaar cards, or blank images."
+        )
     }
     
-    specific_rule = field_rules.get(field_name, f"Verify that the document clearly matches the category: {field_name}.")
+    specific_rule = field_rules.get(field_name, f"Verify that the document matches the category: {field_name}.")
     
     prompt_text = (
-        f"You are an expert document classification AI.\n"
+        f"You are a highly accurate, strict document classification AI.\n"
         f"The candidate uploaded this image for the '{field_name}' field.\n\n"
         f"Specific Rules for this field:\n{specific_rule}\n\n"
         f"General Rules:\n"
-        f"1. You MUST carefully distinguish between FRONT and BACK sides based on the presence of a face photo.\n"
-        f"2. Do NOT reject the document for being slightly blurry, low quality, or a sample/template.\n\n"
+        f"1. EMPTY OR ILLEGIBLE: If the image is completely blank, solid color, or so blurry that absolutely no text can be read, you MUST reject it.\n"
+        f"2. BLURRINESS ALLOWANCE: Do NOT reject if the document is only slightly blurry or low quality, as long as you can still verify the key text/features.\n"
+        f"3. BOILERPLATE/FAKE: If the document is clearly a blank template (missing real photo/details), reject it.\n"
+        f"4. WRONG SIDE: Pay strict attention to Front vs Back rules.\n\n"
         f"You MUST use Chain-of-Thought reasoning. Reply strictly with a JSON object exactly like this:\n"
         f"{{\n"
-        f"  \"step_by_step_analysis\": \"First, explicitly state if you see a portrait photo of a face. Then state if you see an address block. Finally, conclude if it matches the specific rules for {field_name}.\",\n"
+        f"  \"step_by_step_analysis\": \"1) Are there legible words? 2) Does it have a face photo? 3) Does it match the Specific Rules exactly?\",\n"
         f"  \"is_valid\": true or false,\n"
         f"  \"reason\": \"Short final conclusion.\"\n"
         f"}}"

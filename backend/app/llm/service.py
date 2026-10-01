@@ -334,26 +334,55 @@ Return your evaluation as valid JSON only, no other text. Ensure all fields are 
             "field_level_technical_issues",
         ]
 
-        try:
-            response = await self.chat_completion(
-                messages=messages,
-                system_prompt=system_prompt,
-                temperature=0.0,
-                max_tokens=4000
-            )
+        import json
+        import re
+        import logging
 
-            import json
-            import re
+        evaluation = None
+        last_error = None
 
+        for attempt in range(3):
             try:
-                evaluation = json.loads(response)
-            except json.JSONDecodeError:
-                json_match = re.search(r'\{[\s\S]*\}', response)
-                if json_match:
-                    evaluation = json.loads(json_match.group())
-                else:
-                    raise ValueError("Could not parse JSON from response")
+                response = await self.chat_completion(
+                    messages=messages,
+                    system_prompt=system_prompt,
+                    temperature=0.2 if attempt > 0 else 0.0,
+                    max_tokens=4000
+                )
 
+                try:
+                    evaluation = json.loads(response)
+                except json.JSONDecodeError:
+                    json_match = re.search(r'\{[\s\S]*\}', response)
+                    if json_match:
+                        try:
+                            evaluation = json.loads(json_match.group())
+                        except json.JSONDecodeError as je:
+                            raise ValueError(f"Extracted JSON still invalid (likely unescaped quotes): {je}")
+                    else:
+                        raise ValueError("Could not parse JSON from response")
+                
+                break
+            except Exception as e:
+                last_error = str(e)
+                logging.warning(f"Evaluation attempt {attempt+1} failed: {last_error}")
+                if attempt == 2:
+                    logging.error(f"Final evaluation failure. Raw response: {response if 'response' in locals() else 'None'}")
+
+        if not evaluation:
+            return {
+                "overall_score": 0,
+                "topic_scores": {
+                    t: {"score": 0, "details": "Evaluation could not be completed"}
+                    for t in required_topics
+                },
+                "summary": f"Evaluation could not be completed after 3 attempts. Error: {last_error}. Please contact support.",
+                "strengths": [],
+                "areas_for_improvement": [],
+                "recommendation": "Unable to evaluate - please retry or contact support."
+            }
+
+        try:
             evaluation["topic_scores"] = evaluation.get("topic_scores", {})
             for topic in required_topics:
                 if topic not in evaluation["topic_scores"]:
@@ -364,18 +393,15 @@ Return your evaluation as valid JSON only, no other text. Ensure all fields are 
             evaluation["overall_score"] = int((topic_sum / len(required_topics)) * 10)
 
             return evaluation
-
         except Exception as e:
+            logging.error(f"Error calculating score: {str(e)}")
             return {
                 "overall_score": 0,
-                "topic_scores": {
-                    t: {"score": 0, "details": "Evaluation could not be completed"}
-                    for t in required_topics
-                },
-                "summary": "Evaluation could not be completed. Please contact support.",
+                "topic_scores": {t: {"score": 0, "details": "Error"} for t in required_topics},
+                "summary": "Error calculating final score.",
                 "strengths": [],
                 "areas_for_improvement": [],
-                "recommendation": "Unable to evaluate - please retry or contact support."
+                "recommendation": "Unable to evaluate."
             }
 
 

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect } from "react";
 import styles from "./dashboard.module.css";
@@ -346,11 +346,8 @@ export default function AdminDashboard() {
     setDeleteConfirmModal(null);
     setContextMenu(null);
     try {
-      const res = await fetch(`/api/admin/candidates/${candidateId}`, {
+      const res = await withAuth(`/api/admin/candidates/${candidateId}`, {
         method: "DELETE",
-        headers: {
-          "Authorization": `Bearer ${localStorage.getItem("adminToken")}`
-        }
       });
       if (!res.ok) {
         throw new Error("Failed to delete candidate");

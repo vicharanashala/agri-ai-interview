@@ -945,7 +945,7 @@ export default function AdminDashboard() {
         >
           📎 Documents
         </button>
-        <button className={`${styles.tab} ${activeTab === "trash" ? styles.activeTab : ""}`} onClick={() => setActiveTab("trash")}>??? Trash</button>
+        <button className={`${styles.tab} ${activeTab === "trash" ? styles.activeTab : ""}`} onClick={() => setActiveTab("trash")}>🗑️ Trash</button>
         <button
           className={`${styles.tab} ${activeTab === "settings" ? styles.activeTab : ""}`}
           onClick={() => setActiveTab("settings")}

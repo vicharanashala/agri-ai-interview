@@ -346,8 +346,12 @@ class InterviewWorkflow:
         if not question_text or not self._is_valid_question(question_text):
             question_text = self._fallback_question(state)
 
-        # Infer topic from question text
-        topic = self._infer_topic(question_text)
+        if remaining_topics:
+            topic = remaining_topics[0]
+        else:
+            # Infer topic from question text
+            topic = self._infer_topic(question_text)
+            
         return {"question": question_text, "topic": topic}
 
     FALLBACK_QUESTIONS = [

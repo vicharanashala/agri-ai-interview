@@ -125,56 +125,159 @@ async def validate_single_document(file: UploadFile = File(...), field_name: str
     # Convert to base64 for the OpenAI Vision payload
     base64_file = base64.b64encode(file_bytes).decode('utf-8')
     
-    # Define extremely rigorous field-specific rules
     field_rules = {
         "Aadhaar Card (Front side)": (
             "Rule 1: MUST clearly contain the exact word 'Aadhaar' or the Government of India emblem.\n"
             "Rule 2: MUST contain a clearly visible PORTRAIT PHOTO of a face.\n"
             "Rule 3: MUST NOT have a large address block. If there is a full address block, it is the BACK side -> REJECT.\n"
-            "CRITICAL: If it is a blank template with no real photo or says '0000 0000 0000', REJECT."
+            "Rule 4: CRITICAL: If it is a blank template with no real photo or contains '0000 0000 0000', REJECT."
         ),
+
         "Aadhaar Card (Back side)": (
             "Rule 1: MUST contain an ADDRESS block.\n"
             "Rule 2: MUST NOT contain a large portrait photo of a face. If there is a face photo, it is the FRONT side -> REJECT.\n"
-            "Rule 3: Should contain the word Aadhaar or a QR code."
+            "Rule 3: Should contain the word 'Aadhaar' or a QR code."
         ),
+
         "PAN Card (Front side)": (
             "Rule 1: MUST clearly say 'INCOME TAX DEPARTMENT'.\n"
-            "Rule 2: MUST contain a portrait photo and a 10-character alphanumeric PAN.\n"
-            "CRITICAL: Reject Aadhaar cards or anything without a photo."
+            "Rule 2: MUST contain a portrait photo of a face.\n"
+            "Rule 3: MUST contain a 10-character alphanumeric PAN number.\n"
+            "Rule 4: CRITICAL: Reject Aadhaar cards or anything without a photo."
         ),
+
         "10th Class Marksheet": (
             "Rule 1: MUST contain words like 'Secondary School', 'Class X', '10th', or 'Matriculation'.\n"
-            "CRITICAL: If it says 'Class XII', '12th', or 'Senior Secondary', REJECT IT immediately."
+            "Rule 2: CRITICAL: If it clearly says 'Class XII', '12th', or 'Senior Secondary', REJECT IT immediately."
         ),
+
         "12th Class Marksheet": (
             "Rule 1: MUST contain words like 'Senior Secondary', 'Class XII', '12th', or 'Intermediate'.\n"
-            "CRITICAL: If it says 'Class X', '10th', or 'Matriculation', REJECT IT immediately."
+            "Rule 2: CRITICAL: If it clearly says 'Class X', '10th', or 'Matriculation', REJECT IT immediately."
         ),
+
         "Bank Proof": (
             "Rule 1: MUST contain a Bank Logo/Name, Account Number, and IFSC code.\n"
-            "CRITICAL: Reject PAN cards, Aadhaar cards, or blank images."
+            "Rule 2: CRITICAL: Reject PAN cards, Aadhaar cards, or blank images."
         )
     }
-    
-    specific_rule = field_rules.get(field_name, f"Verify that the document matches the category: {field_name}.")
-    
-    prompt_text = (
-        f"You are a highly accurate, strict document classification AI.\n"
-        f"The candidate uploaded this image for the '{field_name}' field.\n\n"
-        f"Specific Rules for this field:\n{specific_rule}\n\n"
-        f"General Rules:\n"
-        f"1. EMPTY OR ILLEGIBLE: If the image is completely blank, solid color, or so blurry that absolutely no text can be read, you MUST reject it.\n"
-        f"2. BLURRINESS ALLOWANCE: Do NOT reject if the document is only slightly blurry or low quality, as long as you can still verify the key text/features.\n"
-        f"3. BOILERPLATE/FAKE: If the document is clearly a blank template (missing real photo/details), reject it.\n"
-        f"4. WRONG SIDE: Pay strict attention to Front vs Back rules.\n\n"
-        f"You MUST use Chain-of-Thought reasoning. Reply strictly with a JSON object exactly like this:\n"
-        f"{{\n"
-        f"  \"step_by_step_analysis\": \"1) Are there legible words? 2) Does it have a face photo? 3) Does it match the Specific Rules exactly?\",\n"
-        f"  \"is_valid\": true or false,\n"
-        f"  \"reason\": \"Short final conclusion.\"\n"
-        f"}}"
+
+    specific_rule = field_rules.get(
+        field_name,
+        f"Verify that the document matches the category: {field_name}."
     )
+
+    prompt_text = f"""
+You are a strict document verification AI.
+
+The candidate uploaded an image for the following document field:
+
+DOCUMENT TYPE: "{field_name}"
+
+Your task is to determine whether the uploaded image satisfies the requirements for this
+specific document type.
+
+IMPORTANT:
+Do NOT make the final decision based only on general visual similarity.
+First inspect the image and explicitly determine the presence or absence of every
+important visual/textual feature required by the rules.
+
+SPECIFIC RULES:
+{specific_rule}
+
+GENERAL RULES:
+
+1. EMPTY OR ILLEGIBLE
+- If the image is completely blank, solid color, or so blurry that the required
+  document cannot be verified, mark it invalid.
+- Do NOT reject merely because the image is slightly blurry or low quality.
+- If important evidence is still visible, continue verification.
+
+2. DOCUMENT PRESENCE
+- Determine whether an actual document is present.
+- Reject blank images, unrelated images, screenshots of unrelated content,
+  or obvious non-document images.
+
+3. WRONG DOCUMENT / WRONG SIDE
+- Carefully check whether the image belongs to the requested document type.
+- For Aadhaar, distinguish FRONT from BACK using the presence of a portrait photo
+  and address block.
+- For 10th and 12th marksheets, carefully distinguish Class X from Class XII.
+- Do not assume the requested document is correct merely because some matching
+  words are present.
+
+4. TEMPLATE / FAKE / PLACEHOLDER
+- Reject obvious blank templates or placeholder documents.
+- Reject documents containing placeholder values such as "0000 0000 0000"
+  where applicable.
+- A real document should contain actual identifying/document information.
+
+5. TEXT VERIFICATION
+- Look carefully for the required words, numbers, labels, and document features.
+- If text is unclear, do not invent or guess what it says.
+- If you cannot verify a required feature from the image, mark that feature as false
+  or uncertain.
+
+6. VISUAL FEATURES
+- Check for portrait photos, address blocks, QR codes, logos, document headings,
+  tables, and other relevant visual features.
+- Do not assume that a visually similar document satisfies the requirements.
+
+7. EVIDENCE-BASED DECISION
+- Your final decision MUST be based on the individual checks below.
+- Do not use hidden reasoning or chain-of-thought.
+- Return only the requested JSON object.
+
+Before deciding, perform these checks internally:
+
+A. Is an actual document visible?
+B. Is the image sufficiently clear to verify the required features?
+C. What relevant text is actually visible?
+D. What relevant visual features are actually visible?
+E. Which specific rules are satisfied?
+F. Which specific rules are violated?
+G. Is there evidence that this is the wrong document or wrong side?
+H. Is there evidence that this is a blank/template/placeholder document?
+
+OUTPUT FORMAT:
+
+Return ONLY valid JSON.
+
+{{
+  "is_valid": true,
+  "checks": {{
+    "document_present": true,
+    "image_verifiable": true,
+    "required_text_present": true,
+    "portrait_photo_present": false,
+    "address_block_present": false,
+    "qr_code_present": false,
+    "logo_or_emblem_present": true,
+    "wrong_document_or_side": false,
+    "blank_or_template": false,
+    "placeholder_values": false
+  }},
+  "detected_text": [
+    "Aadhaar",
+    "Government of India"
+  ],
+  "failed_rules": [],
+  "reason": "Short explanation based only on visible evidence."
+}}
+
+IMPORTANT OUTPUT RULES:
+
+- Set a check to true ONLY when the corresponding feature is visibly present.
+- Set a check to false when the feature is visibly absent.
+- Do NOT invent text, numbers, photos, logos, QR codes, or other features.
+- If something cannot be verified because of image quality, treat it as not verified
+  rather than guessing.
+- "detected_text" must contain only text that is actually visible in the image.
+- "failed_rules" must list the specific rules that are violated.
+- "reason" must be short and factual.
+- Do NOT provide chain-of-thought or hidden reasoning.
+- Return ONLY the JSON object.
+"""
     
     # Standard OpenAI/vLLM Vision Payload
     vm_payload = {

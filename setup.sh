@@ -114,8 +114,7 @@ DATABASE_URL=sqlite:///./annam_interviews.db
 REDIS_URL=redis://localhost:6379
 OPENAI_API_KEY=your_openai_api_key_here
 SECRET_KEY=change-this-to-a-random-secret-key
-ADMIN_EMAIL=admin@annam.com
-ADMIN_PASSWORD=admin123
+
 EOF
     warn "Created backend/.env — please add your OPENAI_API_KEY"
   fi

@@ -91,7 +91,7 @@ export default function AdminLoginPage() {
               id="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="admin@annam.com"
+              placeholder="admin@example.com"
               required
               className={styles.input}
             />
@@ -121,7 +121,7 @@ export default function AdminLoginPage() {
 
         <div className={styles.footer}>
           <p className={styles.demoNote}>
-            Demo credentials: admin@annam.com / admin123
+            Contact system administrator if you lost your credentials.
           </p>
         </div>
       </div>

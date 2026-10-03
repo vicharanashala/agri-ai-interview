@@ -38,8 +38,7 @@ Requires: **Python 3.11+** and **Node 20+**
 
 - **Candidate portal**: http://localhost:3000 → Sign up
 - **Admin dashboard**: http://localhost:3000/admin/login
-  - Email: `admin@annam.com`
-  - Password: `admin123`
+
 
 > ⚠️ Never commit `.env.prod` — it is gitignored. Use `.env.prod.example` as a template.
 
@@ -117,8 +116,7 @@ gcloud secrets create OPENAI_API_KEY --data-file=- <<< "sk-..."
 | `OPENAI_API_KEY` | OpenAI API key | `sk-...` |
 | `DATABASE_URL` | PostgreSQL connection string | `postgresql://user:password@postgres:5432/ai_interview` |
 | `SECRET_KEY` | FastAPI auth signing key | 64-char random string |
-| `ADMIN_EMAIL` | Admin login email | `admin@annam.com` |
-| `ADMIN_PASSWORD` | Admin login password | `change-this` |
+
 | `NEXTAUTH_URL` | Frontend URL | `http://localhost:3000` |
 | `NEXTAUTH_SECRET` | NextAuth signing secret | 32-char random string |
 

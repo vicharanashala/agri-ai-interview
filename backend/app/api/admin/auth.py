@@ -10,14 +10,20 @@ import bcrypt
 import secrets
 from datetime import datetime, timezone
 
-_ADMINS = {
-    "admin@annam.com": {
-        "id": "admin_001",
-        "email": "admin@annam.com",
-        "password_hash": "$2b$12$4EaNEEoTHM0JX/Qu0y8c1uamVc3Kpt7MOMtAUI6EEqPxqViRdM9Xq",
-        "name": "Admin User",
+def get_admin_credentials(email: str) -> Optional[dict]:
+    from app.db.mongodb import get_sync_db
+    db = get_sync_db()
+    admin_doc = db.admins.find_one({"email": email})
+    
+    if not admin_doc:
+        return None
+        
+    return {
+        "id": str(admin_doc.get("_id")),
+        "email": admin_doc["email"],
+        "password_hash": admin_doc.get("password_hash"),
+        "name": admin_doc.get("name", "Admin User"),
     }
-}
 
 _ADMIN_SESSION_PREFIX = "admin_session:"
 _ADMIN_SESSION_TTL = 60 * 60 * 24 * 7  # 7 days
@@ -94,7 +100,7 @@ class AdminLoginResponse(BaseModel):
 
 @router.post("/login", response_model=AdminLoginResponse)
 async def admin_login(request: AdminLoginRequest, response: Response):
-    admin = _ADMINS.get(request.email)
+    admin = get_admin_credentials(request.email)
     if not admin:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 

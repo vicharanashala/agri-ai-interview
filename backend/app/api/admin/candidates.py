@@ -46,6 +46,7 @@ class CandidateResponse(BaseModel):
     foundationCourseCompleted: bool = False
     foundationCourseStatus: Optional[str] = "not_started"
     interviewStatus: Optional[str] = "not_attended"
+    isSelected: bool = False
     consentAccepted: Optional[bool] = False
     consentWithdrawn: Optional[bool] = False
     consentStatus: Optional[str] = "pending"
@@ -154,6 +155,7 @@ def _candidate_to_response(cand: dict, user_email: Optional[str]) -> CandidateRe
         consentAccepted=consent_accepted,
         consentWithdrawn=consent_withdrawn,
         consentStatus=consent_status,
+            isSelected=cand.get("is_selected", False),
         consentTimestamp=_format_iso(cand.get("consent_timestamp")),
         consentWithdrawnAt=_format_iso(cand.get("consent_withdrawn_at")),
     )
@@ -325,6 +327,7 @@ async def get_candidates(
             consentAccepted=consent_accepted,
             consentWithdrawn=consent_withdrawn,
             consentStatus=consent_status,
+            isSelected=cand.get("is_selected", False),
             consentTimestamp=_format_iso(cand.get("consent_timestamp")),
             consentWithdrawnAt=_format_iso(cand.get("consent_withdrawn_at")),
         )
@@ -685,6 +688,10 @@ async def get_overview_stats(state: str = Query(None), district: str = Query(Non
     fail_query["result"] = "FAIL"
     total_fail = db.interview_sessions.count_documents(fail_query)
 
+    selected_query = cand_query.copy()
+    selected_query["is_selected"] = True
+    total_selected = db.candidates.count_documents(selected_query)
+
     return {
         "totalCandidates": total,
         "byPhase": by_phase,
@@ -692,6 +699,7 @@ async def get_overview_stats(state: str = Query(None), district: str = Query(Non
         "totalCompleted": total_completed,
         "totalPass": total_pass,
         "totalFail": total_fail,
+        "totalSelected": total_selected,
     }
 
 
@@ -1377,3 +1385,214 @@ def restore_candidate(candidate_id: str, db=Depends(get_sync_db), admin=Depends(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/candidates/{candidate_id}/mark-selected")
+def mark_candidate_selected(candidate_id: str, db=Depends(get_sync_db), admin=Depends(require_admin_auth)):
+    try:
+        from app.utils.helpers import _get_id_variants
+    except ImportError:
+        def _get_id_variants(val):
+            try: return [val, ObjectId(val)]
+            except: return [val]
+    try:
+        cand = db.candidates.find_one({"_id": {"$in": _get_id_variants(candidate_id)}})
+        if not cand:
+            raise HTTPException(status_code=404, detail="Candidate not found")
+        
+        current_status = cand.get("is_selected", False)
+        new_status = not current_status
+        
+        db.candidates.update_one(
+            {"_id": cand["_id"]},
+            {"$set": {"is_selected": new_status}}
+        )
+        return {"success": True, "message": "Candidate selected status updated", "is_selected": new_status}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/stats/kpi-details")
+def get_kpi_details(kpi: str = Query(...), state: str = Query(None), district: str = Query(None), db=Depends(get_sync_db), admin=Depends(require_admin_auth)):
+    cand_query = {"is_deleted": {"$ne": True}}
+    if state and state != "All": cand_query["state"] = state
+    if district and district != "All": cand_query["district"] = district
+
+    sessions = []
+    if kpi == "totalCandidates":
+        pass # cand_query is already correct
+    elif kpi == "totalSelected":
+        cand_query["is_selected"] = True
+    elif kpi in ["activeInterviews", "totalCompleted", "totalPass", "totalFail"]:
+        # We need to find candidate IDs from interview_sessions
+        sess_query = {}
+        if kpi == "activeInterviews":
+            sess_query["status"] = {"$in": ["active", "interviewing", "paused"]}
+        elif kpi == "totalCompleted":
+            sess_query["status"] = "completed"
+            sess_query["result"] = {"$in": ["PASS", "FAIL"]}
+        elif kpi == "totalPass":
+            sess_query["status"] = "completed"
+            sess_query["result"] = "PASS"
+        elif kpi == "totalFail":
+            sess_query["status"] = "completed"
+            sess_query["result"] = "FAIL"
+            
+        sessions = list(db.interview_sessions.find(sess_query, {"candidate_id": 1, "started_at": 1, "result": 1, "total_score": 1}))
+        from app.utils.helpers import _get_id_variants
+        cand_ids = []
+        for s in sessions:
+            if s.get("candidate_id"):
+                cand_ids.extend(_get_id_variants(s["candidate_id"]))
+                
+        if cand_query:
+            cand_query["_id"] = {"$in": cand_ids}
+        else:
+            cand_query = {"_id": {"$in": cand_ids}, "is_deleted": {"$ne": True}}
+    else:
+        raise HTTPException(400, "Unknown KPI")
+
+    candidates = list(db.candidates.find(cand_query).sort("created_at", -1))
+    
+    user_ids = [c["user_id"] for c in candidates if c.get("user_id")]
+    user_map = {str(u["_id"]): u.get("email") for u in db.users.find({"_id": {"$in": user_ids}})}
+    
+    sessions_by_cand = {}
+    from app.utils.helpers import _get_id_variants
+    
+    # Only fetch all sessions if we are on a KPI that requires them
+    if kpi in ["activeInterviews", "totalCompleted", "totalPass", "totalFail"]:
+        c_vars = []
+        for c in candidates:
+            c_vars.extend(_get_id_variants(c["_id"]))
+        all_sess = list(db.interview_sessions.find({"candidate_id": {"$in": c_vars}}))
+        for sess in all_sess:
+            cid = str(sess["candidate_id"])
+            if cid not in sessions_by_cand:
+                sessions_by_cand[cid] = []
+            sessions_by_cand[cid].append(sess)
+
+    results = []
+    for c in candidates:
+        cid = str(c["_id"])
+        user_email = user_map.get(str(c.get("user_id")))
+        
+        c_variants = [str(v) for v in _get_id_variants(c["_id"])]
+        cand_sessions = []
+        for cv in c_variants:
+            cand_sessions.extend(sessions_by_cand.get(cv, []))
+            
+        cand_sessions.sort(key=lambda x: x.get("started_at") or "")
+        
+        attempt_details = []
+        for sess in cand_sessions:
+            attempt_details.append({
+                "date": sess.get("started_at"),
+                "result": sess.get("result", "PENDING"),
+                "score": sess.get("total_score", 0)
+            })
+
+        results.append({
+            "id": cid,
+            "fullName": c.get("full_name") or c.get("name") or user_email or "",
+            "email": c.get("email") or user_email or "",
+            "phone": c.get("phone") or "",
+            "state": c.get("state") or "",
+            "district": c.get("district") or "",
+            "current_phase": c.get("current_phase") or "onboarding",
+            "is_selected": c.get("is_selected", False),
+            "created_at": c.get("created_at"),
+            "documents_submitted_at": c.get("consent_timestamp") or c.get("updated_at"),
+            "attempts": attempt_details,
+            "total_attempts": len(cand_sessions)
+        })
+        
+    return {"candidates": results}
+
+@router.get("/stats/report")
+def get_candidate_report(
+    start_date: str = Query(None),
+    end_date: str = Query(None),
+    status_filter: str = Query(None),
+    db=Depends(get_sync_db),
+    admin=Depends(require_admin_auth)
+):
+    query = {"is_deleted": {"$ne": True}}
+    
+    if start_date or end_date:
+        date_query = {}
+        if start_date:
+            date_query["$gte"] = start_date
+        if end_date:
+            date_query["$lte"] = end_date + "T23:59:59.999Z"
+        query["created_at"] = date_query
+        
+    if status_filter == "onboarded":
+        query["is_selected"] = True
+    elif status_filter == "interviewing" or status_filter == "attended_interview":
+        pass # We will filter this based on actual sessions later
+    elif status_filter == "docs_not_selected":
+        query["documents_submitted"] = True
+        query["is_selected"] = {"$ne": True}
+        
+    candidates = list(db.candidates.find(query).sort("created_at", -1))
+    
+    # Pre-fetch user emails if needed
+    user_ids = [c["user_id"] for c in candidates if c.get("user_id")]
+    user_map = {str(u["_id"]): u.get("email") for u in db.users.find({"_id": {"$in": user_ids}})}
+    
+    # Pre-fetch all sessions for these candidates to build attempt details
+    from app.utils.helpers import _get_id_variants
+    cand_id_variants = []
+    for c in candidates:
+        cand_id_variants.extend(_get_id_variants(c["_id"]))
+        
+    sessions = list(db.interview_sessions.find({"candidate_id": {"$in": cand_id_variants}}).sort("started_at", 1))
+    sessions_by_cand = {}
+    for sess in sessions:
+        cid = str(sess["candidate_id"])
+        if cid not in sessions_by_cand:
+            sessions_by_cand[cid] = []
+        sessions_by_cand[cid].append(sess)
+        
+    results = []
+    for c in candidates:
+        cid = str(c["_id"])
+        c_variants = [str(v) for v in _get_id_variants(c["_id"])]
+        
+        cand_sessions = []
+        for cv in c_variants:
+            cand_sessions.extend(sessions_by_cand.get(cv, []))
+            
+        cand_sessions.sort(key=lambda x: x.get("started_at") or "")
+        
+        # If filtering by attended_interview, skip candidates with no sessions
+        if status_filter in ["interviewing", "attended_interview"] and not cand_sessions:
+            continue
+            
+        attempt_details = []
+        for sess in cand_sessions:
+            attempt_details.append({
+                "date": sess.get("started_at"),
+                "result": sess.get("result", "PENDING"),
+                "score": sess.get("total_score", 0)
+            })
+            
+        user_email = user_map.get(str(c.get("user_id")))
+        results.append({
+            "id": cid,
+            "fullName": c.get("full_name") or c.get("name") or user_email or "",
+            "email": c.get("email") or user_email or "",
+            "phone": c.get("phone") or "",
+            "current_phase": c.get("current_phase") or "onboarding",
+            "is_selected": c.get("is_selected", False),
+            "created_at": c.get("created_at"),
+            "documents_submitted_at": c.get("consent_timestamp") or c.get("updated_at"), # best approximation
+            "attempts": attempt_details,
+            "total_attempts": len(cand_sessions)
+        })
+        
+    return {"report": results}

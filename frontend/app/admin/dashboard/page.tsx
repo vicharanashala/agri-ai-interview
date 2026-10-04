@@ -14,6 +14,7 @@ import AnalyticsTab from "../../../components/admin/AnalyticsTab";
 
 // Types
 interface Candidate {
+  isSelected?: boolean;
   id: string;
   fullName: string;
   email?: string;
@@ -362,7 +363,23 @@ export default function AdminDashboard() {
     }
   };
 
-    const handleRestoreCandidate = async (candidateId: string) => {
+      const handleToggleSelectedCandidate = async (candidateId: string) => {
+    setContextMenu(null);
+    try {
+      const res = await withAuth(`/api/admin/candidates/${candidateId}/mark-selected`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        throw new Error("Failed to update candidate status");
+      }
+      loadCandidates();
+    } catch (err) {
+      console.error(err);
+      alert("Error updating candidate status");
+    }
+  };
+
+  const handleRestoreCandidate = async (candidateId: string) => {
     setDeletingCandidate(true);
     setContextMenu(null);
     try {
@@ -1801,7 +1818,7 @@ export default function AdminDashboard() {
                     <span style={{ fontSize: '0.875rem', color: '#666' }}>seconds</span>
                   </div>
                   <p className={styles.interviewConfigHint}>
-                    After {idleThresholdInput}s of no activity during interview → 1st warning. Same trigger again → interview closed. Default: 15s.
+                    After {idleThresholdInput}s of no activity during interview ? 1st warning. Same trigger again ? interview closed. Default: 15s.
                   </p>
                 </div>
                 <div className={styles.interviewConfigCard} style={{ marginTop: '1rem' }}>
@@ -1861,12 +1878,10 @@ export default function AdminDashboard() {
           }}
           onClick={(e) => e.stopPropagation()}
         >
-                    {activeTab === "trash" ? (
+                                {activeTab === "trash" ? (
             <button
               style={{ display: 'flex', alignItems: 'center', width: '100%', padding: '8px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', color: '#006400', fontWeight: 'bold', fontSize: '14px' }}
-              onClick={() => {
-                handleRestoreCandidate(contextMenu.candidateId);
-              }}
+              onClick={() => handleRestoreCandidate(contextMenu.candidateId)}
               onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#d4edda'}
               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
             >
@@ -1879,7 +1894,9 @@ export default function AdminDashboard() {
               </svg>
               Restore
             </button>
-          ) : (
+                          ) : (
+                <>
+                  
             <button
               style={{ display: 'flex', alignItems: 'center', width: '100%', padding: '8px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', color: '#9c0606', fontWeight: 'bold', fontSize: '14px' }}
               onClick={() => {
@@ -1897,7 +1914,8 @@ export default function AdminDashboard() {
               </svg>
               Remove
             </button>
-          )}
+              </>
+            )}
         </div>
       )}
 

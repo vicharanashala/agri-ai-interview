@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 import styles from './EvaluationsTab.module.css';
@@ -15,6 +15,7 @@ interface CandidateRow {
   consentStatus?: string;
   consentTimestamp?: string | null;
   consentWithdrawnAt?: string | null;
+  isSelected?: boolean;
 }
 
 interface Props {
@@ -41,6 +42,21 @@ export default function DocumentsTab({ adminToken }: Props) {
     const adminApiBase = process.env.NEXT_PUBLIC_ADMIN_API_URL || '';
     return fetch(`${adminApiBase}${url}`, { ...opts, headers, credentials: 'include' });
   }, [adminToken]);
+
+  const handleToggleSelected = async (candidateId: string) => {
+    try {
+      const res = await withAuth(`/api/admin/candidates/${candidateId}/mark-selected`, {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error("Failed to update candidate status");
+      
+      // Update local state directly for instant feedback
+      setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, isSelected: !c.isSelected } : c));
+    } catch (err) {
+      console.error(err);
+      alert("Error updating candidate status");
+    }
+  };
 
   const downloadZip = useCallback(async (id: string, name: string | null) => {
     setDownloading(id);
@@ -121,6 +137,7 @@ export default function DocumentsTab({ adminToken }: Props) {
                 <th style={{ padding: '8px 12px', textAlign: 'left', color: '#6b7280', fontWeight: 500, fontSize: 12 }}>Documents</th>
                 <th style={{ padding: '8px 12px', textAlign: 'left', color: '#6b7280', fontWeight: 500, fontSize: 12 }}>Data Access Consent</th>
                 <th style={{ padding: '8px 12px', textAlign: 'left', color: '#6b7280', fontWeight: 500, fontSize: 12 }}>Download</th>
+                <th style={{ padding: '8px 12px', textAlign: 'left', color: '#6b7280', fontWeight: 500, fontSize: 12 }}>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -130,6 +147,7 @@ export default function DocumentsTab({ adminToken }: Props) {
                   <td style={{ padding: '12px' }}><div className={styles.skeletonBox} style={{ width: '150px', height: '16px' }} /></td>
                   <td style={{ padding: '12px' }}><div className={styles.skeletonBox} style={{ width: '80px', height: '24px', borderRadius: '12px' }} /></td>
                   <td style={{ padding: '12px' }}><div className={styles.skeletonBox} style={{ width: '100px', height: '16px' }} /></td>
+                    <td style={{ padding: '12px' }}><div className={styles.skeletonBox} style={{ width: '100px', height: '32px', borderRadius: '4px' }} /></td>
                   <td style={{ padding: '12px' }}><div className={styles.skeletonBox} style={{ width: '90px', height: '20px' }} /></td>
                 </tr>
               ))}
@@ -147,6 +165,7 @@ export default function DocumentsTab({ adminToken }: Props) {
               <th style={{ padding: '8px 12px', textAlign: 'left', color: '#6b7280', fontWeight: 500, fontSize: 12 }}>Documents</th>
               <th style={{ padding: '8px 12px', textAlign: 'left', color: '#6b7280', fontWeight: 500, fontSize: 12 }}>Data Access Consent</th>
               <th style={{ padding: '8px 12px', textAlign: 'left', color: '#6b7280', fontWeight: 500, fontSize: 12 }}>Download</th>
+                <th style={{ padding: '8px 12px', textAlign: 'left', color: '#6b7280', fontWeight: 500, fontSize: 12 }}>Action</th>
             </tr>
           </thead>
           <tbody>

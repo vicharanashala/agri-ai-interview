@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect, useMemo } from "react";
 import {
@@ -27,7 +27,86 @@ export default function AnalyticsTab({
   const [kpiStats, setKpiStats] = useState<any>(null);
   const [phaseStats, setPhaseStats] = useState<any>(null);
   const [geoStats, setGeoStats] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(true);
+
+  const [kpiModalOpen, setKpiModalOpen] = useState(false);
+  const [kpiModalType, setKpiModalType] = useState("");
+  const [kpiModalTitle, setKpiModalTitle] = useState("");
+  const [kpiModalData, setKpiModalData] = useState<any[]>([]);
+  const [kpiModalLoading, setKpiModalLoading] = useState(false);
+  const [kpiModalState, setKpiModalState] = useState("All");
+  const [kpiModalDistrict, setKpiModalDistrict] = useState("All");
+
+  const [reportExpanded, setReportExpanded] = useState(false);
+  const [reportStartDate, setReportStartDate] = useState("");
+  const [reportEndDate, setReportEndDate] = useState("");
+  const [reportStatus, setReportStatus] = useState("all");
+  const [reportData, setReportData] = useState<any[]>([]);
+  const [reportLoading, setReportLoading] = useState(false);
+
+  const fetchKpiModalData = async (type: string, st: string, dist: string) => {
+    setKpiModalLoading(true);
+    try {
+      const token = getAdminToken();
+      const headers: Record<string, string> = token ? { "X-Admin-Token": token } : {};
+      const query = new URLSearchParams({ kpi: type });
+      if (st !== "All") query.append("state", st);
+      if (dist !== "All") query.append("district", dist);
+      
+      const res = await fetch(`${adminApiBase}/api/admin/stats/kpi-details?` + query.toString(), { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setKpiModalData(data.candidates || []);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setKpiModalLoading(false);
+    }
+  };
+
+  const openKpiModal = (type: string, title: string) => {
+    setKpiModalType(type);
+    setKpiModalTitle(title);
+    setKpiModalOpen(true);
+    setKpiModalState("All");
+    setKpiModalDistrict("All");
+    fetchKpiModalData(type, "All", "All");
+  };
+
+  const fetchDetailedReport = async () => {
+    setReportLoading(true);
+    try {
+      const token = getAdminToken();
+      const headers: Record<string, string> = token ? { "X-Admin-Token": token } : {};
+      const query = new URLSearchParams();
+      if (reportStartDate) query.append("start_date", reportStartDate);
+      if (reportEndDate) query.append("end_date", reportEndDate);
+      if (reportStatus && reportStatus !== "all") query.append("status_filter", reportStatus);
+      
+      const res = await fetch(`${adminApiBase}/api/admin/stats/report?` + query.toString(), { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setReportData(data.report || []);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (reportExpanded) {
+      fetchDetailedReport();
+    }
+  }, [reportExpanded, reportStartDate, reportEndDate, reportStatus]);
+
+  useEffect(() => {
+    if (kpiModalOpen) {
+      fetchKpiModalData(kpiModalType, kpiModalState, kpiModalDistrict);
+    }
+  }, [kpiModalState, kpiModalDistrict]);
 
   // Independent Filters
   const [kpiState, setKpiState] = useState<string>("All");
@@ -295,8 +374,8 @@ export default function AnalyticsTab({
             )}
           </div>
         </div>
-        <div className={styles.kpiGrid}>
-          <div className={`${styles.kpiCard} ${styles.blueCard}`}>
+                <div className={styles.kpiGrid}>
+          <div className={`${styles.kpiCard} ${styles.blueCard}`} onClick={() => openKpiModal('totalCandidates', 'Total Candidates Registered')} style={{ cursor: 'pointer' }}>
             <span className={styles.kpiIcon} style={{ display: 'inline-flex', justifyContent: 'center' }}>
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
@@ -308,7 +387,19 @@ export default function AnalyticsTab({
             <div className={styles.kpiLabel}>Total Candidates Registered</div>
             <div className={styles.kpiValue}>{kpiStats?.totalCandidates || 0}</div>
           </div>
-          <div className={`${styles.kpiCard} ${styles.greenCard}`}>
+          <div className={`${styles.kpiCard}`} style={{ borderColor: '#8b5cf6', background: 'linear-gradient(to bottom right, #f3e8ff, #ffffff)', cursor: 'pointer' }} onClick={() => openKpiModal('totalSelected', 'Total Candidates Selected')}>
+            <span className={styles.kpiIcon} style={{ display: 'inline-flex', justifyContent: 'center', background: '#ede9fe', color: '#8b5cf6' }}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="8.5" cy="7" r="4"></circle>
+                <line x1="20" y1="8" x2="20" y2="14"></line>
+                <line x1="23" y1="11" x2="17" y2="11"></line>
+              </svg>
+            </span>
+            <div className={styles.kpiLabel}>Total Candidates Selected</div>
+            <div className={styles.kpiValue}>{kpiStats?.totalSelected || 0}</div>
+          </div>
+          <div className={`${styles.kpiCard} ${styles.greenCard}`} onClick={() => openKpiModal('totalPass', 'Total Candidates Passed')} style={{ cursor: 'pointer' }}>
             <span className={styles.kpiIcon} style={{ display: 'inline-flex', justifyContent: 'center' }}>
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
@@ -318,7 +409,7 @@ export default function AnalyticsTab({
             <div className={styles.kpiLabel}>Total Candidates Passed</div>
             <div className={styles.kpiValue}>{kpiStats?.totalPass || 0}</div>
           </div>
-          <div className={`${styles.kpiCard} ${styles.redCard}`}>
+          <div className={`${styles.kpiCard} ${styles.redCard}`} onClick={() => openKpiModal('totalFail', 'Total Candidates Failed')} style={{ cursor: 'pointer' }}>
             <span className={styles.kpiIcon} style={{ display: 'inline-flex', justifyContent: 'center' }}>
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="10"></circle>
@@ -357,7 +448,105 @@ export default function AnalyticsTab({
         </div>
       </div>
 
-      <div className={styles.distributionContainer}>
+              <div style={{ marginTop: '24px', marginBottom: '24px', background: 'white', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
+          <div 
+            style={{ padding: '16px 24px', background: '#f8fafc', borderBottom: reportExpanded ? '1px solid #e2e8f0' : 'none', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+            onClick={() => setReportExpanded(!reportExpanded)}
+          >
+            <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600, color: '#1e293b' }}>Detailed Date-wise Candidate Report</h2>
+            <span>{reportExpanded ? '▲ Collapse' : '▼ Expand'}</span>
+          </div>
+          {reportExpanded && (
+            <div style={{ padding: '24px' }}>
+              <div style={{ display: 'flex', gap: '16px', marginBottom: '16px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '0.875rem', fontWeight: 500 }}>Start Date</label>
+                  <input type="date" value={reportStartDate} onChange={e => setReportStartDate(e.target.value)} style={{ padding: '8px', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '0.875rem', fontWeight: 500 }}>End Date</label>
+                  <input type="date" value={reportEndDate} onChange={e => setReportEndDate(e.target.value)} style={{ padding: '8px', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '0.875rem', fontWeight: 500 }}>Status</label>
+                  <select value={reportStatus} onChange={e => setReportStatus(e.target.value)} style={{ padding: '8px', border: '1px solid #cbd5e1', borderRadius: '4px', background: 'white' }}>
+                    <option value="all">All Candidates</option>
+                    <option value="onboarded">Onboarded / Selected</option>
+                    <option value="interviewing">Attending Interview</option>
+                    <option value="docs_not_selected">Docs Submitted but Not Selected</option>
+                  </select>
+                </div>
+              </div>
+              
+              {reportLoading ? (
+                <div style={{ padding: '20px', textAlign: 'center' }}>Loading report...</div>
+              ) : (
+                <div style={{ overflowX: 'auto' }}>
+                  <table className={styles.table}>
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        {reportStatus === "interviewing" || reportStatus === "attended_interview" ? (
+                          <>
+                            <th>Total Attempts</th>
+                            <th>Attempt Details (Date - Result - Score)</th>
+                          </>
+                        ) : reportStatus === "docs_not_selected" ? (
+                          <>
+                            <th>Phone</th>
+                            <th>Docs Submitted Date</th>
+                          </>
+                        ) : (
+                          <>
+                            <th>Phone</th>
+                            <th>Joined Date</th>
+                            {reportStatus !== "onboarded" && <th>Current Phase</th>}
+                          </>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reportData.length > 0 ? reportData.map((cand: any) => (
+                        <tr key={cand.id}>
+                          <td>{cand.fullName}</td>
+                          <td>{cand.email}</td>
+                          {reportStatus === "interviewing" || reportStatus === "attended_interview" ? (
+                            <>
+                              <td>{cand.total_attempts}</td>
+                              <td>
+                                {cand.attempts && cand.attempts.length > 0 ? cand.attempts.map((att: any, idx: number) => (
+                                  <div key={idx} style={{ fontSize: '12px', marginBottom: '4px' }}>
+                                    {new Date(att.date).toLocaleDateString()} - {att.result} - {att.score.toFixed(1)}
+                                  </div>
+                                )) : 'No details'}
+                              </td>
+                            </>
+                          ) : reportStatus === "docs_not_selected" ? (
+                            <>
+                              <td>{cand.phone}</td>
+                              <td>{cand.documents_submitted_at ? new Date(cand.documents_submitted_at).toLocaleDateString() : 'Unknown'}</td>
+                            </>
+                          ) : (
+                            <>
+                              <td>{cand.phone}</td>
+                              <td>{new Date(cand.created_at).toLocaleDateString()}</td>
+                              {reportStatus !== "onboarded" && <td><span className={styles.statusBadge}>{cand.current_phase}</span></td>}
+                            </>
+                          )}
+                        </tr>
+                      )) : (
+                        <tr><td colSpan={6} style={{ textAlign: 'center', padding: '20px' }}>No candidates found for this period and status.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className={styles.distributionContainer}>
         <div className={styles.tableHeaderRow}>
           <h2 className={styles.sectionTitle}>CANDIDATE DISTRIBUTION</h2>
           <div className={styles.filters}>
@@ -539,6 +728,100 @@ export default function AnalyticsTab({
           )}
         </div>
       </div>
+      {kpiModalOpen && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center' }} onClick={() => setKpiModalOpen(false)}>
+          <div style={{ background: 'white', borderRadius: '8px', padding: '24px', width: '90%', maxWidth: '800px', maxHeight: '80vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 'bold' }}>{kpiModalTitle}</h2>
+              <button onClick={() => setKpiModalOpen(false)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer' }}>&times;</button>
+            </div>
+            
+            <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
+              <select value={kpiModalState} onChange={(e) => { setKpiModalState(e.target.value); setKpiModalDistrict("All"); }} style={{ padding: '8px', border: '1px solid #cbd5e1', borderRadius: '4px' }}>
+                <option value="All">All States</option>
+                {geoStats && Object.keys(geoStats.by_state || {}).map((s: string) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+              {kpiModalState !== "All" && (
+                <select value={kpiModalDistrict} onChange={(e) => setKpiModalDistrict(e.target.value)} style={{ padding: '8px', border: '1px solid #cbd5e1', borderRadius: '4px' }}>
+                  <option value="All">All Districts</option>
+                  {geoStats && geoStats.by_state[kpiModalState] && Object.keys(geoStats.by_state[kpiModalState].by_district || {}).map((d: string) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            {kpiModalLoading ? (
+              <div style={{ textAlign: 'center', padding: '24px' }}>Loading...</div>
+            ) : kpiModalData.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '24px', color: '#666' }}>No candidates found for this KPI.</div>
+            ) : (
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>State</th>
+                    {kpiModalType === 'totalPass' || kpiModalType === 'totalFail' ? (
+                      <>
+                        <th>Total Attempts</th>
+                        <th>Attempt Details (Date - Result - Score)</th>
+                      </>
+                    ) : kpiModalType === 'totalSelected' ? (
+                      <>
+                        <th>Joined Date</th>
+                        <th>Docs Submitted Date</th>
+                        <th>Selected?</th>
+                      </>
+                    ) : (
+                      <>
+                        <th>Phone</th>
+                        <th>Joined Date</th>
+                        <th>Phase</th>
+                      </>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {kpiModalData.map((cand: any) => (
+                    <tr key={cand.id}>
+                      <td>{cand.fullName}</td>
+                      <td>{cand.email}</td>
+                      <td>{cand.state}</td>
+                      {kpiModalType === 'totalPass' || kpiModalType === 'totalFail' ? (
+                        <>
+                          <td>{cand.total_attempts}</td>
+                          <td>
+                            {cand.attempts && cand.attempts.length > 0 ? cand.attempts.map((att: any, idx: number) => (
+                              <div key={idx} style={{ fontSize: '12px', marginBottom: '4px' }}>
+                                {new Date(att.date).toLocaleDateString()} - {att.result} - {att.score.toFixed(1)}
+                              </div>
+                            )) : 'No details'}
+                          </td>
+                        </>
+                      ) : kpiModalType === 'totalSelected' ? (
+                        <>
+                          <td>{new Date(cand.created_at).toLocaleDateString()}</td>
+                          <td>{cand.documents_submitted_at ? new Date(cand.documents_submitted_at).toLocaleDateString() : 'Unknown'}</td>
+                          <td>Yes</td>
+                        </>
+                      ) : (
+                        <>
+                          <td>{cand.phone}</td>
+                          <td>{new Date(cand.created_at).toLocaleDateString()}</td>
+                          <td><span className={styles.statusBadge}>{cand.current_phase}</span></td>
+                        </>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

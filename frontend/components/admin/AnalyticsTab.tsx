@@ -600,7 +600,7 @@ export default function AnalyticsTab({
                               <td>
                                 {cand.attempts && cand.attempts.length > 0 ? cand.attempts.map((att: any, idx: number) => (
                                   <div key={idx} style={{ fontSize: '12px', marginBottom: '4px' }}>
-                                    {new Date(att.date).toLocaleDateString()} - {att.result} - {att.score.toFixed(1)}
+                                    {att.date ? new Date(att.date).toLocaleDateString() : 'Unknown'} - {att.result || 'PENDING'} - {(typeof att.score === 'number' ? att.score : 0).toFixed(1)}
                                   </div>
                                 )) : 'No details'}
                               </td>
@@ -902,7 +902,7 @@ export default function AnalyticsTab({
                           <td>
                             {cand.attempts && cand.attempts.length > 0 ? cand.attempts.map((att: any, idx: number) => (
                               <div key={idx} style={{ fontSize: '12px', marginBottom: '4px' }}>
-                                {new Date(att.date).toLocaleDateString()} - {att.result} - {att.score.toFixed(1)}
+                                {att.date ? new Date(att.date).toLocaleDateString() : 'Unknown'} - {att.result || 'PENDING'} - {(typeof att.score === 'number' ? att.score : 0).toFixed(1)}
                               </div>
                             )) : 'No details'}
                           </td>

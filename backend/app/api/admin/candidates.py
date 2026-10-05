@@ -172,7 +172,7 @@ async def get_candidates(
     state: Optional[str] = Query(None),
     district: Optional[str] = Query(None),
     interviewStatus: Optional[str] = Query(None),
-    limit: int = Query(10, ge=1, le=500),
+    limit: int = Query(10, ge=1, le=100000),
     offset: int = Query(0, ge=0),
     _admin=Depends(require_admin_auth),
 ):
@@ -768,7 +768,7 @@ async def get_state_stats(state: str = Query(None), _admin=Depends(require_admin
 
 @router.get("/anti-cheat/violations")
 async def get_anti_cheat_violations(
-    limit: int = Query(10, ge=1, le=500),
+    limit: int = Query(10, ge=1, le=100000),
     offset: int = Query(0, ge=0),
     _admin=Depends(require_admin_auth),
 ):
@@ -1423,7 +1423,7 @@ def get_kpi_details(kpi: str = Query(...), state: str = Query(None), district: s
             sess_query["status"] = "completed"
             sess_query["result"] = "FAIL"
             
-        sessions = list(db.interview_sessions.find(sess_query, {"candidate_id": 1, "started_at": 1, "result": 1, "total_score": 1}))
+        sessions = list(db.interview_sessions.find(sess_query, {"candidate_id": 1, "started_at": 1, "result": 1, "score": 1, "overall_score": 1}))
 
         cand_ids = []
         for s in sessions:
@@ -1473,7 +1473,7 @@ def get_kpi_details(kpi: str = Query(...), state: str = Query(None), district: s
             attempt_details.append({
                 "date": sess.get("started_at"),
                 "result": sess.get("result", "PENDING"),
-                "score": sess.get("total_score", 0)
+                "score": sess.get("score") or sess.get("overall_score") or 0
             })
 
         results.append({
@@ -1565,7 +1565,7 @@ def get_candidate_report(
             attempt_details.append({
                 "date": sess.get("started_at"),
                 "result": sess.get("result", "PENDING"),
-                "score": sess.get("total_score", 0)
+                "score": sess.get("score") or sess.get("overall_score") or 0
             })
             
         user_email = user_map.get(str(c.get("user_id")))

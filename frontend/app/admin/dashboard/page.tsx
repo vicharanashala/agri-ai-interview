@@ -879,11 +879,27 @@ export default function AdminDashboard() {
   if (!adminData) {
     return <div className={styles.loading}>Loading...</div>;
   }
-  const handleExportCsv = () => {
-    if (candidates.length === 0) return;
+  const handleExportCsv = async () => {
+    try {
+      const query = new URLSearchParams();
+      if (phaseFilter) query.append("phase", phaseFilter);
+      if (stateFilter) query.append("state", stateFilter);
+      if (districtFilter) query.append("district", districtFilter);
+      if (interviewStatusFilter) query.append("interview_status", interviewStatusFilter);
+      if (searchQuery) query.append("search", searchQuery);
+      query.append("limit", "100000"); // fetch all for export
+      
+      const res = await withAuth(`/api/admin/candidates?` + query.toString());
+      if (!res.ok) throw new Error("Export failed");
+      const data = await res.json();
+      const allCandidates = data.candidates || [];
+      if (allCandidates.length === 0) {
+        alert("No candidates to export.");
+        return;
+      }
     const headers = ["Name", "Email", "Phone", "State", "Current Phase", "Interview Status", "Attempts", "Created At"];
     const csvRows = [headers.join(",")];
-    for (const c of candidates) {
+    for (const c of allCandidates) {
       csvRows.push([
         `"${c.fullName || ""}"`,
         `"${c.email || ""}"`,
@@ -900,7 +916,14 @@ export default function AdminDashboard() {
     const a = document.createElement("a");
     a.href = url;
     a.download = `candidates_${phaseFilter || "all"}_${Date.now()}.csv`;
-    a.click();
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error("Export error:", e);
+      alert("Failed to export candidates");
+    }
   };
 
   return (
@@ -1040,8 +1063,7 @@ export default function AdminDashboard() {
               </select>
               <button onClick={() => loadCandidates(true)} className={styles.searchBtn}>Search</button>
               <button onClick={handleExportCsv} className={styles.exportBtn} style={{ marginLeft: "auto", background: "#10b981", color: "white", padding: "8px 16px", borderRadius: "6px", border: "none", cursor: "pointer", fontWeight: 600 }}>
-                Export CSV
-              </button>
+                Export Excel/CSV</button>
             </div>
 
             {/* Candidates Table */}

@@ -1339,12 +1339,6 @@ async def bypass_candidate_course(candidate_id: str, _admin=Depends(require_admi
 @router.delete("/candidates/{candidate_id}")
 def delete_candidate(candidate_id: str, db=Depends(get_sync_db), admin=Depends(require_admin_auth)):
     try:
-        from app.utils.helpers import _get_id_variants
-    except ImportError:
-        def _get_id_variants(val):
-            try: return [val, ObjectId(val)]
-            except: return [val]
-    try:
         cand = db.candidates.find_one({"_id": {"$in": _get_id_variants(candidate_id)}})
         if not cand:
             raise HTTPException(status_code=404, detail="Candidate not found")
@@ -1364,12 +1358,6 @@ def delete_candidate(candidate_id: str, db=Depends(get_sync_db), admin=Depends(r
 @router.post("/candidates/{candidate_id}/restore")
 def restore_candidate(candidate_id: str, db=Depends(get_sync_db), admin=Depends(require_admin_auth)):
     try:
-        from app.utils.helpers import _get_id_variants
-    except ImportError:
-        def _get_id_variants(val):
-            try: return [val, ObjectId(val)]
-            except: return [val]
-    try:
         cand = db.candidates.find_one({"_id": {"$in": _get_id_variants(candidate_id)}})
         if not cand:
             raise HTTPException(status_code=404, detail="Candidate not found")
@@ -1388,12 +1376,6 @@ def restore_candidate(candidate_id: str, db=Depends(get_sync_db), admin=Depends(
 
 @router.post("/candidates/{candidate_id}/mark-selected")
 def mark_candidate_selected(candidate_id: str, db=Depends(get_sync_db), admin=Depends(require_admin_auth)):
-    try:
-        from app.utils.helpers import _get_id_variants
-    except ImportError:
-        def _get_id_variants(val):
-            try: return [val, ObjectId(val)]
-            except: return [val]
     try:
         cand = db.candidates.find_one({"_id": {"$in": _get_id_variants(candidate_id)}})
         if not cand:
@@ -1442,7 +1424,7 @@ def get_kpi_details(kpi: str = Query(...), state: str = Query(None), district: s
             sess_query["result"] = "FAIL"
             
         sessions = list(db.interview_sessions.find(sess_query, {"candidate_id": 1, "started_at": 1, "result": 1, "total_score": 1}))
-        from app.utils.helpers import _get_id_variants
+
         cand_ids = []
         for s in sessions:
             if s.get("candidate_id"):
@@ -1461,8 +1443,7 @@ def get_kpi_details(kpi: str = Query(...), state: str = Query(None), district: s
     user_map = {str(u["_id"]): u.get("email") for u in db.users.find({"_id": {"$in": user_ids}})}
     
     sessions_by_cand = {}
-    from app.utils.helpers import _get_id_variants
-    
+
     # Only fetch all sessions if we are on a KPI that requires them
     if kpi in ["activeInterviews", "totalCompleted", "totalPass", "totalFail"]:
         c_vars = []
@@ -1545,7 +1526,7 @@ def get_candidate_report(
     user_map = {str(u["_id"]): u.get("email") for u in db.users.find({"_id": {"$in": user_ids}})}
     
     # Pre-fetch all sessions for these candidates to build attempt details
-    from app.utils.helpers import _get_id_variants
+
     cand_id_variants = []
     for c in candidates:
         cand_id_variants.extend(_get_id_variants(c["_id"]))

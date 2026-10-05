@@ -53,7 +53,7 @@ export default function AnalyticsTab({
       if (st !== "All") query.append("state", st);
       if (dist !== "All") query.append("district", dist);
       
-      const res = await fetch(`${adminApiBase}/api/admin/stats/kpi-details?` + query.toString(), { headers });
+      const res = await fetch(`${adminApiBase}/api/admin/stats/kpi-details?` + query.toString(), { headers, credentials: "include" });
       if (res.ok) {
         const data = await res.json();
         setKpiModalData(data.candidates || []);
@@ -84,7 +84,7 @@ export default function AnalyticsTab({
       if (reportEndDate) query.append("end_date", reportEndDate);
       if (reportStatus && reportStatus !== "all") query.append("status_filter", reportStatus);
       
-      const res = await fetch(`${adminApiBase}/api/admin/stats/report?` + query.toString(), { headers });
+      const res = await fetch(`${adminApiBase}/api/admin/stats/report?` + query.toString(), { headers, credentials: "include" });
       if (res.ok) {
         const data = await res.json();
         setReportData(data.report || []);

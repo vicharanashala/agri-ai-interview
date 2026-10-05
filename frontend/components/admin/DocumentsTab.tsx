@@ -263,6 +263,28 @@ export default function DocumentsTab({ adminToken }: Props) {
                       <span style={{ color: '#d1d5db', fontSize: 13 }}>—</span>
                     )}
                   </td>
+                  <td style={{ padding: '10px 12px' }}>
+                    {c.documentsSubmitted ? (
+                      <button 
+                        onClick={() => handleToggleSelected(c.id)}
+                        style={{
+                          padding: '6px 12px',
+                          background: c.isSelected ? '#fee2e2' : '#dbeafe',
+                          color: c.isSelected ? '#dc2626' : '#2563eb',
+                          border: '1px solid',
+                          borderColor: c.isSelected ? '#fca5a5' : '#bfdbfe',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontSize: 13,
+                          fontWeight: 500,
+                        }}
+                      >
+                        {c.isSelected ? 'Unmark Selected' : 'Mark Selected'}
+                      </button>
+                      ) : (
+                        <span style={{ color: '#9ca3af', fontSize: 13, fontStyle: 'italic' }}>Not Submitted</span>
+                      )}
+                  </td>
                 </tr>
               );
             })}

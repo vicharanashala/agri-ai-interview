@@ -261,7 +261,7 @@ async def get_candidates(
         current_phase = cand.get("current_phase", "onboarding")
 
         # Gather variants for this candidate to match sessions
-        c_variants = [str(v) for v in _get_id_variants(cand["_id"])]
+        c_variants = {str(v) for v in _get_id_variants(cand["_id"])}  # set: ObjectId and str forms stringify to the same key
         
         cand_sessions = []
         for cv in c_variants:
@@ -1461,7 +1461,7 @@ def get_kpi_details(kpi: str = Query(...), state: str = Query(None), district: s
         cid = str(c["_id"])
         user_email = user_map.get(str(c.get("user_id")))
         
-        c_variants = [str(v) for v in _get_id_variants(c["_id"])]
+        c_variants = {str(v) for v in _get_id_variants(c["_id"])}  # set: ObjectId and str forms stringify to the same key
         cand_sessions = []
         for cv in c_variants:
             cand_sessions.extend(sessions_by_cand.get(cv, []))
@@ -1548,7 +1548,7 @@ def get_candidate_report(
     results = []
     for c in candidates:
         cid = str(c["_id"])
-        c_variants = [str(v) for v in _get_id_variants(c["_id"])]
+        c_variants = {str(v) for v in _get_id_variants(c["_id"])}  # set: ObjectId and str forms stringify to the same key
         
         cand_sessions = []
         for cv in c_variants:

@@ -304,6 +304,41 @@
 .reportTableWrapper .table tbody tr:hover { background: #f1f5f9; }
 .reportTableWrapper .table tbody tr:last-child td { border-bottom: none; }
 
+/* Name/Email get a fixed share; remaining columns split the rest evenly instead of leaving one large gap */
+.reportTableWrapper .table .reportNameCol {
+  width: 22%;
+  min-width: 160px;
+}
+.reportTableWrapper .table .reportEmailCol {
+  width: 30%;
+  min-width: 220px;
+}
+
+/* Attempt columns (Attended Interview status): compact, one aligned line per attempt */
+.reportTableWrapper .table .attemptCountCol,
+.reportTableWrapper .table .attemptResultCol,
+.reportTableWrapper .table .attemptScoreCol,
+.kpiModalTable .attemptCountCol,
+.kpiModalTable .attemptResultCol,
+.kpiModalTable .attemptScoreCol {
+  text-align: center;
+  white-space: nowrap;
+}
+.reportTableWrapper .table .attemptDateCol,
+.kpiModalTable .attemptDateCol {
+  white-space: nowrap;
+}
+.reportTableWrapper .table .attemptScoreCol,
+.kpiModalTable .attemptScoreCol { font-variant-numeric: tabular-nums; }
+/* KPI modal attempt cells sit at the top so multi-line attempts align with Name/Email */
+.kpiModalTable td { vertical-align: top; }
+.attemptLine {
+  line-height: 20px;
+}
+.attemptLine + .attemptLine {
+  margin-top: 4px;
+}
+
 .reportEmpty,
 .reportTableWrapper .table td.reportEmpty {
   padding: 32px 16px;

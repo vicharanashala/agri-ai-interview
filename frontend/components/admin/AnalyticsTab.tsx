@@ -18,6 +18,16 @@ import PageSelector from "./PageSelector";
 // KPI modal type prefix for the stage cards; the suffix is a candidate current_phase value
 const PHASE_KPI_PREFIX = "phase:";
 
+// Display format for every date in the Analytics tab: "DD Mon YYYY" (e.g. 03 Oct 2026).
+// Built from en-US parts because en-IN/en-GB render September as "Sept".
+const displayDateFormat = new Intl.DateTimeFormat("en-US", { day: "2-digit", month: "short", year: "numeric" });
+const formatDisplayDate = (value: string | null | undefined) => {
+  const date = value ? new Date(value) : null;
+  if (!date || isNaN(date.getTime())) return "Unknown";
+  const parts = Object.fromEntries(displayDateFormat.formatToParts(date).map((p) => [p.type, p.value]));
+  return `${parts.day} ${parts.month} ${parts.year}`;
+};
+
 interface AnalyticsTabProps {
   adminApiBase: string;
   getAdminToken: () => string | null;
@@ -568,12 +578,14 @@ export default function AnalyticsTab({
                   <table className={styles.table}>
                     <thead>
                       <tr>
-                        <th>Name</th>
-                        <th>Email</th>
+                        <th className={styles.reportNameCol}>Name</th>
+                        <th className={styles.reportEmailCol}>Email</th>
                         {reportStatus === "interviewing" || reportStatus === "attended_interview" ? (
                           <>
-                            <th>Total Attempts</th>
-                            <th>Attempt Details (Date - Result - Score)</th>
+                            <th className={styles.attemptCountCol}>Total Attempts</th>
+                            <th className={styles.attemptDateCol}>Date</th>
+                            <th className={styles.attemptResultCol}>Result</th>
+                            <th className={styles.attemptScoreCol}>Score</th>
                           </>
                         ) : reportStatus === "docs_not_selected" ? (
                           <>
@@ -596,24 +608,39 @@ export default function AnalyticsTab({
                           <td>{cand.email}</td>
                           {reportStatus === "interviewing" || reportStatus === "attended_interview" ? (
                             <>
-                              <td>{cand.total_attempts}</td>
-                              <td>
-                                {cand.attempts && cand.attempts.length > 0 ? cand.attempts.map((att: any, idx: number) => (
-                                  <div key={idx} style={{ fontSize: '12px', marginBottom: '4px' }}>
-                                    {att.date ? new Date(att.date).toLocaleDateString() : 'Unknown'} - {att.result || 'PENDING'} - {(typeof att.score === 'number' ? att.score : 0).toFixed(1)}
-                                  </div>
-                                )) : 'No details'}
-                              </td>
+                              <td className={styles.attemptCountCol}>{cand.total_attempts}</td>
+                              {cand.attempts && cand.attempts.length > 0 ? (
+                                <>
+                                  {/* One line per attempt in each column so date/result/score stay aligned */}
+                                  <td className={styles.attemptDateCol}>
+                                    {cand.attempts.map((att: any, idx: number) => (
+                                      <div key={idx} className={styles.attemptLine}>{formatDisplayDate(att.date)}</div>
+                                    ))}
+                                  </td>
+                                  <td className={styles.attemptResultCol}>
+                                    {cand.attempts.map((att: any, idx: number) => (
+                                      <div key={idx} className={styles.attemptLine}>{att.result || 'PENDING'}</div>
+                                    ))}
+                                  </td>
+                                  <td className={styles.attemptScoreCol}>
+                                    {cand.attempts.map((att: any, idx: number) => (
+                                      <div key={idx} className={styles.attemptLine}>{(typeof att.score === 'number' ? att.score : 0).toFixed(1)}</div>
+                                    ))}
+                                  </td>
+                                </>
+                              ) : (
+                                <td colSpan={3}>No details</td>
+                              )}
                             </>
                           ) : reportStatus === "docs_not_selected" ? (
                             <>
                               <td>{cand.phone}</td>
-                              <td>{cand.documents_submitted_at ? new Date(cand.documents_submitted_at).toLocaleDateString() : 'Unknown'}</td>
+                              <td>{formatDisplayDate(cand.documents_submitted_at)}</td>
                             </>
                           ) : (
                             <>
                               <td>{cand.phone}</td>
-                              <td>{new Date(cand.created_at).toLocaleDateString()}</td>
+                              <td>{formatDisplayDate(cand.created_at)}</td>
                               {reportStatus !== "onboarded" && <td><span className={styles.statusBadge}>{cand.current_phase}</span></td>}
                             </>
                           )}
@@ -864,7 +891,7 @@ export default function AnalyticsTab({
             ) : kpiModalData.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '24px', color: '#666' }}>No candidates found for this KPI.</div>
             ) : (
-              <table className={styles.table}>
+              <table className={`${styles.table} ${styles.kpiModalTable}`}>
                 <thead>
                   <tr>
                     <th>Name</th>
@@ -872,8 +899,10 @@ export default function AnalyticsTab({
                     <th>State</th>
                     {kpiModalType === 'totalPass' || kpiModalType === 'totalFail' ? (
                       <>
-                        <th>Total Attempts</th>
-                        <th>Attempt Details (Date - Result - Score)</th>
+                        <th className={styles.attemptCountCol}>Total Attempts</th>
+                        <th className={styles.attemptDateCol}>Date</th>
+                        <th className={styles.attemptResultCol}>Result</th>
+                        <th className={styles.attemptScoreCol}>Score</th>
                       </>
                     ) : kpiModalType === 'totalSelected' ? (
                       <>
@@ -898,25 +927,40 @@ export default function AnalyticsTab({
                       <td>{cand.state}</td>
                       {kpiModalType === 'totalPass' || kpiModalType === 'totalFail' ? (
                         <>
-                          <td>{cand.total_attempts}</td>
-                          <td>
-                            {cand.attempts && cand.attempts.length > 0 ? cand.attempts.map((att: any, idx: number) => (
-                              <div key={idx} style={{ fontSize: '12px', marginBottom: '4px' }}>
-                                {att.date ? new Date(att.date).toLocaleDateString() : 'Unknown'} - {att.result || 'PENDING'} - {(typeof att.score === 'number' ? att.score : 0).toFixed(1)}
-                              </div>
-                            )) : 'No details'}
-                          </td>
+                          <td className={styles.attemptCountCol}>{cand.total_attempts}</td>
+                          {cand.attempts && cand.attempts.length > 0 ? (
+                            <>
+                              {/* Same layout as the Detailed Candidate Report: one aligned line per attempt */}
+                              <td className={styles.attemptDateCol}>
+                                {cand.attempts.map((att: any, idx: number) => (
+                                  <div key={idx} className={styles.attemptLine}>{formatDisplayDate(att.date)}</div>
+                                ))}
+                              </td>
+                              <td className={styles.attemptResultCol}>
+                                {cand.attempts.map((att: any, idx: number) => (
+                                  <div key={idx} className={styles.attemptLine}>{att.result || 'PENDING'}</div>
+                                ))}
+                              </td>
+                              <td className={styles.attemptScoreCol}>
+                                {cand.attempts.map((att: any, idx: number) => (
+                                  <div key={idx} className={styles.attemptLine}>{(typeof att.score === 'number' ? att.score : 0).toFixed(1)}</div>
+                                ))}
+                              </td>
+                            </>
+                          ) : (
+                            <td colSpan={3}>No details</td>
+                          )}
                         </>
                       ) : kpiModalType === 'totalSelected' ? (
                         <>
-                          <td>{new Date(cand.created_at).toLocaleDateString()}</td>
-                          <td>{cand.documents_submitted_at ? new Date(cand.documents_submitted_at).toLocaleDateString() : 'Unknown'}</td>
+                          <td>{formatDisplayDate(cand.created_at)}</td>
+                          <td>{formatDisplayDate(cand.documents_submitted_at)}</td>
                           <td>Yes</td>
                         </>
                       ) : (
                         <>
                           <td>{cand.phone}</td>
-                          <td>{new Date(cand.created_at).toLocaleDateString()}</td>
+                          <td>{formatDisplayDate(cand.created_at)}</td>
                           <td><span className={styles.statusBadge}>{cand.current_phase}</span></td>
                         </>
                       )}

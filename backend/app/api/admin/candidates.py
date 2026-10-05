@@ -1504,11 +1504,17 @@ def get_candidate_report(
     query = {"is_deleted": {"$ne": True}}
     
     if start_date or end_date:
-        date_query = {}
-        if start_date:
-            date_query["$gte"] = start_date
-        if end_date:
-            date_query["$lte"] = end_date + "T23:59:59.999Z"
+        # created_at is stored as a BSON Date, so bounds must be datetimes (a string never matches a Date).
+        # Naive datetimes are treated as UTC by pymongo, matching how created_at is stored.
+        try:
+            date_query = {}
+            if start_date:
+                date_query["$gte"] = datetime.strptime(start_date, "%Y-%m-%d")
+            if end_date:
+                # Exclusive upper bound at the next midnight so the whole end date is included
+                date_query["$lt"] = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
+        except ValueError:
+            raise HTTPException(400, "start_date and end_date must be in YYYY-MM-DD format")
         query["created_at"] = date_query
         
     if status_filter == "onboarded":

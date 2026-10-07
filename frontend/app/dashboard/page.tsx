@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import FullPageSkeleton from '@/components/FullPageSkeleton';
 import { useState, useEffect } from 'react';
@@ -49,6 +49,7 @@ export default function DashboardPage() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [showVideoModal, setShowVideoModal] = useState(false);
   const [attempts, setAttempts] = useState<Attempt[]>([]);
+  const [expandedTab, setExpandedTab] = useState<'instructions' | 'attempts' | 'tutorial' | null>(null);
   const router = useRouter();
 
   const handleFaqClick = () => {
@@ -315,53 +316,13 @@ export default function DashboardPage() {
   };
  const getCompletionPercentage = () => {
   if (documentsSubmitted) return 100;
-
   if (currentPhase === 5) return 75;
-
   if (currentPhase === 4) return 50;
-
-  if (currentPhase === 3) {
-    return hasPassed ? 50 : 25;
-  }
-
+  if (currentPhase === 3) return hasPassed ? 50 : 25;
   if (currentPhase === 2) return 25;
-
   return 0;
-};
-
-const completionPercentage = getCompletionPercentage();
-  const renderPhaseStatus = (phase: PhaseInfo) => {
-    if (phase.id === 2) {
-      if (hasPassed) {
-        return <span className={styles.completedBadge}>Completed</span>;
-      }
-      if (attempts.length >= 3 && !hasPassed) {
-        return <span className={styles.failedBadge}>Failed</span>;
-      }
-      if (attempts.length > 0 && attempts.length < 3 && !hasPassed) {
-        return <span className={styles.reattemptBadge}>Re-attempt</span>;
-      }
-    }
-    
-    if (phase.id === 3) {
-      if (phase.status === 'completed' || phase.status === 'current') {
-        const isFilled = hasPassed || attempts.length >= 3;
-        if (isFilled) {
-          return <span className={styles.completedBadge}>View Summary</span>;
-        } else {
-          return <span className={styles.currentBadge} style={{ background: 'rgba(8, 203, 0, 0.08)', animation: 'none' }}>View Summary</span>;
-        }
-      }
-    }
-    
-    if (phase.status === 'completed') {
-      return <span className={styles.completedBadge}>Completed</span>;
-    }
-    if (phase.status === 'current') {
-      return <span className={styles.currentBadge}>In Progress</span>;
-    }
-    return <span className={styles.lockedBadge}>🔒 Locked</span>;
   };
+  const globalProgress = getCompletionPercentage();
 
   const handleAdvancePhase = (completedPhase: Phase) => {
     // Only advance if the current phase is completed
@@ -401,6 +362,74 @@ const completionPercentage = getCompletionPercentage();
     );
   }
 
+
+  const renderPhaseCard = (phase: PhaseInfo) => {
+    const isCompleted = phase.status === 'completed';
+    const isCurrent = phase.status === 'current';
+
+    let buttonText = null;
+    let showButton = false;
+    
+    if (phase.id === 2 && (isCurrent || phase.status === 'completed')) {
+      if (hasPassed) {
+        showButton = false; // completed, no button
+      } else if (attempts.length >= 3 && !hasPassed) {
+        buttonText = 'Failed'; // maybe no button? or disabled
+        showButton = true;
+      } else if (attempts.length > 0 && attempts.length < 3 && !hasPassed) {
+        buttonText = '▶ Re-attempt';
+        showButton = true;
+      } else if (isCurrent) {
+        buttonText = '▶ Start Interview';
+        showButton = true;
+      }
+    } else if (phase.id === 3 && (isCompleted || isCurrent)) {
+      showButton = true;
+      buttonText = '▶ View Summary';
+    }
+
+    return (
+      <div className={`${styles.phaseCard} ${styles[phase.status]}`} onClick={() => handlePhaseClick(phase)}>
+        {isCurrent && <div className={styles.activeMissionBadge}>ACTIVE MISSION</div>}
+        <div className={styles.cardHeader}>
+          <div className={styles.phaseNumberBadge}>
+            {isCompleted ? '✓' : phase.id}
+          </div>
+          <div className={styles.statusBadge}>
+            {isCompleted ? '✓ Completed' : isCurrent ? 'IN PROGRESS' : '🔒 LOCKED'}
+          </div>
+        </div>
+        <div className={styles.cardBody}>
+          <h3 className={styles.phaseTitle}>{phase.name}</h3>
+          <p className={styles.phaseDesc}>{phase.description}</p>
+        </div>
+        
+        {showButton && buttonText && (
+          <button 
+            className={`${styles.startInterviewBtn} ${buttonText === 'Failed' ? styles.btnDisabled : ''}`} 
+            onClick={(e) => { 
+              e.stopPropagation(); 
+              if (buttonText !== 'Failed') handlePhaseClick(phase); 
+            }}
+            disabled={buttonText === 'Failed'}
+          >
+            {buttonText}
+          </button>
+        )}
+
+        <div className={styles.cardFooterTransparent}>
+          <div className={styles.progressSection}>
+            <div className={styles.miniProgressBar}>
+              <div className={styles.miniProgressFill} style={{ width: `${globalProgress}%` }}></div>
+            </div>
+            <span className={styles.progressPercent}>{globalProgress}%</span>
+          </div>
+          <span className={styles.stageText}>Stage 0{phase.id}</span>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <main className={styles.container}>
       {/* Top Navbar */}
@@ -412,138 +441,125 @@ const completionPercentage = getCompletionPercentage();
           </div>
         </div>
       </nav>
-
       {/* Main Dashboard Content */}
       <div className={styles.contentContainer}>
         <div className={styles.pageHeader}>
           <h1 className={styles.dashboardTitle}>Interview Progress Dashboard</h1>
-          <p className={styles.dashboardSubtitle}>Track your journey through the hiring process</p>
+          
         </div>
 
-        <div className={styles.progressContainer}>
-        <div className={styles.progressBar}>
-          <div 
-            className={styles.progressFill} 
-           style={{
-              width: `${completionPercentage}%`
-            }}
-          />
+        {/* Greeting Banner */}
+        <div className={styles.greetingBanner}>
+          <span className={styles.greetingText}>
+            {documentsSubmitted ? (
+              <>🎉 <strong>Congratulations!</strong> You have successfully completed all the steps. The HR team will coordinate with you for the further steps.</>
+            ) : currentPhase === 1 ? (
+              <>Step 1 unlocked — let's get you <strong style={{color: '#10b981', marginLeft: '0'}}>onboarded</strong>!</>
+            ) : currentPhase === 2 ? (
+              <>Step 2 unlocked — it's time for your <strong style={{color: '#f59e0b', marginLeft: '0'}}>interview</strong>!</>
+            ) : currentPhase === 3 ? (
+              <>Step 3 unlocked — your <strong style={{color: '#f59e0b', marginLeft: '0'}}>interview results</strong> are ready!</>
+            ) : currentPhase === 4 ? (
+              <>Step 4 unlocked — it's time to begin your <strong style={{color: '#f59e0b', marginLeft: '0'}}>Foundation Course</strong>!</>
+            ) : currentPhase === 5 ? (
+              <>Step 5 unlocked — you're almost there, upload your <strong style={{color: '#f59e0b', marginLeft: '0'}}>documents</strong>!</>
+            ) : null}
+          </span>
         </div>
-        <span className={styles.progressPercent}>
-          {completionPercentage}% Complete
-        </span>
-      </div>
 
-      {/* How to Use / Tutorial Video */}
-      <div className={styles.tutorialWrapper}>
-        <div
-          onClick={() => setShowVideoModal(true)}
-          className={styles.tutorialCard}
-        >
-          <div className={styles.tutorialPlayIcon}>
-            ▶
+        {/* Action Tabs / Collapsibles */}
+        <div className={styles.actionTabsContainer}>
+          <div className={styles.tabButtons}>
+            <button className={`${styles.tabBtn} ${expandedTab === 'instructions' ? styles.activeTab : ''}`} onClick={() => setExpandedTab(expandedTab === 'instructions' ? null : 'instructions')}>
+              <div className={styles.tabIconOrange}>!</div> Important Instructions <div className={styles.dotOrange}></div>
+            </button>
+            <button className={`${styles.tabBtn} ${expandedTab === 'attempts' ? styles.activeTab : ''}`} onClick={() => setExpandedTab(expandedTab === 'attempts' ? null : 'attempts')}>
+              <div className={styles.tabIconGreen}></div> Attempts: {attempts.length} / 3 <span className={styles.badgeLightGreen}>{3 - attempts.length} Left</span>
+            </button>
+            <button className={`${styles.tabBtn} ${expandedTab === 'tutorial' ? styles.activeTab : ''}`} onClick={() => setExpandedTab(expandedTab === 'tutorial' ? null : 'tutorial')}>
+              <div className={styles.tabIconPlay}>▶</div> Watch Tutorial
+            </button>
           </div>
-          <div className={styles.tutorialContent}>
-            <p className={styles.tutorialTitle}>
-              🎥 Watch: How to Use This App & Take the Interview
-            </p>
-            <p className={styles.tutorialSub}>
-              Click to watch the tutorial video before proceeding
-            </p>
-          </div>
-          <span className={styles.tutorialArrow}>→</span>
-        </div>
-      </div>
-
-      <div className={styles.instructionsCard}>
-        <p className={styles.instructionsTitle}>Important Instructions</p>
-        <p className={styles.instructionsText}>
-          1. The candidate will be allowed maximum 3 attempts.<br/>
-          2. On failing the interview there will be a cooldown period after which candidate is allowed next attempt.<br/>
-          3. Please read the interview instructions carefully, failing which may lead to interview closure.
-        </p>
-      </div>
-
-      {/* Cooldown countdown banner */}
-      {cooldownTimeLeft && (
-        <div className={styles.attemptsCard}>
-          <h2 className={styles.attemptsTitle}>⏳ Interview Cooldown Active</h2>
-          <p style={{ color: '#374151', fontSize: '15px', margin: 0 }}>
-            You can retry the interview after <strong style={{ fontWeight: 700 }}>{cooldownTimeLeft}</strong>.
-          </p>
-        </div>
-      )}
-
-      {/* Past Interview Attempts */}
-      {attempts.length > 0 && (
-        <div className={styles.attemptsCard}>
-          <h2 className={styles.attemptsTitle}>
-            Interview Attempts ({attempts.length}/3)
-          </h2>
-          <div className={styles.attemptsList}>
-            {attempts.map((attempt, index) => {
-              const date = (attempt.completedAt
-                ? new Date(attempt.completedAt)
-                : attempt.startedAt
-                ? new Date(attempt.startedAt)
-                : null
-              )?.toLocaleDateString('en-IN', {
-                  day: '2-digit',
-                  month: 'short',
-                  year: 'numeric',
-                }) ?? '—';
-
-              const badgeClass =
-                attempt.result === 'PASS'
-                  ? styles.badgePass
-                  : attempt.result === 'FAIL'
-                  ? styles.badgeFail
-                  : attempt.result === 'WITHDRAWN'
-                  ? styles.badgeWithdrawn
-                  : attempt.result === 'ANTI_CHEAT'
-                  ? styles.badgeAntiCheat
-                  : styles.badgeCompleted;
-
-              return (
-                <div key={attempt.id} className={styles.attemptRow}>
-                  <span className={styles.attemptNumber}>#{index + 1}</span>
-                  <span className={badgeClass}>
-                    {attempt.result ?? 'COMPLETED'}
-                  </span>
-                  {attempt.overall_score != null && (
-                    <span className={styles.attemptScore}>
-                      Score: {attempt.overall_score}/100
-                    </span>
-                  )}
-                  <span className={styles.attemptDate}>{date}</span>
-                </div>
-              );
-            })}
+          
+          <div className={`${styles.tabContentArea} ${expandedTab ? styles.contentExpanded : ''}`}>
+            {expandedTab === 'instructions' && (
+              <ul className={styles.instructionsList}>
+                <li><span className={styles.listNum}>1</span> The candidate will be allowed maximum 3 attempts.</li>
+                <li><span className={styles.listNum}>2</span> On failing the interview there will be a cooldown period after which candidate is allowed next attempt.</li>
+                <li><span className={styles.listNum}>3</span> Please read the interview instructions carefully, failing which may lead to interview closure.</li>
+              </ul>
+            )}
+            {expandedTab === 'attempts' && (
+              <div className={styles.attemptsContent}>
+                {cooldownTimeLeft ? (
+                  <p>Interview Cooldown Active. You can retry after <strong>{cooldownTimeLeft}</strong>.</p>
+                ) : attempts.length === 0 ? (
+                  <p className={styles.noAttemptsText}>No attempts yet.</p>
+                ) : (
+                  <div className={styles.attemptsList}>
+                    {attempts.map((attempt, index) => (
+                      <div key={attempt.id} className={styles.attemptRow}>
+                        <span className={styles.attemptNumber}>#{index + 1}</span>
+                        <span className={styles.attemptScore}>{attempt.result ?? 'COMPLETED'}</span>
+                        <span className={styles.attemptDate}>
+                          {attempt.completedAt ? new Date(attempt.completedAt).toLocaleDateString() : ''}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {expandedTab === 'tutorial' && (
+              <div className={styles.tutorialContent}>
+                <p>Learn how to use this app and take the interview.</p>
+                <button className={styles.watchVideoBtn} onClick={() => setShowVideoModal(true)}>
+                  ▶ Watch Tutorial Video
+                </button>
+              </div>
+            )}
           </div>
         </div>
-      )}
 
-      <div className={styles.phasesList}>
-        {phases.map((phase, index) => (
-          <div
-            key={phase.id}
-            className={`${styles.phaseCard} ${styles[phase.status]}`}
-            onClick={() => handlePhaseClick(phase)}
-          >
-            <div className={styles.phaseNumber}>{phase.id}</div>
-            <div className={styles.phaseIcon}>{getStatusIcon(phase)}</div>
-            <div className={styles.phaseContent}>
-              <h3 className={styles.phaseName}>{phase.name}</h3>
-              <p className={styles.phaseDescription}>{phase.description}</p>
-            </div>
-            <div className={styles.phaseStatus}>
-              {renderPhaseStatus(phase)}
+        {/* Phases S-Curve Grid */}
+        <div className={styles.sCurveGrid}>
+          {/* Row 1 */}
+          <div className={styles.gridItem}>
+            {renderPhaseCard(phases[0])}
+          </div>
+          <div className={styles.hConnector}>
+            <svg width="100%" height="4"><line x1="0" y1="2" x2="100%" y2="2" stroke={currentPhase > 1 ? "#10b981" : "#e2e8f0"} strokeWidth="4" className={styles.animatedLine} strokeLinecap="round" /></svg>
+          </div>
+          <div className={styles.gridItem}>
+            {renderPhaseCard(phases[1])}
+          </div>
+          <div className={styles.hConnector}>
+            <svg width="100%" height="4"><line x1="0" y1="2" x2="100%" y2="2" stroke={currentPhase > 2 ? "#10b981" : "#e2e8f0"} strokeWidth="4" className={styles.animatedLine} strokeLinecap="round" /></svg>
+          </div>
+          <div className={styles.gridItem} style={{ position: 'relative' }}>
+            {renderPhaseCard(phases[2])}
+            {/* Absolute curve down to row 2 */}
+            <div className={styles.curveConnectorRight}>
+               <svg width="100%" height="100%" preserveAspectRatio="none">
+                 <path d="M 0 0 C 40 0, 40 100, 0 100" stroke={currentPhase > 3 ? "#10b981" : "#e2e8f0"} strokeWidth="4" fill="none" className={styles.animatedLine} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+               </svg>
             </div>
           </div>
-        ))}
-      </div>
 
-
+          {/* Row 2 */}
+          <div className={styles.gridItemEmpty}></div>
+          <div className={styles.gridItemEmpty}></div>
+          <div className={styles.gridItem}>
+            {renderPhaseCard(phases[4])}
+          </div>
+          <div className={styles.hConnector}>
+             {/* Line flows right to left! */}
+             <svg width="100%" height="4"><line x1="100%" y1="2" x2="0" y2="2" stroke={currentPhase > 4 ? "#10b981" : "#e2e8f0"} strokeWidth="4" className={styles.animatedLine} strokeLinecap="round" /></svg>
+          </div>
+          <div className={styles.gridItem}>
+            {renderPhaseCard(phases[3])}
+          </div>
+        </div>
 
       {/* Video Modal */}
       {showVideoModal && (

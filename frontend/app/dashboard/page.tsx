@@ -102,6 +102,16 @@ export default function DashboardPage() {
         if (moduleCompleted      && actualPhase < 6) actualPhase = 6;
         if (docsSubmitted        && actualPhase < 6) actualPhase = 6;
 
+        const lastSeen = parseInt(sessionStorage.getItem('lastSeenPhase') || '0', 10);
+        if (actualPhase > lastSeen && lastSeen !== 0) {
+          setTimeout(async () => {
+            const confetti = (await import('canvas-confetti')).default;
+            confetti({ particleCount: 150, spread: 80, origin: { x: 0, y: 0.1 }, angle: 315, zIndex: 9999 });
+            confetti({ particleCount: 150, spread: 80, origin: { x: 1, y: 0.1 }, angle: 225, zIndex: 9999 });
+          }, 500);
+        }
+        sessionStorage.setItem('lastSeenPhase', String(actualPhase));
+
         setCurrentPhase(actualPhase);
         setHasCompletedInterview(actualPhase >= 3);
 
@@ -445,9 +455,9 @@ if (currentPhase === 6) return 80;
         <div className={styles.cardFooterTransparent}>
           <div className={styles.progressSection}>
             <div className={styles.miniProgressBar}>
-              <div className={styles.miniProgressFill} style={{ width: `${globalProgress}%` }}></div>
+              <div className={styles.miniProgressFill} style={{ width: `${phase.id === 1 ? 20 : phase.id === 2 ? 40 : phase.id === 3 ? 40 : phase.id === 4 ? 60 : phase.id === 5 ? 80 : 100}%` }}></div>
             </div>
-            <span className={styles.progressPercent}>{globalProgress}%</span>
+            <span className={styles.progressPercent}>{phase.id === 1 ? 20 : phase.id === 2 ? 40 : phase.id === 3 ? 40 : phase.id === 4 ? 60 : phase.id === 5 ? 80 : 100}%</span>
           </div>
           <span className={styles.stageText}>Stage 0{phase.id}</span>
         </div>
@@ -524,16 +534,25 @@ if (currentPhase === 6) return 80;
                   <p className={styles.noAttemptsText}>No attempts yet.</p>
                 ) : (
                   <div className={styles.attemptsList}>
-                    {attempts.map((attempt, index) => (
-                      <div key={attempt.id} className={styles.attemptRow}>
-                        <span className={styles.attemptNumber}>#{index + 1}</span>
-                        <span className={styles.attemptScore}>{attempt.result ?? 'COMPLETED'}</span>
-                        <span className={styles.attemptDate}>
-                          {attempt.completedAt ? new Date(attempt.completedAt).toLocaleDateString() : ''}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
+                      {attempts.map((attempt, index) => {
+                        const date = (attempt.completedAt ? new Date(attempt.completedAt) : attempt.startedAt ? new Date(attempt.startedAt) : null)?.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) ?? '—';
+                        const badgeClass = attempt.result === 'PASS' ? styles.badgePass : attempt.result === 'FAIL' ? styles.badgeFail : attempt.result === 'WITHDRAWN' ? styles.badgeWithdrawn : attempt.result === 'ANTI_CHEAT' ? styles.badgeAntiCheat : styles.badgeCompleted;
+                        return (
+                          <div key={attempt.id} className={styles.attemptRow}>
+                            <span className={styles.attemptNumber}>#{index + 1}</span>
+                            <span className={`${styles.attemptScoreBadge} ${badgeClass}`}>
+                              {attempt.result ?? 'COMPLETED'}
+                            </span>
+                            {attempt.overall_score != null && (
+                              <span className={styles.attemptScoreVal}>
+                                Score: {attempt.overall_score}/100
+                              </span>
+                            )}
+                            <span className={styles.attemptDate}>{date}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
                 )}
               </div>
             )}

@@ -485,7 +485,8 @@ if (currentPhase === 6) return 80;
 
         {/* Greeting Banner */}
         <div className={styles.greetingBanner}>
-          <span className={styles.greetingText}>
+            <img src="/avatar.png" alt="Avatar" className={styles.bannerAvatar} onError={(e) => e.currentTarget.style.display = 'none'} />
+            <span className={styles.greetingText}>
             {documentsSubmitted ? (
               <>🎉 <strong>Congratulations!</strong> You have successfully completed all the steps. The HR team will coordinate with you for the further steps.</>
             ) : currentPhase === 1 ? (

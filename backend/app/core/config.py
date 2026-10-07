@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     VIBE_COURSE_ID: str = "6a2be954ca990e71be4e3751"  # course ID
     VIBE_COURSE_VERSION_ID: str = "6a2be954ca990e71be4e3752"  # course version ID
 
+    # Anveshan / Question Collection integration
+    QC_API_URL: str = ""
+    ANVESHAN_ANNADATHA_AUTH_KEY: str = ""
+
     # SMTP / Email settings
     EMAIL_SMTP_HOST: str = "smtp.zoho.in"
     EMAIL_SMTP_PORT: int = 465

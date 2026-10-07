@@ -1,3 +1,4 @@
+import logging
 """
 MongoDB client — Motor (async) + PyMongo (sync).
 
@@ -64,6 +65,10 @@ def setup_indexes():
     db.users.create_index("email", unique=True)
 
     db.candidates.create_index("user_id")
+    try:
+        db.candidates.create_index("phone", unique=True, sparse=True)
+    except Exception as e:
+        logging.warning(f"Could not create unique index on candidates.phone: {e}. You may have duplicate phone numbers in your database.")
     db.candidates.create_index("current_phase")
     db.candidates.create_index([("state", ASCENDING), ("district", ASCENDING)])
 

@@ -708,7 +708,7 @@ export default function OnboardingPage() {
         let msg = `HTTP ${response.status}`;
         try {
           const errorData = await response.json();
-          msg = errorData.error || msg;
+          msg = errorData.detail || errorData.error || msg;
         } catch {}
         throw new Error(msg);
       }

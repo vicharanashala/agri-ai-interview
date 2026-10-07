@@ -70,6 +70,7 @@ export default function UploadDocumentsPage() {
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [alreadySubmitted, setAlreadySubmitted] = useState(false);
   const [foundationCompleted, setFoundationCompleted] = useState(false);
+  const [moduleCompleted, setModuleCompleted] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [consentAccepted, setConsentAccepted] = useState(false);
   const [showConsentModal, setShowConsentModal] = useState(false);
@@ -77,7 +78,11 @@ export default function UploadDocumentsPage() {
   const router = useRouter();
 
   useEffect(() => {
-    const checkFoundation = async () => {
+    const checkFoundationAndModule = async () => {
+      const modStored = localStorage.getItem('moduleCompleted');
+      if (modStored === 'true' || modStored === 'completed') {
+        setModuleCompleted(true);
+      }
       const stored = localStorage.getItem('foundationCourseCompleted');
       const lsCompleted = stored === 'true' || stored === 'completed';
       if (lsCompleted) {
@@ -93,13 +98,17 @@ export default function UploadDocumentsPage() {
             setFoundationCompleted(true);
             localStorage.setItem('foundationCourseCompleted', 'completed');
           }
+          if (candidate && candidate.moduleCompleted) {
+            setModuleCompleted(true);
+            localStorage.setItem('moduleCompleted', 'completed');
+          }
         }
       } catch (err) {
         console.error('Failed to verify foundation completion via profile API:', err);
       }
     };
 
-    checkFoundation();
+    checkFoundationAndModule();
   }, []);
 
   useEffect(() => {
@@ -280,7 +289,7 @@ export default function UploadDocumentsPage() {
         throw new Error(data.detail || 'Upload failed.');
       }
 
-      await syncPhaseToDb(5, {
+      await syncPhaseToDb(6, {
         documentsSubmitted: true,
         consentAccepted: true,
         consentTimestamp: new Date().toISOString(),
@@ -348,6 +357,16 @@ export default function UploadDocumentsPage() {
       </div>
     </main>
   );
+
+  if (!moduleCompleted && foundationCompleted) {
+    return renderCenteredState(
+      'Question Collection Required',
+      'You must complete the Question Collection Module before uploading documents.',
+      'Go to Module',
+      () => router.push('/module'),
+      'Locked'
+    );
+  }
 
   if (!foundationCompleted) {
     return renderCenteredState(

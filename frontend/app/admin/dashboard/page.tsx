@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect } from "react";
 import styles from "./dashboard.module.css";
@@ -9,6 +9,7 @@ import EvaluationsTab from "../../../components/admin/EvaluationsTab";
 import OfferLetterTab from "../../../components/admin/OfferLetterTab";
 import DocumentsTab from "../../../components/admin/DocumentsTab";
 import CourseCompletionTab from "../../../components/admin/CourseCompletionTab";
+import ModuleCompletionTab from "../../../components/admin/ModuleCompletionTab";
 import PageSelector from "../../../components/admin/PageSelector";
 import AnalyticsTab from "../../../components/admin/AnalyticsTab";
 
@@ -103,7 +104,7 @@ interface Guidelines {
 }
 
 // Tabs
-type Tab = "live" | "candidates" | "analytics" | "evaluations" | "course-completion" | "anti-cheat" | "settings" | "documents" | "trash";
+type Tab = "live" | "candidates" | "analytics" | "evaluations" | "course-completion" | "module-completion" | "anti-cheat" | "settings" | "documents" | "trash";
 type SettingsTab = "guidelines" | "criteria" | "interview-config" | "anti-cheat" | "offer-letter";
 
 // Chart colors
@@ -114,7 +115,8 @@ const PHASE_LABELS: Record<string, string> = {
   interview: "Interview",
   summary: "Summary",
   foundation: "Foundation Course",
-  documents: "Documents",
+    module: "Question Collection",
+    documents: "Documents",
 };
 
 // Points to the Next.js rewrite proxy so the browser talks to a single origin.
@@ -289,6 +291,11 @@ export default function AdminDashboard() {
         calls.push(
           loadStats().catch(err => console.error("loadStats error:", err)),
           loadCandidates(false, target).catch(err => console.error("loadCandidates error:", err)),
+        );
+      } else if (target === "module-completion") {
+        calls.push(
+          loadStats().catch(err => console.error("loadStats error:", err)),
+          loadCandidates().catch(err => console.error("loadCandidates error:", err)),
         );
       } else if (target === "anti-cheat") {
         calls.push(
@@ -934,6 +941,12 @@ export default function AdminDashboard() {
           🎓 Course Completion
         </button>
         <button
+          className={`${styles.tab} ${activeTab === "module-completion" ? styles.activeTab : ""}`}
+          onClick={() => setActiveTab("module-completion")}
+        >
+          📋 Module Completion
+        </button>
+        <button
           className={`${styles.tab} ${activeTab === "anti-cheat" ? styles.activeTab : ""}`}
           onClick={() => setActiveTab("anti-cheat")}
         >
@@ -1403,6 +1416,15 @@ export default function AdminDashboard() {
         {/* Course Completion Tab */}
         {activeTab === "course-completion" && (
           <CourseCompletionTab
+            adminToken={getAdminToken()}
+            adminApiBase={ADMIN_API_BASE}
+            onRefreshCandidates={loadCandidates}
+          />
+        )}
+
+        {/* Module Completion Tab */}
+        {activeTab === "module-completion" && (
+          <ModuleCompletionTab
             adminToken={getAdminToken()}
             adminApiBase={ADMIN_API_BASE}
             onRefreshCandidates={loadCandidates}

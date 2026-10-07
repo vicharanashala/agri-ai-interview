@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect } from "react";
 import styles from "./dashboard.module.css";
@@ -104,7 +104,7 @@ interface Guidelines {
 }
 
 // Tabs
-type Tab = "live" | "candidates" | "analytics" | "evaluations" | "course-completion" | "module-completion" | "anti-cheat" | "settings" | "documents";
+type Tab = "live" | "candidates" | "analytics" | "evaluations" | "course-completion" | "module-completion" | "anti-cheat" | "settings" | "documents" | "trash";
 type SettingsTab = "guidelines" | "criteria" | "interview-config" | "anti-cheat" | "offer-letter";
 
 // Chart colors

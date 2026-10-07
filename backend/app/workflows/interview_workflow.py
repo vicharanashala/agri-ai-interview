@@ -316,6 +316,11 @@ class InterviewWorkflow:
         # ── 5. Chat history ────────────────────────────────────────────────
         prompt += f"\n=== CONVERSATION HISTORY ===\n{state.get_conversation_context()}\n"
 
+        # ── 6. Strict Language Constraint ──────────────────────────────────
+        prompt += "\nCRITICAL LANGUAGE RULE: This interview MUST be conducted STRICTLY in English. "
+        prompt += "If the candidate answers in Hinglish, Hindi, or any other language, you MUST politely remind them to use English, and ask your next question in English. "
+        prompt += "NEVER generate your question or response in Hinglish or Hindi.\n"
+
         prompt += "\nAsk the next question based on the above context:"
 
         # Try up to 2 times to get a valid question; fall back on failure

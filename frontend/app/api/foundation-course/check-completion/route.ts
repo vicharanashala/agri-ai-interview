@@ -5,6 +5,10 @@ const BACKEND_URL = process.env.BACKEND_URL
 function getCandidateToken(request: NextRequest): string | null {
   const auth = request.headers.get('authorization') ?? ''
   if (auth.startsWith('Bearer ')) return auth.slice(7)
+
+  const redisToken = request.headers.get('x-redis-token')
+  if (redisToken) return redisToken
+
   return request.cookies.get('candidate_session')?.value ?? null
 }
 

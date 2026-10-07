@@ -9,7 +9,7 @@ import HowToUseModal from '@/components/HowToUseModal';
 import BrandLogos from '@/components/BrandLogos';
 import ProfileNavButton from '@/components/ProfileNavButton';
 
-type Phase = 1 | 2 | 3 | 4 | 5;
+type Phase = 1 | 2 | 3 | 4 | 5 | 6;
 
 interface PhaseInfo {
   id: Phase;
@@ -90,14 +90,17 @@ export default function DashboardPage() {
         // 3. Pull milestone flags from DB and localStorage
         const docsSubmitted       = !!candidate.documentsSubmitted;
         const foundationCompleted = lsFoundationCompleted || !!candidate.foundationCourseCompleted;
+        const lsModuleCompleted   = localStorage.getItem('moduleCompleted') === 'true' || localStorage.getItem('moduleCompleted') === 'completed';
+        const moduleCompleted     = lsModuleCompleted || !!candidate.moduleCompleted;
         setDocumentsSubmitted(docsSubmitted);
 
         // 4. Reconstruct actual phase from DB phase + flags
         let actualPhase: Phase = dbPhaseNum;
 
-        if (summaryVisited       && actualPhase < 3) actualPhase = 3;
-        if (foundationCompleted  && actualPhase < 4) actualPhase = 4;
-        if (docsSubmitted        && actualPhase < 5) actualPhase = 5;
+        if (summaryVisited       && actualPhase < 4) actualPhase = 4;
+        if (foundationCompleted  && actualPhase < 5) actualPhase = 5;
+        if (moduleCompleted      && actualPhase < 6) actualPhase = 6;
+        if (docsSubmitted        && actualPhase < 6) actualPhase = 6;
 
         setCurrentPhase(actualPhase);
         setHasCompletedInterview(actualPhase >= 3);
@@ -113,6 +116,12 @@ export default function DashboardPage() {
           localStorage.setItem('foundationCourseCompleted', 'completed');
         } else if (!lsFoundationCompleted) {
           localStorage.removeItem('foundationCourseCompleted');
+        }
+
+        if (candidate.moduleCompleted) {
+          localStorage.setItem('moduleCompleted', 'completed');
+        } else if (!lsModuleCompleted) {
+          localStorage.removeItem('moduleCompleted');
         }
 
         // Persist candidate info in sessionStorage for downstream pages (offer letter, etc.)
@@ -239,14 +248,20 @@ export default function DashboardPage() {
     {
       id: 4,
       name: 'Foundation Course',
-      description: 'Complete the foundation course to unlock document upload',
+      description: 'Complete the foundation course to unlock Ground Truth Module',
       status: currentPhase > 4 ? 'completed' : currentPhase === 4 ? 'current' : 'locked',
     },
     {
       id: 5,
+      name: 'Ground Truth Module',
+      description: 'Complete the tasks on Question collection to unlock document upload',
+      status: currentPhase > 5 ? 'completed' : currentPhase === 5 ? 'current' : 'locked',
+    },
+    {
+      id: 6,
       name: 'Upload Documents',
       description: 'Submit required documents to complete the process',
-      status: documentsSubmitted ? 'completed' : currentPhase === 5 ? 'current' : 'locked',
+      status: documentsSubmitted ? 'completed' : currentPhase === 6 ? 'current' : 'locked',
     },
   ];
 
@@ -293,8 +308,11 @@ export default function DashboardPage() {
           router.push('/foundation-course');
           break;
         case 5:
-          router.push('/upload-documents');
-          break;
+            router.push('/module');
+            break;
+          case 6:
+            router.push('/upload-documents');
+            break;
       }
     }
   };
@@ -316,10 +334,17 @@ export default function DashboardPage() {
   };
  const getCompletionPercentage = () => {
   if (documentsSubmitted) return 100;
-  if (currentPhase === 5) return 75;
-  if (currentPhase === 4) return 50;
-  if (currentPhase === 3) return hasPassed ? 50 : 25;
-  if (currentPhase === 2) return 25;
+if (currentPhase === 6) return 80;
+
+  if (currentPhase === 5) return 60;
+
+  if (currentPhase === 4) return 40;
+
+  if (currentPhase === 3) {
+    return hasPassed ? 40 : 20;
+  }
+
+  if (currentPhase === 2) return 20;
   return 0;
   };
   const globalProgress = getCompletionPercentage();
@@ -327,7 +352,7 @@ export default function DashboardPage() {
   const handleAdvancePhase = (completedPhase: Phase) => {
     // Only advance if the current phase is completed
     // This is called by child pages when they finish their tasks
-    if (completedPhase === currentPhase && currentPhase < 5) {
+    if (completedPhase === currentPhase && currentPhase < 6) {
       const nextPhase = (currentPhase + 1) as Phase;
       setCurrentPhase(nextPhase);
       sessionStorage.setItem('interviewPhase', String(nextPhase));
@@ -462,7 +487,9 @@ export default function DashboardPage() {
             ) : currentPhase === 4 ? (
               <>Step 4 unlocked — it's time to begin your <strong style={{color: '#f59e0b', marginLeft: '0'}}>Foundation Course</strong>!</>
             ) : currentPhase === 5 ? (
-              <>Step 5 unlocked — you're almost there, upload your <strong style={{color: '#f59e0b', marginLeft: '0'}}>documents</strong>!</>
+              <>Step 5 unlocked — your <strong style={{color: '#f59e0b', marginLeft: '0'}}>Ground Truth Module</strong> is ready!</>
+            ) : currentPhase === 6 ? (
+              <>Step 6 unlocked — you're almost there, upload your <strong style={{color: '#f59e0b', marginLeft: '0'}}>documents</strong>!</>
             ) : null}
           </span>
         </div>
@@ -547,8 +574,13 @@ export default function DashboardPage() {
           </div>
 
           {/* Row 2 */}
-          <div className={styles.gridItemEmpty}></div>
-          <div className={styles.gridItemEmpty}></div>
+          <div className={styles.gridItem}>
+            {renderPhaseCard(phases[5])}
+          </div>
+          <div className={styles.hConnector}>
+             {/* Line flows right to left! */}
+             <svg width="100%" height="4"><line x1="100%" y1="2" x2="0" y2="2" stroke={currentPhase > 5 ? "#10b981" : "#e2e8f0"} strokeWidth="4" className={styles.animatedLine} strokeLinecap="round" /></svg>
+          </div>
           <div className={styles.gridItem}>
             {renderPhaseCard(phases[4])}
           </div>

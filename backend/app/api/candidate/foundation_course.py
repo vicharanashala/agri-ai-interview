@@ -43,7 +43,13 @@ def _get_candidate_email_from_db(candidate_id: str) -> str:
     cand = db.candidates.find_one({"_id": ObjectId(candidate_id)}, {"user_id": 1})
     if not cand:
         raise HTTPException(status_code=404, detail="Candidate not found")
-    user = db.users.find_one({"_id": ObjectId(cand["user_id"])}, {"email": 1})
+    # candidates.user_id is stored as a string, while users._id may be either a
+    # string (current signup flow) or an ObjectId (legacy records) — match both.
+    user_id = cand.get("user_id")
+    id_variants = [user_id, str(user_id)] if user_id else []
+    if user_id and ObjectId.is_valid(str(user_id)):
+        id_variants.append(ObjectId(str(user_id)))
+    user = db.users.find_one({"_id": {"$in": id_variants}}, {"email": 1}) if id_variants else None
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return user["email"]

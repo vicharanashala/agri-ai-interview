@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import styles from './EvaluationsTab.module.css';
 
 interface CandidateRow {
   id: string;
@@ -133,7 +134,28 @@ export default function CourseCompletionTab({ adminToken, adminApiBase, onRefres
     </div>
 
       {loading ? (
-        <div>Loading...</div>
+          <div style={{ background: 'white', borderRadius: '8px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+              <thead>
+                <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+                  <th style={{ padding: '12px 16px', textAlign: 'left', color: '#4b5563', fontWeight: 600, fontSize: 12 }}>Name</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left', color: '#4b5563', fontWeight: 600, fontSize: 12 }}>Email</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left', color: '#4b5563', fontWeight: 600, fontSize: 12 }}>Status</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'right', color: '#4b5563', fontWeight: 600, fontSize: 12 }}>Take Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from({ length: limit }).map((_, i) => (
+                  <tr key={i} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                    <td style={{ padding: '16px' }}><div className={styles.skeletonBox} style={{ width: '120px', height: '16px' }} /></td>
+                    <td style={{ padding: '16px' }}><div className={styles.skeletonBox} style={{ width: '150px', height: '16px' }} /></td>
+                    <td style={{ padding: '16px' }}><div className={styles.skeletonBox} style={{ width: '80px', height: '24px', borderRadius: '12px' }} /></td>
+                    <td style={{ padding: '16px' }}><div className={styles.skeletonBox} style={{ width: '60px', height: '28px', marginLeft: 'auto', borderRadius: '6px' }} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
       ) : candidates.length === 0 ? (
         <div style={{ padding: '20px', textAlign: 'center', color: '#6b7280', background: '#f9fafb', borderRadius: '8px' }}>
           No candidates in the foundation course phase.

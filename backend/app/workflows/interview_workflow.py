@@ -294,10 +294,20 @@ class InterviewWorkflow:
                     else:
                         prompt += f"{key}: {val}\n"
 
-        # ── 3. Question number context ──────────────────────────────────────
+        # ── 3. Question number context & Topic Steering ─────────────────────
         prompt += f"\n=== QUESTION {current_q} of {max_q} ===\n"
-        prompt += "You are conducting an agriculture internship interview. "
-        prompt += "Ask ONE short, focused follow-up question (1-2 lines). "
+        prompt += "You are conducting an agriculture internship interview.\n"
+        
+        asked_topics = set(qa.get("topic") for qa in state.qa_pairs if qa.get("topic") and qa.get("topic") != "unknown")
+        remaining_topics = [t for t in self.TOPIC_LABELS if t not in asked_topics]
+        
+        if remaining_topics:
+            target_topic = remaining_topics[0]
+            target_topic_readable = target_topic.replace("_", " ").title()
+            prompt += f"CRITICAL INSTRUCTION: You MUST ask a question specifically about '{target_topic_readable}'. "
+            prompt += f"We need to evaluate the candidate on this mandatory topic. Do not ask about previous topics.\n"
+            
+        prompt += "\nAsk ONE short, focused follow-up question (1-2 lines). "
         prompt += "Return ONLY the question, no preamble.\n"
 
         # ── 4. Question guidelines ──────────────────────────────────────────
@@ -336,8 +346,12 @@ class InterviewWorkflow:
         if not question_text or not self._is_valid_question(question_text):
             question_text = self._fallback_question(state)
 
-        # Infer topic from question text
-        topic = self._infer_topic(question_text)
+        if remaining_topics:
+            topic = remaining_topics[0]
+        else:
+            # Infer topic from question text
+            topic = self._infer_topic(question_text)
+            
         return {"question": question_text, "topic": topic}
 
     FALLBACK_QUESTIONS = [

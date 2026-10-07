@@ -1,4 +1,4 @@
-"""
+﻿"""
 Admin Candidates & Interviews API Endpoints — MongoDB.
 """
 import json
@@ -183,6 +183,16 @@ async def get_candidates(
     db = get_sync_db()
 
     query: Dict[str, Any] = {}
+
+    if status == "trash":
+
+        query["is_deleted"] = True
+
+    else:
+
+        query["is_deleted"] = {"$ne": True}
+
+
     if phase:
         query["current_phase"] = phase
     if phases:
@@ -195,6 +205,22 @@ async def get_candidates(
         query["state"] = {"$regex": state, "$options": "i"}
     if district:
         query["district"] = {"$regex": district, "$options": "i"}
+
+    if search:
+        sl = search.lower()
+        matched_users = list(db.users.find({"email": {"$regex": search, "$options": "i"}}, {"_id": 1}))
+        matched_user_ids = [u["_id"] for u in matched_users]
+        
+        search_or = [
+            {"full_name": {"$regex": search, "$options": "i"}},
+            {"user_id": {"$in": matched_user_ids}}
+        ]
+        
+        # Merge with existing $or if it exists (from phases)
+        if "$or" in query:
+            query["$and"] = [{"$or": query.pop("$or")}, {"$or": search_or}]
+        else:
+            query["$or"] = search_or
 
     cursor = db.candidates.find(query).sort("created_at", -1)
     all_candidates = list(cursor)
@@ -268,12 +294,6 @@ async def get_candidates(
         # Apply interviewStatus filter early if possible
         if interviewStatus and c_interview_status != interviewStatus:
             continue
-
-        # Apply search filter early
-        if search:
-            sl = search.lower()
-            if sl not in raw_full_name.lower() and sl not in (user_email or "").lower():
-                continue
 
         foundation_completed = cand.get("foundation_course_completed", False)
         foundation_status = cand.get("foundation_course_status", "completed" if foundation_completed else "not_started")
@@ -858,7 +878,23 @@ async def get_all_evaluations(
     else:
         query["result"] = {"$in": ["PASS", "FAIL"]}
 
-    cursor = db.interview_sessions.find(query).sort("started_at", -1)
+    if search:
+        sl = search.lower()
+        matched_users = list(db.users.find({"email": {"$regex": search, "$options": "i"}}, {"_id": 1}))
+        matched_user_ids = [u["_id"] for u in matched_users]
+        cand_query = {"$or": [
+            {"full_name": {"$regex": search, "$options": "i"}},
+            {"user_id": {"$in": matched_user_ids}}
+        ]}
+        matched_cands = list(db.candidates.find(cand_query, {"_id": 1}))
+        matched_cand_ids = [c["_id"] for c in matched_cands]
+        # Also, string versions of object ids
+        matched_cand_ids_str = [str(i) for i in matched_cand_ids]
+        matched_cand_ids.extend(matched_cand_ids_str)
+        query["candidate_id"] = {"$in": matched_cand_ids}
+
+    total = db.interview_sessions.count_documents(query)
+    cursor = db.interview_sessions.find(query).sort("started_at", -1).skip(offset).limit(limit)
     sessions = list(cursor)
 
     # Bulk fetches
@@ -980,8 +1016,7 @@ async def get_all_evaluations(
         })
 
 
-    total = len(evals)
-    paginated_evals = evals[offset : offset + limit]
+    paginated_evals = evals
 
     return {"evaluations": paginated_evals, "total": total}
 
@@ -1329,3 +1364,52 @@ async def bypass_candidate_module(candidate_id: str, _admin=Depends(require_admi
         }}
     )
     return {"success": True, "message": "Candidate module bypassed successfully."}
+@router.delete("/candidates/{candidate_id}")
+def delete_candidate(candidate_id: str, db=Depends(get_sync_db), admin=Depends(require_admin_auth)):
+    try:
+        from app.utils.helpers import _get_id_variants
+    except ImportError:
+        def _get_id_variants(val):
+            try: return [val, ObjectId(val)]
+            except: return [val]
+    try:
+        cand = db.candidates.find_one({"_id": {"$in": _get_id_variants(candidate_id)}})
+        if not cand:
+            raise HTTPException(status_code=404, detail="Candidate not found")
+        
+        db.candidates.update_one(
+            {"_id": cand["_id"]},
+            {"$set": {"is_deleted": True, "deleted_at": datetime.now(timezone.utc).isoformat()}}
+        )
+        return {"success": True, "message": "Candidate moved to trash"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/candidates/{candidate_id}/restore")
+def restore_candidate(candidate_id: str, db=Depends(get_sync_db), admin=Depends(require_admin_auth)):
+    try:
+        from app.utils.helpers import _get_id_variants
+    except ImportError:
+        def _get_id_variants(val):
+            try: return [val, ObjectId(val)]
+            except: return [val]
+    try:
+        cand = db.candidates.find_one({"_id": {"$in": _get_id_variants(candidate_id)}})
+        if not cand:
+            raise HTTPException(status_code=404, detail="Candidate not found")
+        
+        db.candidates.update_one(
+            {"_id": cand["_id"]},
+            {"$set": {"is_deleted": False}, "$unset": {"deleted_at": ""}}
+        )
+        return {"success": True, "message": "Candidate restored successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))

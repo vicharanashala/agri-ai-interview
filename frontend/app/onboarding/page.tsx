@@ -394,6 +394,11 @@ export default function OnboardingPage() {
   const getEligibleRole = (): EligibleRole => {
     if (!hasFilledEducationDetails) return null;
     
+    // If they are currently pursuing any degree, they are strictly an Intern
+    if (education.some((e) => e.status === 'Pursuing')) {
+      return 'Intern';
+    }
+    
     if (!hasCompletedQualifyingDegree(education)) return 'Intern';
     
     // Determine maximum role allowed based on education level

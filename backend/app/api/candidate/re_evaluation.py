@@ -134,7 +134,7 @@ async def get_re_evaluation_status(request: Request, interview_id: Optional[str]
             "candidate_id": {"$in": _get_id_variants(session.get("candidate_id"))},
             "status": "completed",
             "result": {"$in": ["PASS", "FAIL", "WITHDRAWN"]},
-            "started_at": {"$lte": session.get("started_at")},
+            "_id": {"$lte": session.get("_id")},
         }) or 1
 
     return {
@@ -158,7 +158,7 @@ async def get_candidate_attempts_history(request: Request):
     cand_variants = _get_id_variants(candidate_id)
     sessions = list(db.interview_sessions.find(
         {"candidate_id": {"$in": cand_variants}, "status": "completed"},
-        sort=[("started_at", 1)],
+        sort=[("_id", 1)],
     ))
 
     history = []

@@ -151,6 +151,9 @@ export default function FoundationCoursePage() {
                   {isChecking ? 'Checking...' : 'Check Completion'}
                 </button>
               </div>
+              <p className={styles.note}>
+                <strong>Note:</strong> Please sign in/sign up on ViBe using the same email address registered on Anveshan. This is required to verify your Foundation Course completion.
+              </p>
             </>
           ) : (
             <>

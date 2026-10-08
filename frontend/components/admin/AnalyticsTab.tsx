@@ -211,7 +211,7 @@ const STAGE_ROWS = [
         kpi: "groundTruthCompleted",
         of: "groundTruthModule",
         label: "Ground Truth Module Completed",
-        tooltip: "Candidates who completed the Ground Truth Module.",
+        tooltip: "Candidates who completed the Ground Truth Module (includes legacy candidates who bypassed this before release).",
         accent: "indigoCard",
         icon: (
           <>

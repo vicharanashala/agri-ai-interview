@@ -1786,7 +1786,6 @@ def mark_candidate_not_joined(candidate_id: str, db=Depends(get_sync_db), admin=
 
 
 @router.get("/stats/kpi-details")
-def get_kpi_details(
     kpi: str = Query(...),
     state: str = Query(None),
     district: str = Query(None),

@@ -736,10 +736,22 @@ def _candidate_funnel(
     """
     date_query = _created_at_range(start_date, end_date)
     cands = list(db.candidates.find({"is_deleted": {"$ne": True}}).sort("created_at", -1))
+    users = list(db.users.find())
 
     groups: Dict[str, List[dict]] = {}
     for c in cands:
         groups.setdefault(str(c.get("user_id") or c["_id"]), []).append(c)
+
+    for u in users:
+        uid = str(u["_id"])
+        if uid not in groups:
+            groups[uid] = [{
+                "_id": u["_id"],
+                "user_id": u["_id"],
+                "email": u.get("email"),
+                "created_at": u.get("created_at"),
+                "name": u.get("name"),
+            }]
 
     def has_profile(c: dict) -> bool:
         return any(c.get(f) for f in _PROFILE_FIELDS)
@@ -845,11 +857,12 @@ def _funnel_kpi_candidates(
     kpi: str,
     state: Optional[str],
     district: Optional[str],
+    role: Optional[str],
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
 ) -> List[dict]:
     flag = FUNNEL_KPIS[kpi]
-    entries = [e for e in _candidate_funnel(db, state, district, start_date, end_date) if e[flag]]
+    entries = [e for e in _candidate_funnel(db, state, district, start_date, end_date, role) if e[flag]]
 
     user_ids = []
     for e in entries:
@@ -1748,13 +1761,14 @@ def get_kpi_details(
     kpi: str = Query(...),
     state: str = Query(None),
     district: str = Query(None),
+    role: str = Query(None),
     start_date: str = Query(None),
     end_date: str = Query(None),
     db=Depends(get_sync_db),
     admin=Depends(require_admin_auth),
 ):
     if kpi in FUNNEL_KPIS:
-        return {"candidates": _funnel_kpi_candidates(db, kpi, state, district, start_date, end_date)}
+        return {"candidates": _funnel_kpi_candidates(db, kpi, state, district, role, start_date, end_date)}
 
     cand_query = {"is_deleted": {"$ne": True}}
     if state and state != "All": cand_query["state"] = state

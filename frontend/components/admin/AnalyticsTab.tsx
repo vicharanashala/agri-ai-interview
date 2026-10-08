@@ -311,22 +311,11 @@ export default function AnalyticsTab({
   const [kpiModalLoading, setKpiModalLoading] = useState(false);
   const [kpiModalState, setKpiModalState] = useState("All");
   const [kpiModalDistrict, setKpiModalDistrict] = useState("All");
+  const [kpiModalRole, setKpiModalRole] = useState("All");
 
-  const [reportStartDate, setReportStartDate] = useState("");
-  const [reportEndDate, setReportEndDate] = useState("");
-  const [reportStatus, setReportStatus] = useState("all");
-  const [reportData, setReportData] = useState<any[]>([]);
-  const [reportLoading, setReportLoading] = useState(false);
-  const [reportPage, setReportPage] = useState(0);
-  const [reportLimit, setReportLimit] = useState(10);
 
-  // The report API returns the full list, so paginate client-side
-  const pagedReportData = useMemo(
-    () => reportData.slice(reportPage * reportLimit, (reportPage + 1) * reportLimit),
-    [reportData, reportPage, reportLimit]
-  );
 
-  const fetchKpiModalData = async (type: string, st: string, dist: string) => {
+  const fetchKpiModalData = async (type: string, st: string, dist: string, role: string) => {
     setKpiModalLoading(true);
     try {
       const token = getAdminToken();
@@ -334,6 +323,7 @@ export default function AnalyticsTab({
       const query = new URLSearchParams({ kpi: type });
       if (st !== "All") query.append("state", st);
       if (dist !== "All") query.append("district", dist);
+      if (role !== "All") query.append("role", role);
       // The modal has no date inputs of its own; it lists the KPI section's registration-date range
       if (kpiStartDate) query.append("start_date", kpiStartDate);
       if (kpiEndDate) query.append("end_date", kpiEndDate);
@@ -350,61 +340,25 @@ export default function AnalyticsTab({
     }
   };
 
-  // The modal opens on the KPI section's State/District so its list matches the clicked card's count
-  const openKpiModal = (type: string, title: string, st = "All", dist = "All") => {
+  // The modal opens on the KPI section's filters so its list matches the clicked card's count
+  const openKpiModal = (type: string, title: string, st = "All", dist = "All", role = "All") => {
     setKpiModalType(type);
     setKpiModalTitle(title);
     setKpiModalOpen(true);
     setKpiModalState(st);
     setKpiModalDistrict(dist);
-    // A changed State/District is fetched by the modal filter effect below; fetch here only when it won't fire
-    if (st === kpiModalState && dist === kpiModalDistrict) fetchKpiModalData(type, st, dist);
+    setKpiModalRole(role);
+    // A changed filter is fetched by the modal filter effect below; fetch here only when it won't fire
+    if (st === kpiModalState && dist === kpiModalDistrict && role === kpiModalRole) fetchKpiModalData(type, st, dist, role);
   };
 
-  const fetchDetailedReport = async () => {
-    setReportLoading(true);
-    try {
-      const token = getAdminToken();
-      const headers: Record<string, string> = token ? { "X-Admin-Token": token } : {};
-      const query = new URLSearchParams();
-      if (reportStartDate) query.append("start_date", reportStartDate);
-      if (reportEndDate) query.append("end_date", reportEndDate);
-      if (reportStatus && reportStatus !== "all") query.append("status_filter", reportStatus);
-      
-      const res = await fetch(`${adminApiBase}/api/admin/stats/report?` + query.toString(), { headers, credentials: "include" });
-      if (res.ok) {
-        const data = await res.json();
-        setReportData(data.report || []);
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setReportLoading(false);
-    }
-  };
 
-  useEffect(() => {
-    setReportPage(0);
-    fetchDetailedReport();
-  }, [reportStartDate, reportEndDate, reportStatus]);
-
-  const resetReportFilters = () => {
-    setReportPage(0);
-    if (!reportStartDate && !reportEndDate && reportStatus === "all") {
-      // Filters already at defaults, so the effect above won't fire; refresh directly
-      fetchDetailedReport();
-      return;
-    }
-    setReportStartDate("");
-    setReportEndDate("");
-    setReportStatus("all");
-  };
 
   useEffect(() => {
     if (kpiModalOpen) {
-      fetchKpiModalData(kpiModalType, kpiModalState, kpiModalDistrict);
+      fetchKpiModalData(kpiModalType, kpiModalState, kpiModalDistrict, kpiModalRole);
     }
-  }, [kpiModalState, kpiModalDistrict]);
+  }, [kpiModalState, kpiModalDistrict, kpiModalRole]);
 
   // Independent Filters
   const [kpiState, setKpiState] = useState<string>("All");
@@ -683,7 +637,7 @@ export default function AnalyticsTab({
         data-tooltip-placement={kpiTooltip.kpi === card.kpi ? kpiTooltip.placement : "above"}
         onMouseEnter={(e) => placeKpiTooltip(e.currentTarget, card.kpi)}
         onFocus={(e) => placeKpiTooltip(e.currentTarget, card.kpi)}
-        onClick={() => openKpiModal(card.kpi, card.label, kpiState, kpiDistrict)}
+        onClick={() => openKpiModal(card.kpi, card.label, kpiState, kpiDistrict, kpiRole)}
       >
         <span className={styles.kpiHeader}>
           <span className={styles.kpiIcon}>
@@ -778,136 +732,7 @@ export default function AnalyticsTab({
         ))}
       </div>
 
-        <div className={styles.reportContainer}>
-          <div className={styles.reportHeader}>
-            <h2 className={styles.reportTitle}>Detailed Candidate Report</h2>
-          </div>
-            <div className={styles.reportBody}>
-              <div className={styles.reportFilters}>
-                <div className={styles.reportField}>
-                  <label>Start Date</label>
-                  <input type="date" value={reportStartDate} onChange={e => setReportStartDate(e.target.value)} />
-                </div>
-                <div className={styles.reportField}>
-                  <label>End Date</label>
-                  <input type="date" value={reportEndDate} onChange={e => setReportEndDate(e.target.value)} />
-                </div>
-                <div className={styles.reportField}>
-                  <label>Status</label>
-                  <select value={reportStatus} onChange={e => setReportStatus(e.target.value)}>
-                    <option value="all">All Candidates</option>
-                    <option value="onboarded">Onboarded / Selected</option>
-                    <option value="interviewing">Attended Interview</option>
-                    <option value="docs_not_selected">Docs Submitted but Not Selected</option>
-                  </select>
-                </div>
-                <div className={styles.reportActions}>
-                  <button type="button" className={styles.resetBtn} onClick={resetReportFilters}>
-                    Reset
-                  </button>
-                </div>
-              </div>
-              
-              {reportLoading ? (
-                <div className={`${styles.reportTableCard} ${styles.reportEmpty}`}>Loading report...</div>
-              ) : (
-                <div className={styles.reportTableCard}>
-                <div className={styles.reportTableWrapper}>
-                  <table className={styles.table}>
-                    <thead>
-                      <tr>
-                        <th className={styles.reportNameCol}>Name</th>
-                        <th className={styles.reportEmailCol}>Email</th>
-                        {reportStatus === "interviewing" || reportStatus === "attended_interview" ? (
-                          <>
-                            <th className={styles.attemptCountCol}>Total Attempts</th>
-                            <th className={styles.attemptDateCol}>Date</th>
-                            <th className={styles.attemptResultCol}>Result</th>
-                            <th className={styles.attemptScoreCol}>Score</th>
-                          </>
-                        ) : reportStatus === "docs_not_selected" ? (
-                          <>
-                            <th>Phone</th>
-                            <th>Docs Submitted Date</th>
-                          </>
-                        ) : (
-                          <>
-                            <th>Phone</th>
-                            <th>Joined Date</th>
-                            {reportStatus !== "onboarded" && <th>Current Phase</th>}
-                          </>
-                        )}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {pagedReportData.length > 0 ? pagedReportData.map((cand: any) => (
-                        <tr key={cand.id}>
-                          <td>{cand.fullName}</td>
-                          <td>{cand.email}</td>
-                          {reportStatus === "interviewing" || reportStatus === "attended_interview" ? (
-                            <>
-                              <td className={styles.attemptCountCol}>{cand.total_attempts}</td>
-                              {cand.attempts && cand.attempts.length > 0 ? (
-                                <>
-                                  {/* One line per attempt in each column so date/result/score stay aligned */}
-                                  <td className={styles.attemptDateCol}>
-                                    {cand.attempts.map((att: any, idx: number) => (
-                                      <div key={idx} className={styles.attemptLine}>{formatDisplayDate(att.date)}</div>
-                                    ))}
-                                  </td>
-                                  <td className={styles.attemptResultCol}>
-                                    {cand.attempts.map((att: any, idx: number) => (
-                                      <div key={idx} className={styles.attemptLine}>{att.result || 'PENDING'}</div>
-                                    ))}
-                                  </td>
-                                  <td className={styles.attemptScoreCol}>
-                                    {cand.attempts.map((att: any, idx: number) => (
-                                      <div key={idx} className={styles.attemptLine}>{(typeof att.score === 'number' ? att.score : 0).toFixed(1)}</div>
-                                    ))}
-                                  </td>
-                                </>
-                              ) : (
-                                <td colSpan={3}>No details</td>
-                              )}
-                            </>
-                          ) : reportStatus === "docs_not_selected" ? (
-                            <>
-                              <td>{cand.phone}</td>
-                              <td>{formatDisplayDate(cand.documents_submitted_at)}</td>
-                            </>
-                          ) : (
-                            <>
-                              <td>{cand.phone}</td>
-                              <td>{formatDisplayDate(cand.created_at)}</td>
-                              {reportStatus !== "onboarded" && <td><span className={styles.statusBadge}>{cand.current_phase}</span></td>}
-                            </>
-                          )}
-                        </tr>
-                      )) : (
-                        <tr>
-                          <td colSpan={6} className={styles.reportEmpty}>
-                            <div className={styles.reportEmptyTitle}>No candidates found</div>
-                            <div>Try adjusting the date range or status filter.</div>
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-                {reportData.length > 0 && (
-                  <PageSelector
-                    total={reportData.length}
-                    page={reportPage}
-                    limit={reportLimit}
-                    onPageChange={setReportPage}
-                    onLimitChange={(n) => { setReportLimit(n); setReportPage(0); }}
-                    loading={reportLoading}
-                  />
-                )}
-                </div>
-              )}
-            </div>
-        </div>
+
 
         <div className={styles.distributionContainer}>
         <div className={styles.tableHeaderRow}>
@@ -1123,6 +948,14 @@ export default function AnalyticsTab({
                   ))}
                 </select>
               )}
+              <select value={kpiModalRole} onChange={(e) => setKpiModalRole(e.target.value)} style={{ padding: '8px', border: '1px solid #cbd5e1', borderRadius: '4px' }}>
+                <option value="All">All Roles</option>
+                <option value="Intern">Intern</option>
+                <option value="YP">YP</option>
+                <option value="Junior">Junior</option>
+                <option value="Agri">Agri</option>
+                <option value="Senior">Senior</option>
+              </select>
             </div>
 
             {kpiModalLoading ? (

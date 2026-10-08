@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   BarChart,
   Bar,
@@ -15,8 +15,269 @@ import {
 import styles from "./AnalyticsTab.module.css";
 import PageSelector from "./PageSelector";
 
-// KPI modal type prefix for the stage cards; the suffix is a candidate current_phase value
-const PHASE_KPI_PREFIX = "phase:";
+// KPI overview funnel cards. `kpi` is both the key in the overview `funnel` counts and the kpi-details
+// type the card's modal loads; `of` is the card whose count is this card's denominator.
+const FUNNEL_CARDS = [
+  {
+    kpi: "registered",
+    label: "Total Candidates Registered",
+    tooltip: "Total candidates who created an account on Anveshan.",
+    accent: "blueCard",
+    icon: (
+      <>
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+        <circle cx="9" cy="7" r="4"></circle>
+        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+      </>
+    ),
+  },
+  {
+    kpi: "profileCompleted",
+    of: "registered",
+    label: "Total Candidates Completed Profile",
+    tooltip: "Candidates who submitted their profile, out of all registered candidates.",
+    accent: "skyCard",
+    icon: (
+      <>
+        <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+        <rect x="8" y="2" width="8" height="4" rx="1"></rect>
+        <polyline points="9 14 11 16 15 12"></polyline>
+      </>
+    ),
+  },
+  {
+    kpi: "attendedInterview",
+    of: "profileCompleted",
+    label: "Total Candidates Attended Interview",
+    tooltip: "Candidates who actually attended the interview, out of completed profiles.",
+    accent: "amberCard",
+    icon: (
+      <>
+        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+        <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+        <line x1="12" y1="19" x2="12" y2="23"></line>
+        <line x1="8" y1="23" x2="16" y2="23"></line>
+      </>
+    ),
+  },
+  {
+    kpi: "passedInterview",
+    of: "attendedInterview",
+    label: "Total Candidates Passed Interview",
+    tooltip: "Candidates who passed the interview, out of those who attended.",
+    accent: "greenCard",
+    icon: (
+      <>
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+        <polyline points="22 4 12 14.01 9 11.01"></polyline>
+      </>
+    ),
+  },
+  {
+    kpi: "failedInterview",
+    of: "attendedInterview",
+    label: "Total Candidates Failed",
+    tooltip: "Candidates who failed the interview, out of those who attended.",
+    accent: "redCard",
+    icon: (
+      <>
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="15" y1="9" x2="9" y2="15"></line>
+        <line x1="9" y1="9" x2="15" y2="15"></line>
+      </>
+    ),
+  },
+  {
+    kpi: "reattempted",
+    of: "attendedInterview",
+    label: "Total Candidates Took Reattempt",
+    tooltip: "Candidates who took a reattempt, out of those who attended.",
+    accent: "purpleCard",
+    icon: (
+      <>
+        <polyline points="23 4 23 10 17 10"></polyline>
+        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+      </>
+    ),
+  },
+] as const;
+
+// Post-interview funnel rows below the first row; each card's `of` again names its denominator card
+const STAGE_ROWS = [
+  {
+    title: "Foundation Course",
+    cards: [
+      {
+        kpi: "foundationPhase",
+        of: "passedInterview",
+        label: "Candidates in Foundation Phase",
+        tooltip: "Candidates who passed the interview and are now in the Foundation Course stage.",
+        accent: "tealCard",
+        icon: (
+          <>
+            <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
+            <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>
+          </>
+        ),
+      },
+      {
+        kpi: "foundationInProgress",
+        of: "foundationPhase",
+        label: "Foundation Course In Progress",
+        tooltip: "Candidates currently progressing through the Foundation Course.",
+        accent: "tealCard",
+        icon: (
+          <>
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </>
+        ),
+      },
+      {
+        kpi: "foundationNotStarted",
+        of: "foundationPhase",
+        label: "Foundation Course Not Started",
+        tooltip: "Candidates who reached the Foundation Course stage but have not started the course yet.",
+        accent: "tealCard",
+        icon: (
+          <>
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="10" y1="15" x2="10" y2="9"></line>
+            <line x1="14" y1="15" x2="14" y2="9"></line>
+          </>
+        ),
+      },
+      {
+        kpi: "foundationCompleted",
+        of: "foundationPhase",
+        label: "Foundation Course Completed",
+        tooltip: "Candidates who completed the Foundation Course.",
+        accent: "tealCard",
+        icon: (
+          <>
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+          </>
+        ),
+      },
+    ],
+  },
+  {
+    title: "Ground Truth Module",
+    cards: [
+      {
+        kpi: "groundTruthModule",
+        of: "foundationCompleted",
+        label: "Candidates in Ground Truth Module",
+        tooltip: "Foundation Course completers who are now in the Ground Truth Module.",
+        accent: "indigoCard",
+        icon: (
+          <>
+            <circle cx="12" cy="12" r="10"></circle>
+            <circle cx="12" cy="12" r="6"></circle>
+            <circle cx="12" cy="12" r="2"></circle>
+          </>
+        ),
+      },
+      {
+        kpi: "groundTruthInProgress",
+        of: "groundTruthModule",
+        label: "Ground Truth Module In Progress",
+        tooltip: "Candidates currently progressing through the Ground Truth Module.",
+        accent: "indigoCard",
+        icon: (
+          <>
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </>
+        ),
+      },
+      {
+        kpi: "groundTruthNotStarted",
+        of: "groundTruthModule",
+        label: "Ground Truth Module Not Started",
+        tooltip: "Candidates who reached the Ground Truth Module but have not started it yet.",
+        accent: "indigoCard",
+        icon: (
+          <>
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="10" y1="15" x2="10" y2="9"></line>
+            <line x1="14" y1="15" x2="14" y2="9"></line>
+          </>
+        ),
+      },
+      {
+        kpi: "groundTruthCompleted",
+        of: "groundTruthModule",
+        label: "Ground Truth Module Completed",
+        tooltip: "Candidates who completed the Ground Truth Module.",
+        accent: "indigoCard",
+        icon: (
+          <>
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+          </>
+        ),
+      },
+    ],
+  },
+  {
+    title: "Documents & Final Selection",
+    cards: [
+      {
+        kpi: "documentsPhase",
+        of: "groundTruthCompleted",
+        label: "Candidates in Document Phase",
+        tooltip: "Ground Truth completers who are now in the Documents stage.",
+        accent: "slateCard",
+        icon: (
+          <>
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+          </>
+        ),
+      },
+      {
+        kpi: "documentsSubmitted",
+        of: "documentsPhase",
+        label: "Documents Successfully Submitted",
+        tooltip: "Candidates who successfully submitted their required documents.",
+        accent: "slateCard",
+        icon: (
+          <>
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <polyline points="9 15 11 17 15 13"></polyline>
+          </>
+        ),
+      },
+      {
+        kpi: "selectedOnboarded",
+        of: "documentsSubmitted",
+        label: "Selected / Onboarded",
+        tooltip: "Candidates who submitted their documents and were selected/onboarded by the admin.",
+        accent: "greenCard",
+        icon: (
+          <>
+            <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+            <circle cx="8.5" cy="7" r="4"></circle>
+            <polyline points="17 11 19 13 23 9"></polyline>
+          </>
+        ),
+      },
+    ],
+  },
+] as const;
+
+const TOOLTIP_PLACEMENTS = ["above", "below", "right", "left"] as const;
+type TooltipPlacement = (typeof TOOLTIP_PLACEMENTS)[number];
+const TOOLTIP_GAP = 8;
+
+type FunnelCard = (typeof FUNNEL_CARDS)[number] | (typeof STAGE_ROWS)[number]["cards"][number];
+
+// KPI modals that list interview attempts (the rest show phone / joined date / phase)
+const ATTEMPT_KPIS = new Set(["attendedInterview", "passedInterview", "failedInterview", "reattempted", "totalPass", "totalFail"]);
 
 // Display format for every date in the Analytics tab: "DD Mon YYYY" (e.g. 03 Oct 2026).
 // Built from en-US parts because en-IN/en-GB render September as "Sept".
@@ -70,17 +331,17 @@ export default function AnalyticsTab({
     try {
       const token = getAdminToken();
       const headers: Record<string, string> = token ? { "X-Admin-Token": token } : {};
-      // Stage modals ("phase:<current_phase>") reuse the totalCandidates list and filter it by phase
-      const phase = type.startsWith(PHASE_KPI_PREFIX) ? type.slice(PHASE_KPI_PREFIX.length) : null;
-      const query = new URLSearchParams({ kpi: phase ? "totalCandidates" : type });
+      const query = new URLSearchParams({ kpi: type });
       if (st !== "All") query.append("state", st);
       if (dist !== "All") query.append("district", dist);
+      // The modal has no date inputs of its own; it lists the KPI section's registration-date range
+      if (kpiStartDate) query.append("start_date", kpiStartDate);
+      if (kpiEndDate) query.append("end_date", kpiEndDate);
 
       const res = await fetch(`${adminApiBase}/api/admin/stats/kpi-details?` + query.toString(), { headers, credentials: "include" });
       if (res.ok) {
         const data = await res.json();
-        const candidates = data.candidates || [];
-        setKpiModalData(phase ? candidates.filter((c: any) => c.current_phase === phase) : candidates);
+        setKpiModalData(data.candidates || []);
       }
     } catch (e) {
       console.error(e);
@@ -89,13 +350,15 @@ export default function AnalyticsTab({
     }
   };
 
-  const openKpiModal = (type: string, title: string) => {
+  // The modal opens on the KPI section's State/District so its list matches the clicked card's count
+  const openKpiModal = (type: string, title: string, st = "All", dist = "All") => {
     setKpiModalType(type);
     setKpiModalTitle(title);
     setKpiModalOpen(true);
-    setKpiModalState("All");
-    setKpiModalDistrict("All");
-    fetchKpiModalData(type, "All", "All");
+    setKpiModalState(st);
+    setKpiModalDistrict(dist);
+    // A changed State/District is fetched by the modal filter effect below; fetch here only when it won't fire
+    if (st === kpiModalState && dist === kpiModalDistrict) fetchKpiModalData(type, st, dist);
   };
 
   const fetchDetailedReport = async () => {
@@ -146,6 +409,12 @@ export default function AnalyticsTab({
   // Independent Filters
   const [kpiState, setKpiState] = useState<string>("All");
   const [kpiDistrict, setKpiDistrict] = useState<string>("All");
+  // Registration-date range (YYYY-MM-DD), same semantics as the Detailed Candidate Report's dates
+  const [kpiStartDate, setKpiStartDate] = useState("");
+  const [kpiEndDate, setKpiEndDate] = useState("");
+  const kpiStatsRequestId = useRef(0);
+  const kpiSectionRef = useRef<HTMLDivElement>(null);
+  const [kpiTooltip, setKpiTooltip] = useState<{ kpi: string; placement: TooltipPlacement }>({ kpi: "", placement: "above" });
 
   const [tableState, setTableState] = useState<string>("All");
   const [tableDistrict, setTableDistrict] = useState<string>("All");
@@ -179,7 +448,7 @@ export default function AnalyticsTab({
 
   useEffect(() => {
     fetchKpiStats();
-  }, [kpiState, kpiDistrict]);
+  }, [kpiState, kpiDistrict, kpiStartDate, kpiEndDate]);
 
   const fetchInitialData = async () => {
     setLoading(true);
@@ -196,7 +465,7 @@ export default function AnalyticsTab({
         if (phaseState === "All" && phaseDistrict === "All") {
           setPhaseStats(d);
         }
-        if (kpiState === "All" && kpiDistrict === "All") {
+        if (kpiState === "All" && kpiDistrict === "All" && !kpiStartDate && !kpiEndDate) {
           setKpiStats(d);
         }
       }
@@ -209,7 +478,8 @@ export default function AnalyticsTab({
   };
 
   const fetchKpiStats = async () => {
-    if (kpiState === "All" && kpiDistrict === "All" && globalStats) {
+    const requestId = ++kpiStatsRequestId.current;
+    if (kpiState === "All" && kpiDistrict === "All" && !kpiStartDate && !kpiEndDate && globalStats) {
       setKpiStats(globalStats);
       return;
     }
@@ -219,9 +489,12 @@ export default function AnalyticsTab({
       const url = new URL(`${adminApiBase}/api/admin/stats/overview`);
       if (kpiState !== "All") url.searchParams.append("state", kpiState);
       if (kpiDistrict !== "All") url.searchParams.append("district", kpiDistrict);
-      
+      if (kpiStartDate) url.searchParams.append("start_date", kpiStartDate);
+      if (kpiEndDate) url.searchParams.append("end_date", kpiEndDate);
+
       const res = await fetch(url.toString(), { headers });
-      if (res.ok) setKpiStats(await res.json());
+      // With four filters, an older slower response must not overwrite the latest one
+      if (res.ok && requestId === kpiStatsRequestId.current) setKpiStats(await res.json());
     } catch (error) {
       console.error("Failed to fetch kpi stats:", error);
     }
@@ -274,7 +547,6 @@ export default function AnalyticsTab({
   const unifiedDistricts = useMemo(() => getAvailableDistricts(unifiedState), [geoStats, unifiedState]);
   const top10Districts = useMemo(() => getAvailableDistricts(top10State), [geoStats, top10State]);
 
-  const isStageModal = kpiModalType.startsWith(PHASE_KPI_PREFIX);
   const kpiModalDistricts = useMemo(() => getAvailableDistricts(kpiModalState), [geoStats, kpiModalState]);
 
   // Distribution Table Data
@@ -370,19 +642,78 @@ export default function AnalyticsTab({
     { name: "Rejected", value: phaseStats?.totalFail || 0 },
   ];
 
+  // Tooltips open above their card unless that would cover a KPI heading (the row titles sit just above the cards)
+  // or leave the viewport; then they try below, right and left, in that order.
+  const placeKpiTooltip = (cardEl: HTMLElement, kpi: string) => {
+    const tip = cardEl.querySelector<HTMLElement>("[role='tooltip']");
+    if (!tip || !kpiSectionRef.current) return;
+    const card = cardEl.getBoundingClientRect();
+    const w = card.width;
+    const h = tip.offsetHeight;
+    const midY = card.top + card.height / 2;
+    const rects: Record<TooltipPlacement, { left: number; right: number; top: number; bottom: number }> = {
+      above: { left: card.left, right: card.right, top: card.top - TOOLTIP_GAP - h, bottom: card.top - TOOLTIP_GAP },
+      below: { left: card.left, right: card.right, top: card.bottom + TOOLTIP_GAP, bottom: card.bottom + TOOLTIP_GAP + h },
+      right: { left: card.right + TOOLTIP_GAP, right: card.right + TOOLTIP_GAP + w, top: midY - h / 2, bottom: midY + h / 2 },
+      left: { left: card.left - TOOLTIP_GAP - w, right: card.left - TOOLTIP_GAP, top: midY - h / 2, bottom: midY + h / 2 },
+    };
+    const headings = Array.from(kpiSectionRef.current.querySelectorAll("[data-kpi-heading]")).map((el) => el.getBoundingClientRect());
+    const viewportWidth = document.documentElement.clientWidth;
+    const placement = TOOLTIP_PLACEMENTS.find((p) => {
+      const r = rects[p];
+      const fits = r.top >= 0 && r.left >= 0 && r.bottom <= window.innerHeight && r.right <= viewportWidth;
+      return fits && !headings.some((hd) => r.left < hd.right && r.right > hd.left && r.top < hd.bottom && r.bottom > hd.top);
+    }) ?? "above";
+    setKpiTooltip({ kpi, placement });
+  };
+
+  const renderKpiCard = (card: FunnelCard) => {
+    const count = kpiStats?.funnel?.[card.kpi] || 0;
+    const total = "of" in card ? kpiStats?.funnel?.[card.of] || 0 : null;
+    const tooltipId = `kpi-tooltip-${card.kpi}`;
+    return (
+      <button
+        key={card.kpi}
+        type="button"
+        className={`${styles.kpiCard} ${styles[card.accent]}`}
+        aria-describedby={tooltipId}
+        data-tooltip-placement={kpiTooltip.kpi === card.kpi ? kpiTooltip.placement : "above"}
+        onMouseEnter={(e) => placeKpiTooltip(e.currentTarget, card.kpi)}
+        onFocus={(e) => placeKpiTooltip(e.currentTarget, card.kpi)}
+        onClick={() => openKpiModal(card.kpi, card.label, kpiState, kpiDistrict)}
+      >
+        <span className={styles.kpiHeader}>
+          <span className={styles.kpiIcon}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              {card.icon}
+            </svg>
+          </span>
+          <span className={styles.kpiLabel}>{card.label}</span>
+        </span>
+        <span className={styles.kpiValue}>
+          {count}
+          {total !== null && <span className={styles.kpiValueTotal}> / {total}</span>}
+        </span>
+        <span role="tooltip" id={tooltipId} className={styles.kpiTooltip}>{card.tooltip}</span>
+      </button>
+    );
+  };
+
   if (loading) {
     return (
       <div className={styles.dashboardContainer}>
-        <div className={styles.kpiPrimaryGrid}>
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className={styles.skeletonBox} style={{ height: '88px', borderRadius: '8px' }} />
+        <div className={styles.kpiGrid} style={{ marginBottom: '24px' }}>
+          {FUNNEL_CARDS.map((card) => (
+            <div key={card.kpi} className={styles.skeletonBox} style={{ height: '112px', borderRadius: '8px' }} />
           ))}
         </div>
-        <div className={styles.kpiSecondaryGrid} style={{ marginBottom: '24px' }}>
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className={styles.skeletonBox} style={{ height: '72px', borderRadius: '8px' }} />
-          ))}
-        </div>
+        {STAGE_ROWS.map((row) => (
+          <div key={row.title} className={styles.kpiStageGrid} data-cols={row.cards.length} style={{ marginBottom: '24px' }}>
+            {row.cards.map((card) => (
+              <div key={card.kpi} className={styles.skeletonBox} style={{ height: '112px', borderRadius: '8px' }} />
+            ))}
+          </div>
+        ))}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
           <div className={styles.skeletonBox} style={{ height: '300px', borderRadius: '12px' }} />
           <div className={styles.skeletonBox} style={{ height: '300px', borderRadius: '12px' }} />
@@ -393,10 +724,10 @@ export default function AnalyticsTab({
 
   return (
     <div className={styles.dashboardContainer}>
-      <div className={styles.kpiContainer}>
-        <div className={styles.chartHeaderSpace}>
-          <h2 className={styles.sectionTitle}>KPI OVERVIEW CARDS</h2>
-          <div className={styles.filters}>
+      <div className={styles.kpiContainer} ref={kpiSectionRef}>
+        <div className={`${styles.chartHeaderSpace} ${styles.kpiHeaderRow}`}>
+          <h2 className={styles.sectionTitle} data-kpi-heading>KPI OVERVIEW CARDS</h2>
+          <div className={`${styles.filters} ${styles.kpiFilters}`}>
             <label>Select State:</label>
             <select value={kpiState} onChange={(e) => { setKpiState(e.target.value); setKpiDistrict("All"); }}>
               <option value="All">All</option>
@@ -415,129 +746,24 @@ export default function AnalyticsTab({
                 </select>
               </>
             )}
+            <label htmlFor="kpi-start-date">Start Date:</label>
+            <input id="kpi-start-date" type="date" value={kpiStartDate} max={kpiEndDate || undefined} onChange={(e) => setKpiStartDate(e.target.value)} />
+            <label htmlFor="kpi-end-date">End Date:</label>
+            <input id="kpi-end-date" type="date" value={kpiEndDate} min={kpiStartDate || undefined} onChange={(e) => setKpiEndDate(e.target.value)} />
           </div>
         </div>
-        <div className={styles.kpiPrimaryGrid}>
-          <div className={`${styles.kpiCard} ${styles.blueCard}`} onClick={() => openKpiModal('totalCandidates', 'Total Candidates Registered')}>
-            <span className={styles.kpiIcon}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                <circle cx="9" cy="7" r="4"></circle>
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-              </svg>
-            </span>
-            <div className={styles.kpiText}>
-              <div className={styles.kpiLabel}>Total Candidates Registered</div>
-              <div className={styles.kpiValue}>{kpiStats?.totalCandidates || 0}</div>
-            </div>
-          </div>
-          <div className={`${styles.kpiCard} ${styles.purpleCard}`} onClick={() => openKpiModal('totalSelected', 'Total Candidates Selected')}>
-            <span className={styles.kpiIcon}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                <circle cx="8.5" cy="7" r="4"></circle>
-                <line x1="20" y1="8" x2="20" y2="14"></line>
-                <line x1="23" y1="11" x2="17" y2="11"></line>
-              </svg>
-            </span>
-            <div className={styles.kpiText}>
-              <div className={styles.kpiLabel}>Total Candidates Selected</div>
-              <div className={styles.kpiValue}>{kpiStats?.totalSelected || 0}</div>
-            </div>
-          </div>
-          <div className={`${styles.kpiCard} ${styles.greenCard}`} onClick={() => openKpiModal('totalPass', 'Total Candidates Passed')}>
-            <span className={styles.kpiIcon}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                <polyline points="22 4 12 14.01 9 11.01"></polyline>
-              </svg>
-            </span>
-            <div className={styles.kpiText}>
-              <div className={styles.kpiLabel}>Total Candidates Passed</div>
-              <div className={styles.kpiValue}>{kpiStats?.totalPass || 0}</div>
-            </div>
-          </div>
-          <div className={`${styles.kpiCard} ${styles.redCard}`} onClick={() => openKpiModal('totalFail', 'Total Candidates Failed')}>
-            <span className={styles.kpiIcon}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="15" y1="9" x2="9" y2="15"></line>
-                <line x1="9" y1="9" x2="15" y2="15"></line>
-              </svg>
-            </span>
-            <div className={styles.kpiText}>
-              <div className={styles.kpiLabel}>Total Candidates Failed</div>
-              <div className={styles.kpiValue}>{kpiStats?.totalFail || 0}</div>
-            </div>
-          </div>
+        <div className={styles.kpiGrid}>
+          {FUNNEL_CARDS.map(renderKpiCard)}
         </div>
-
-        <div className={styles.kpiSecondaryGrid}>
-          <div className={`${styles.kpiCardSmall} ${styles.stageOnboarding}`} onClick={() => openKpiModal(`${PHASE_KPI_PREFIX}onboarding`, "Onboarding Candidates")}>
-            <span className={styles.kpiIconSmall}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
-                <rect x="8" y="2" width="8" height="4" rx="1"></rect>
-              </svg>
-            </span>
-            <div className={styles.kpiText}>
-              <div className={styles.kpiLabelSmall}>Onboarding</div>
-              <div className={styles.kpiValueSmall}>{kpiStats?.byPhase?.onboarding || 0}</div>
+        {STAGE_ROWS.map((row) => (
+          <div key={row.title} className={styles.kpiStageRow}>
+            <h3 className={styles.kpiRowTitle} data-kpi-heading>{row.title}</h3>
+            {/* Each row keeps its own column count (4, 4, 3) */}
+            <div className={styles.kpiStageGrid} data-cols={row.cards.length}>
+              {row.cards.map(renderKpiCard)}
             </div>
           </div>
-          <div className={`${styles.kpiCardSmall} ${styles.stageInterview}`} onClick={() => openKpiModal(`${PHASE_KPI_PREFIX}interview`, "Interview Candidates")}>
-            <span className={styles.kpiIconSmall}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                <line x1="12" y1="19" x2="12" y2="23"></line>
-                <line x1="8" y1="23" x2="16" y2="23"></line>
-              </svg>
-            </span>
-            <div className={styles.kpiText}>
-              <div className={styles.kpiLabelSmall}>Interview</div>
-              <div className={styles.kpiValueSmall}>{kpiStats?.byPhase?.interview || 0}</div>
-            </div>
-          </div>
-          <div className={`${styles.kpiCardSmall} ${styles.stageSummary}`} onClick={() => openKpiModal(`${PHASE_KPI_PREFIX}summary`, "Summary Candidates")}>
-            <span className={styles.kpiIconSmall}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                <polyline points="14 2 14 8 20 8"></polyline>
-                <line x1="16" y1="13" x2="8" y2="13"></line>
-                <line x1="16" y1="17" x2="8" y2="17"></line>
-              </svg>
-            </span>
-            <div className={styles.kpiText}>
-              <div className={styles.kpiLabelSmall}>Summary</div>
-              <div className={styles.kpiValueSmall}>{kpiStats?.byPhase?.summary || 0}</div>
-            </div>
-          </div>
-          <div className={`${styles.kpiCardSmall} ${styles.stageCourse}`} onClick={() => openKpiModal(`${PHASE_KPI_PREFIX}foundation`, "Course Candidates")}>
-            <span className={styles.kpiIconSmall}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
-                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>
-              </svg>
-            </span>
-            <div className={styles.kpiText}>
-              <div className={styles.kpiLabelSmall}>Course</div>
-              <div className={styles.kpiValueSmall}>{kpiStats?.byPhase?.foundation || 0}</div>
-            </div>
-          </div>
-          <div className={`${styles.kpiCardSmall} ${styles.stageDocs}`} onClick={() => openKpiModal(`${PHASE_KPI_PREFIX}documents`, "Docs Submission Candidates")}>
-            <span className={styles.kpiIconSmall}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
-              </svg>
-            </span>
-            <div className={styles.kpiText}>
-              <div className={styles.kpiLabelSmall}>Docs Submission</div>
-              <div className={styles.kpiValueSmall}>{kpiStats?.byPhase?.documents || 0}</div>
-            </div>
-          </div>
-        </div>
+        ))}
       </div>
 
         <div className={styles.reportContainer}>
@@ -857,31 +1083,32 @@ export default function AnalyticsTab({
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center' }} onClick={() => setKpiModalOpen(false)}>
           <div style={{ background: 'white', borderRadius: '8px', padding: '24px', width: '90%', maxWidth: '800px', maxHeight: '80vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 'bold' }}>{kpiModalTitle}</h2>
+              <div>
+                <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 'bold' }}>{kpiModalTitle}</h2>
+                {(kpiStartDate || kpiEndDate) && (
+                  <div style={{ marginTop: '4px', fontSize: '0.8125rem', color: '#64748b' }}>
+                    Registered {kpiStartDate ? `from ${formatDisplayDate(`${kpiStartDate}T00:00:00`)}` : ""}
+                    {kpiStartDate && kpiEndDate ? " " : ""}
+                    {kpiEndDate ? `through ${formatDisplayDate(`${kpiEndDate}T00:00:00`)}` : ""} (UTC)
+                  </div>
+                )}
+              </div>
               <button onClick={() => setKpiModalOpen(false)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer' }}>&times;</button>
             </div>
             
             <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
               <select value={kpiModalState} onChange={(e) => { setKpiModalState(e.target.value); setKpiModalDistrict("All"); }} style={{ padding: '8px', border: '1px solid #cbd5e1', borderRadius: '4px' }}>
                 <option value="All">All States</option>
-                {isStageModal
-                  ? uniqueStates.map((s: string) => (
-                      <option key={s} value={s}>{s}</option>
-                    ))
-                  : geoStats && Object.keys(geoStats.by_state || {}).map((s: string) => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
+                {uniqueStates.map((s: string) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
               </select>
               {kpiModalState !== "All" && (
                 <select value={kpiModalDistrict} onChange={(e) => setKpiModalDistrict(e.target.value)} style={{ padding: '8px', border: '1px solid #cbd5e1', borderRadius: '4px' }}>
                   <option value="All">All Districts</option>
-                  {isStageModal
-                    ? kpiModalDistricts.map((d) => (
-                        <option key={d} value={d}>{d}</option>
-                      ))
-                    : geoStats && geoStats.by_state[kpiModalState] && Object.keys(geoStats.by_state[kpiModalState].by_district || {}).map((d: string) => (
-                        <option key={d} value={d}>{d}</option>
-                      ))}
+                  {kpiModalDistricts.map((d) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
                 </select>
               )}
             </div>
@@ -897,7 +1124,7 @@ export default function AnalyticsTab({
                     <th>Name</th>
                     <th>Email</th>
                     <th>State</th>
-                    {kpiModalType === 'totalPass' || kpiModalType === 'totalFail' ? (
+                    {ATTEMPT_KPIS.has(kpiModalType) ? (
                       <>
                         <th className={styles.attemptCountCol}>Total Attempts</th>
                         <th className={styles.attemptDateCol}>Date</th>
@@ -925,7 +1152,7 @@ export default function AnalyticsTab({
                       <td>{cand.fullName}</td>
                       <td>{cand.email}</td>
                       <td>{cand.state}</td>
-                      {kpiModalType === 'totalPass' || kpiModalType === 'totalFail' ? (
+                      {ATTEMPT_KPIS.has(kpiModalType) ? (
                         <>
                           <td className={styles.attemptCountCol}>{cand.total_attempts}</td>
                           {cand.attempts && cand.attempts.length > 0 ? (

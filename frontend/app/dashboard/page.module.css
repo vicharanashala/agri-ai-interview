@@ -601,10 +601,32 @@
 @media (max-width: 1024px) {
   .sCurveGrid {
     grid-template-columns: 1fr;
-    row-gap: 20px;
+    row-gap: 16px;
+    width: 100%;
+    margin-right: 0;
   }
   .hConnector, .curveConnectorRight, .gridItemEmpty {
     display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .dashboardTitle {
+    font-size: 24px;
+  }
+  .greetingBanner {
+    padding: 12px 16px;
+    border-radius: 24px;
+  }
+  .contentContainer {
+    padding: 10px 16px 20px;
+  }
+  .tabButtons {
+    gap: 8px;
+  }
+  .tabButton {
+    font-size: 13px;
+    padding: 8px 16px;
   }
 }
 

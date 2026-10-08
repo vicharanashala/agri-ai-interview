@@ -35,6 +35,46 @@ interface Attempt {
   startedAt: string | null;
 }
 
+
+const SkeletonCard = () => (
+  <div style={{ 
+    height: '180px', 
+    background: 'rgba(226, 232, 240, 0.4)', 
+    borderRadius: '16px', 
+    border: '2px solid rgba(226, 232, 240, 0.2)',
+    animation: 'pulse 1.5s infinite' 
+  }}></div>
+);
+
+const DashboardSkeleton = () => (
+  <div className={styles.dashboardContainer} style={{ padding: '20px' }}>
+    <div style={{ width: '100%', maxWidth: '1300px', margin: '0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
+      <div style={{ width: '350px', height: '36px', background: 'rgba(226, 232, 240, 0.4)', borderRadius: '8px', animation: 'pulse 1.5s infinite' }}></div>
+      <div style={{ width: '500px', height: '48px', background: 'rgba(226, 232, 240, 0.4)', borderRadius: '100px', animation: 'pulse 1.5s infinite' }}></div>
+      
+      <div className={styles.sCurveGrid} style={{ marginTop: '20px' }}>
+        <SkeletonCard />
+        <div className={styles.hConnector}></div>
+        <SkeletonCard />
+        <div className={styles.hConnector}></div>
+        <SkeletonCard />
+
+        <div className={styles.gridItemEmpty}></div>
+        <div className={styles.gridItemEmpty}></div>
+        <div className={styles.gridItemEmpty}></div>
+        <div className={styles.gridItemEmpty}></div>
+        <div className={styles.curveConnectorRight}></div>
+
+        <SkeletonCard />
+        <div className={styles.hConnector}></div>
+        <SkeletonCard />
+        <div className={styles.hConnector}></div>
+        <SkeletonCard />
+      </div>
+    </div>
+  </div>
+);
+
 export default function DashboardPage() {
   const [currentPhase, setCurrentPhase] = useState<Phase>(1);
   const [documentsSubmitted, setDocumentsSubmitted] = useState(false);
@@ -97,20 +137,12 @@ export default function DashboardPage() {
         // 4. Reconstruct actual phase from DB phase + flags
         let actualPhase: Phase = dbPhaseNum;
 
-        if (summaryVisited       && actualPhase < 4) actualPhase = 4;
+        
         if (foundationCompleted  && actualPhase < 5) actualPhase = 5;
         if (moduleCompleted      && actualPhase < 6) actualPhase = 6;
         if (docsSubmitted        && actualPhase < 6) actualPhase = 6;
 
-        const lastSeen = parseInt(sessionStorage.getItem('lastSeenPhase') || '0', 10);
-        if (actualPhase > lastSeen && lastSeen !== 0) {
-          setTimeout(async () => {
-            const confetti = (await import('canvas-confetti')).default;
-            confetti({ particleCount: 150, spread: 80, origin: { x: 0, y: 0.1 }, angle: 315, zIndex: 9999 });
-            confetti({ particleCount: 150, spread: 80, origin: { x: 1, y: 0.1 }, angle: 225, zIndex: 9999 });
-          }, 500);
-        }
-        sessionStorage.setItem('lastSeenPhase', String(actualPhase));
+
 
         setCurrentPhase(actualPhase);
         setHasCompletedInterview(actualPhase >= 3);
@@ -219,6 +251,35 @@ export default function DashboardPage() {
   }, [cooldownUntil]);
 
   const hasPassed = attempts.some(a => a.result === 'PASS');
+
+  useEffect(() => {
+    const lastSeen = parseInt(sessionStorage.getItem('lastSeenPhase') || '0', 10);
+    const hasPassed = attempts.some(a => a.result === 'PASS');
+    
+    if (attempts.length > 0) {
+      if (hasPassed && currentPhase < 4) {
+        setCurrentPhase(4);
+      } else if (!hasPassed && currentPhase >= 4) {
+        setCurrentPhase(3);
+      }
+    }
+
+    if (currentPhase > lastSeen && lastSeen !== 0) {
+      if (currentPhase === 3 && !hasPassed) {
+        // Failed interview, no confetti
+      } else {
+        setTimeout(async () => {
+          const confetti = (await import('canvas-confetti')).default;
+          confetti({ particleCount: 150, spread: 80, origin: { x: 0, y: 0.1 }, angle: 315, zIndex: 9999 });
+          confetti({ particleCount: 150, spread: 80, origin: { x: 1, y: 0.1 }, angle: 225, zIndex: 9999 });
+        }, 500);
+      }
+    }
+    if (currentPhase > lastSeen) {
+      sessionStorage.setItem('lastSeenPhase', String(currentPhase));
+    }
+  }, [currentPhase, attempts]);
+
   const hasAttemptsLeft = attempts.length < 3;
 
   // Compute phases dynamically based on state
@@ -245,16 +306,16 @@ export default function DashboardPage() {
     },
     {
       id: 3,
-      name: 'Interview Summary',
-      description: 'View your interview results and scores',
-      status: currentPhase > 3
-        ? 'completed'
-        : (attempts.length > 0 && !hasPassed && hasAttemptsLeft)
-        ? 'completed' // Unlocked but not active (re-attempt is active)
-        : currentPhase === 3
-        ? 'current'   // Active summary
-        : 'locked',
-    },
+        name: 'Interview Summary',
+        description: 'View your interview results and scores',
+        status: hasPassed
+          ? 'completed'
+          : (attempts.length > 0 && !hasPassed)
+          ? 'current'
+          : currentPhase === 3
+          ? 'current'
+          : 'locked',
+      },
     {
       id: 4,
       name: 'Foundation Course',
@@ -393,35 +454,114 @@ if (currentPhase === 6) return 80;
 
   if (isLoading) {
     return (
-      <FullPageSkeleton />
+      <DashboardSkeleton />
     );
   }
 
+
+    const VictoryBadge = () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
+      <circle cx="12" cy="8" r="7"></circle>
+      <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
+    </svg>
+  );
+
+  const getProgressBarStyle = (cardPhaseId: number, globalPhase: number, isFullyCompleted: boolean, cardStatus: 'completed' | 'current' | 'locked') => {
+    // The "logical" target percentage for this card based on its phase id.
+    const logicalTargetPct = cardPhaseId === 1 ? 20 : (cardPhaseId === 2 || cardPhaseId === 3) ? 40 : cardPhaseId === 4 ? 60 : cardPhaseId === 5 ? 80 : 100;
+    
+    if (isFullyCompleted || cardStatus === 'completed') {
+      return { width: `${logicalTargetPct}%`, background: '#10b981' };
+    }
+    
+    // For a locked phase, the user wants the red color to fill the ENTIRE remainder of the grey track (up to 100%).
+    // So for locked cards, we override the fill width to 100%. For current, it stays at the logical target.
+    const fillWidthPct = cardStatus === 'locked' ? 100 : logicalTargetPct;
+    
+    let completedPct = 0, inProgressPct = 0;
+    if (globalPhase === 1) {
+      completedPct = 0; inProgressPct = 20;
+    } else if (globalPhase === 2 || globalPhase === 3) {
+      completedPct = 20; inProgressPct = 40;
+    } else if (globalPhase === 4) {
+      completedPct = 40; inProgressPct = 60;
+    } else if (globalPhase === 5) {
+      completedPct = 60; inProgressPct = 80;
+    } else {
+      completedPct = 80; inProgressPct = 100;
+    }
+
+    const stops = [];
+    
+    const addSegment = (startPct: number, endPct: number, color: string) => {
+      if (startPct >= fillWidthPct) return;
+      const actualEnd = Math.min(endPct, fillWidthPct);
+      const relStart = (startPct / fillWidthPct) * 100;
+      const relEnd = (actualEnd / fillWidthPct) * 100;
+      stops.push(`${color} ${relStart}%`, `${color} ${relEnd}%`);
+    };
+
+    if (completedPct > 0) addSegment(0, completedPct, '#10b981'); // Green
+    if (inProgressPct > completedPct) addSegment(completedPct, inProgressPct, '#f59e0b'); // Orange
+    
+    if (cardStatus === 'locked') {
+        // Red all the way to the end of the fill width (which is 100)
+        if (fillWidthPct > inProgressPct) {
+            addSegment(inProgressPct, fillWidthPct, '#ef4444');
+        }
+    } else if (cardStatus === 'current') {
+        if (fillWidthPct > inProgressPct) {
+            const relStart = (inProgressPct / fillWidthPct) * 100;
+            stops.push(`transparent ${relStart}%`, `transparent 100%`);
+        }
+    }
+
+    return { 
+      width: `${fillWidthPct}%`, 
+      background: `linear-gradient(to right, ${stops.join(', ')})` 
+    };
+  };
 
   const renderPhaseCard = (phase: PhaseInfo) => {
     const isCompleted = phase.status === 'completed';
     const isCurrent = phase.status === 'current';
 
     let buttonText = null;
-    let showButton = false;
-    
-    if (phase.id === 2 && (isCurrent || phase.status === 'completed')) {
-      if (hasPassed) {
-        showButton = false; // completed, no button
-      } else if (attempts.length >= 3 && !hasPassed) {
-        buttonText = 'Failed'; // maybe no button? or disabled
+      let showButton = false;
+      let buttonDisabled = false;
+      
+      if (phase.id === 1 && phase.status === 'completed') {
         showButton = true;
-      } else if (attempts.length > 0 && attempts.length < 3 && !hasPassed) {
-        buttonText = '▶ Re-attempt';
+        buttonText = 'View Profile';
+      } else if (phase.id === 2 && (isCurrent || phase.status === 'completed')) {
+        if (hasPassed) {
+          showButton = true; 
+          buttonText = 'Interview Passed';
+          buttonDisabled = true;
+        } else if (attempts.length >= 3 && !hasPassed) {
+          showButton = true;
+          buttonText = 'Oops! Failed';
+          buttonDisabled = true;
+        } else if (attempts.length > 0 && attempts.length < 3 && !hasPassed) {
+          buttonText = '▶ Re-attempt';
+          showButton = true;
+        } else if (isCurrent) {
+          buttonText = '▶ Start Interview';
+          showButton = true;
+        }
+      } else if (phase.id === 3 && phase.status !== 'locked') {
         showButton = true;
-      } else if (isCurrent) {
-        buttonText = '▶ Start Interview';
+        buttonText = '▶ View Summary';
+      } else if (phase.id === 4 && phase.status !== 'locked') {
         showButton = true;
+        buttonText = phase.status === 'completed' ? 'View Status' : '▶ Start Course';
+      } else if (phase.id === 5 && phase.status !== 'locked') {
+        showButton = true;
+        buttonText = phase.status === 'completed' ? 'View Status' : '▶ Start Tasks';
+      } else if (phase.id === 6 && phase.status !== 'locked') {
+        showButton = true;
+        buttonText = phase.status === 'completed' ? 'View Documents' : '▶ Upload Docs';
       }
-    } else if (phase.id === 3 && (isCompleted || isCurrent)) {
-      showButton = true;
-      buttonText = '▶ View Summary';
-    }
 
     return (
       <div className={`${styles.phaseCard} ${styles[phase.status]}`} onClick={() => handlePhaseClick(phase)}>
@@ -440,25 +580,26 @@ if (currentPhase === 6) return 80;
         </div>
         
         {showButton && buttonText && (
-          <button 
-            className={`${styles.startInterviewBtn} ${buttonText === 'Failed' ? styles.btnDisabled : ''}`} 
-            onClick={(e) => { 
-              e.stopPropagation(); 
-              if (buttonText !== 'Failed') handlePhaseClick(phase); 
-            }}
-            disabled={buttonText === 'Failed'}
-          >
-            {buttonText}
-          </button>
-        )}
+            <button 
+              className={`${styles.startInterviewBtn} ${buttonDisabled ? styles.btnDisabled : ''}`} 
+              onClick={(e) => { 
+                e.stopPropagation(); 
+                if (!buttonDisabled) handlePhaseClick(phase); 
+              }}
+              disabled={buttonDisabled}
+            >
+              {buttonText}
+            </button>
+          )}
 
         <div className={styles.cardFooterTransparent}>
-          <div className={styles.progressSection}>
-            <div className={styles.miniProgressBar}>
-              <div className={styles.miniProgressFill} style={{ width: `${phase.id === 1 ? 20 : phase.id === 2 ? 40 : phase.id === 3 ? 40 : phase.id === 4 ? 60 : phase.id === 5 ? 80 : 100}%` }}></div>
+          <div className={styles.progressSection} style={{ display: 'flex', alignItems: 'center' }}>
+              <VictoryBadge />
+              <div className={styles.miniProgressBar}>
+                <div className={styles.miniProgressFill} style={getProgressBarStyle(phase.id, currentPhase, documentsSubmitted, phase.status)}></div>
+              </div>
+              <span className={styles.progressPercent}>{phase.id === 1 ? 20 : phase.id === 2 ? 40 : phase.id === 3 ? 40 : phase.id === 4 ? 60 : phase.id === 5 ? 80 : 100}%</span>
             </div>
-            <span className={styles.progressPercent}>{phase.id === 1 ? 20 : phase.id === 2 ? 40 : phase.id === 3 ? 40 : phase.id === 4 ? 60 : phase.id === 5 ? 80 : 100}%</span>
-          </div>
           <span className={styles.stageText}>Stage 0{phase.id}</span>
         </div>
       </div>
@@ -587,7 +728,7 @@ if (currentPhase === 6) return 80;
             {renderPhaseCard(phases[2])}
             {/* Absolute curve down to row 2 */}
             <div className={styles.curveConnectorRight}>
-               <svg width="100%" height="100%" preserveAspectRatio="none">
+               <svg width="100%" height="100%" viewBox="0 0 40 100" preserveAspectRatio="none">
                  <path d="M 0 0 C 40 0, 40 100, 0 100" stroke={currentPhase > 3 ? "#10b981" : "#e2e8f0"} strokeWidth="4" fill="none" className={styles.animatedLine} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
                </svg>
             </div>
@@ -695,3 +836,5 @@ if (currentPhase === 6) return 80;
     </main>
   );
 }
+
+// Trigger refresh

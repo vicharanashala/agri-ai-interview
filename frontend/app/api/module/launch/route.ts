@@ -18,7 +18,10 @@ export async function POST(request: NextRequest) {
     console.log('[api/module/launch] Token present:', !!token, '| auth header:', request.headers.get('authorization'), '| x-redis-token:', request.headers.get('x-redis-token'), '| cookie:', request.cookies.get('candidate_session')?.value);
     
     if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ 
+        error: 'Authentication failed', 
+        message: 'Session token is missing from headers and cookies. Please try logging out and logging back in.' 
+      }, { status: 401 })
     }
 
     const res = await fetch(

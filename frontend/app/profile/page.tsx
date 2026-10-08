@@ -45,6 +45,10 @@ export default function ProfilePage() {
   const [primaryExpertise, setPrimaryExpertise] = useState('');
   const [currentPhase, setCurrentPhase] = useState('onboarding');
   const [educationList, setEducationList] = useState<EducationItem[]>([]);
+  
+  // Resume state
+  const [resume, setResume] = useState<{ id?: string; name: string; size?: string; data?: string } | null>(null);
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
 
   // Consent state
   const [consentAccepted, setConsentAccepted] = useState(false);
@@ -113,6 +117,15 @@ export default function ProfilePage() {
               },
             ]);
           }
+          
+          // Resume info
+          if (data.resumeName) {
+            setResume({
+              id: data.resumeId,
+              name: data.resumeName,
+              size: data.resumeSize || 'Uploaded',
+            });
+          }
         }
       } catch (err) {
         console.error('Failed to load profile:', err);
@@ -156,6 +169,26 @@ export default function ProfilePage() {
     setFeedback(null);
 
     try {
+      // 1. Upload resume first if changed
+      if (resumeFile) {
+        const formData = new FormData();
+        formData.append('file', resumeFile);
+        
+        const resumeRes = await fetch('/api/resume', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!resumeRes.ok) {
+          const errorData = await resumeRes.json().catch(() => ({}));
+          throw new Error(errorData.error || 'Failed to upload resume');
+        }
+        
+        // Clear file to avoid re-uploading
+        setResumeFile(null);
+      }
+
+      // 2. Save profile payload
       const payload = {
         fullName,
         phone,
@@ -658,6 +691,59 @@ export default function ProfilePage() {
             >
               <span>+</span> Add Another Education Entry
             </button>
+          </div>
+
+          {/* Section 4: Resume / CV */}
+          <div>
+            <h3 className={styles.sectionTitle}>4. Resume / CV</h3>
+            <div className={styles.resumeSection}>
+              {resume ? (
+                <div className={styles.resumePreview}>
+                  <span className={styles.resumeIcon}>📄</span>
+                  <div className={styles.resumeInfo}>
+                    <p className={styles.resumeName}>{resume.name}</p>
+                    <p className={styles.resumeSize}>{resume.size || 'Uploaded'}</p>
+                  </div>
+                  <div className={styles.resumeActions}>
+                    <button
+                      type="button"
+                      className={styles.removeButton}
+                      onClick={() => {
+                        setResume(null);
+                        setResumeFile(null);
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <label className={styles.resumeUpload}>
+                  <span className={styles.uploadIcon}>📄</span>
+                  <p className={styles.uploadText}>Click to upload your resume</p>
+                  <p className={styles.uploadHint}>PDF or DOCX (Max 5MB)</p>
+                  <input
+                    type="file"
+                    accept=".pdf,.doc,.docx"
+                    className={styles.resumeInput}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        if (file.size > 5 * 1024 * 1024) {
+                          setFeedback({ type: 'error', text: 'Resume file size must be less than 5MB' });
+                          return;
+                        }
+                        setResumeFile(file);
+                        setResume({
+                          name: file.name,
+                          size: (file.size / (1024 * 1024)).toFixed(2) + ' MB',
+                        });
+                      }
+                    }}
+                  />
+                </label>
+              )}
+            </div>
           </div>
 
           {/* Bottom Actions */}

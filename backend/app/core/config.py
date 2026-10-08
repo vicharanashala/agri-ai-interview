@@ -46,8 +46,13 @@ class Settings(BaseSettings):
     GCS_BASE_PREFIX: str = ""  # e.g. "agri-interview-platform/staging"
 
     # ViBe integration (Foundation Course)
-    VIBE_API_URL: str = "https://vibe.vicharanashala.ai"
-    VIBE_COURSE_ID: str = "6a2be954ca990e71be4e3752"
+    VIBE_API_URL: str = "https://vibe-backend-production-239934307367.asia-south1.run.app/api"
+    VIBE_COURSE_ID: str = "6a2be954ca990e71be4e3751"  # course ID
+    VIBE_COURSE_VERSION_ID: str = "6a2be954ca990e71be4e3752"  # course version ID
+
+    # Anveshan / Question Collection integration
+    QC_API_URL: str = ""
+    ANVESHAN_ANNADATHA_AUTH_KEY: str = ""
 
     # SMTP / Email settings
     EMAIL_SMTP_HOST: str = "smtp.zoho.in"

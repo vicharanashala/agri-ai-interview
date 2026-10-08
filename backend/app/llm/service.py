@@ -306,7 +306,8 @@ Questions MUST relate to agriculture, crops, soil, irrigation, or farming practi
             + "CRITICAL CONSTRAINTS:\n"
             + "1. Keep all text descriptions (details, summary) extremely concise to prevent output truncation.\n"
             + "2. Never use unescaped double quotes inside JSON string values. Use single quotes if necessary.\n"
-            + "3. Output ONLY the JSON block, starting with { and ending with }."
+            + "3. Output ONLY the JSON block, starting with { and ending with }.\n"
+            + "4. STRICT LANGUAGE PENALTY: The candidate MUST answer in English. If the candidate answers in a non-English language (like Hinglish, Manglish, Hindi, etc.), you MUST give them a score of 0 for those answers. If they use it for all questions, their overall score MUST be 0. State this clearly in the summary."
         )
 
         evaluation_prompt = f"""Evaluate this agricultural interview candidate comprehensively:

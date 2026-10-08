@@ -5,22 +5,27 @@ const BACKEND_URL = process.env.BACKEND_URL
 function getCandidateToken(request: NextRequest): string | null {
   const auth = request.headers.get('authorization') ?? ''
   if (auth.startsWith('Bearer ')) return auth.slice(7)
-
+  
   const redisToken = request.headers.get('x-redis-token')
   if (redisToken) return redisToken
-
+  
   return request.cookies.get('candidate_session')?.value ?? null
 }
 
 export async function GET(request: NextRequest) {
   try {
     const token = getCandidateToken(request)
+    console.log('[api/module/check-completion] Token present:', !!token, '| auth header:', request.headers.get('authorization'), '| x-redis-token:', request.headers.get('x-redis-token'), '| cookie:', request.cookies.get('candidate_session')?.value);
+    
     if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ 
+        error: 'Authentication failed', 
+        message: 'Session token is missing from headers and cookies. Please try logging out and logging back in.' 
+      }, { status: 401 })
     }
 
     const res = await fetch(
-      `${BACKEND_URL}/api/candidate/foundation-course/completion-check`,
+      `${BACKEND_URL}/api/candidate/question-collection/completion-check`,
       {
         method: 'GET',
         headers: {
@@ -38,7 +43,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(await res.json())
   } catch (error) {
-    console.error('[api/foundation-course/check-completion GET]', error)
+    console.error('[api/module/check-completion GET]', error)
     return NextResponse.json({ error: 'Bad gateway' }, { status: 502 })
   }
 }

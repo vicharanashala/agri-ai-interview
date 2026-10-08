@@ -587,3 +587,102 @@
     align-items: flex-start;
   }
 }
+/* Resume Section */
+.resumeSection {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.resumePreview {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  background: rgba(34, 197, 94, 0.06);
+  border: 1px solid rgba(34, 197, 94, 0.15);
+  border-radius: 10px;
+}
+
+.resumeIcon {
+  font-size: 24px;
+}
+
+.resumeInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.resumeName {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f2238;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.resumeSize {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.resumeActions {
+  flex-shrink: 0;
+}
+
+.resumeInput {
+  display: none;
+}
+
+.removeButton {
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.15);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.removeButton:hover {
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.resumeUpload {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 32px 20px;
+  background: #f8fafc;
+  border: 1.5px dashed #cbd5e1;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+  margin-top: 8px;
+}
+
+.resumeUpload:hover {
+  border-color: #22c55e;
+  background: rgba(34, 197, 94, 0.03);
+}
+
+.uploadIcon {
+  font-size: 28px;
+}
+
+.uploadText {
+  font-size: 14px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.uploadHint {
+  font-size: 12px;
+  color: #94a3b8;
+}

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
@@ -122,19 +122,6 @@ const STAGE_ROWS = [
         ),
       },
       {
-        kpi: "foundationInProgress",
-        of: "foundationPhase",
-        label: "Foundation Course In Progress",
-        tooltip: "Candidates currently progressing through the Foundation Course.",
-        accent: "tealCard",
-        icon: (
-          <>
-            <circle cx="12" cy="12" r="10"></circle>
-            <polyline points="12 6 12 12 16 14"></polyline>
-          </>
-        ),
-      },
-      {
         kpi: "foundationNotStarted",
         of: "foundationPhase",
         label: "Foundation Course Not Started",
@@ -145,6 +132,19 @@ const STAGE_ROWS = [
             <circle cx="12" cy="12" r="10"></circle>
             <line x1="10" y1="15" x2="10" y2="9"></line>
             <line x1="14" y1="15" x2="14" y2="9"></line>
+          </>
+        ),
+      },
+      {
+        kpi: "foundationInProgress",
+        of: "foundationPhase",
+        label: "Foundation Course In Progress",
+        tooltip: "Candidates currently progressing through the Foundation Course.",
+        accent: "tealCard",
+        icon: (
+          <>
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
           </>
         ),
       },
@@ -181,19 +181,6 @@ const STAGE_ROWS = [
         ),
       },
       {
-        kpi: "groundTruthInProgress",
-        of: "groundTruthModule",
-        label: "Ground Truth Module In Progress",
-        tooltip: "Candidates currently progressing through the Ground Truth Module.",
-        accent: "indigoCard",
-        icon: (
-          <>
-            <circle cx="12" cy="12" r="10"></circle>
-            <polyline points="12 6 12 12 16 14"></polyline>
-          </>
-        ),
-      },
-      {
         kpi: "groundTruthNotStarted",
         of: "groundTruthModule",
         label: "Ground Truth Module Not Started",
@@ -204,6 +191,19 @@ const STAGE_ROWS = [
             <circle cx="12" cy="12" r="10"></circle>
             <line x1="10" y1="15" x2="10" y2="9"></line>
             <line x1="14" y1="15" x2="14" y2="9"></line>
+          </>
+        ),
+      },
+      {
+        kpi: "groundTruthInProgress",
+        of: "groundTruthModule",
+        label: "Ground Truth Module In Progress",
+        tooltip: "Candidates currently progressing through the Ground Truth Module.",
+        accent: "indigoCard",
+        icon: (
+          <>
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
           </>
         ),
       },
@@ -409,6 +409,7 @@ export default function AnalyticsTab({
   // Independent Filters
   const [kpiState, setKpiState] = useState<string>("All");
   const [kpiDistrict, setKpiDistrict] = useState<string>("All");
+  const [kpiRole, setKpiRole] = useState<string>("All");
   // Registration-date range (YYYY-MM-DD), same semantics as the Detailed Candidate Report's dates
   const [kpiStartDate, setKpiStartDate] = useState("");
   const [kpiEndDate, setKpiEndDate] = useState("");
@@ -448,7 +449,7 @@ export default function AnalyticsTab({
 
   useEffect(() => {
     fetchKpiStats();
-  }, [kpiState, kpiDistrict, kpiStartDate, kpiEndDate]);
+  }, [kpiState, kpiDistrict, kpiStartDate, kpiEndDate, kpiRole]);
 
   const fetchInitialData = async () => {
     setLoading(true);
@@ -465,7 +466,7 @@ export default function AnalyticsTab({
         if (phaseState === "All" && phaseDistrict === "All") {
           setPhaseStats(d);
         }
-        if (kpiState === "All" && kpiDistrict === "All" && !kpiStartDate && !kpiEndDate) {
+        if (kpiState === "All" && kpiDistrict === "All" && kpiRole === "All" && !kpiStartDate && !kpiEndDate) {
           setKpiStats(d);
         }
       }
@@ -479,7 +480,7 @@ export default function AnalyticsTab({
 
   const fetchKpiStats = async () => {
     const requestId = ++kpiStatsRequestId.current;
-    if (kpiState === "All" && kpiDistrict === "All" && !kpiStartDate && !kpiEndDate && globalStats) {
+    if (kpiState === "All" && kpiDistrict === "All" && kpiRole === "All" && !kpiStartDate && !kpiEndDate && globalStats) {
       setKpiStats(globalStats);
       return;
     }
@@ -489,6 +490,7 @@ export default function AnalyticsTab({
       const url = new URL(`${adminApiBase}/api/admin/stats/overview`);
       if (kpiState !== "All") url.searchParams.append("state", kpiState);
       if (kpiDistrict !== "All") url.searchParams.append("district", kpiDistrict);
+      if (kpiRole !== "All") url.searchParams.append("role", kpiRole);
       if (kpiStartDate) url.searchParams.append("start_date", kpiStartDate);
       if (kpiEndDate) url.searchParams.append("end_date", kpiEndDate);
 
@@ -637,9 +639,10 @@ export default function AnalyticsTab({
   const candidatesByPhase = [
     { name: "Onboarding", value: phaseStats?.byPhase?.onboarding || 0 },
     { name: "Interview", value: phaseStats?.byPhase?.interview || 0 },
-    { name: "Selected", value: phaseStats?.totalPass || 0 },
+    { name: "Passed", value: phaseStats?.funnel?.passedInterview || 0 },
     { name: "Course", value: phaseStats?.byPhase?.foundation || 0 },
-    { name: "Rejected", value: phaseStats?.totalFail || 0 },
+    { name: "Module", value: phaseStats?.byPhase?.module || 0 },
+    { name: "Failed", value: phaseStats?.funnel?.failedInterview || 0 },
   ];
 
   // Tooltips open above their card unless that would cover a KPI heading (the row titles sit just above the cards)
@@ -746,6 +749,15 @@ export default function AnalyticsTab({
                 </select>
               </>
             )}
+            <label>Select Role:</label>
+            <select value={kpiRole} onChange={(e) => setKpiRole(e.target.value)}>
+              <option value="All">All</option>
+              <option value="Intern">Intern</option>
+              <option value="YP">YP</option>
+              <option value="Junior">Junior</option>
+              <option value="Agri">Agri</option>
+              <option value="Senior">Senior</option>
+            </select>
             <label htmlFor="kpi-start-date">Start Date:</label>
             <input id="kpi-start-date" type="date" value={kpiStartDate} max={kpiEndDate || undefined} onChange={(e) => setKpiStartDate(e.target.value)} />
             <label htmlFor="kpi-end-date">End Date:</label>

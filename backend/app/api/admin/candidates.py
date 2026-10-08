@@ -1,4 +1,4 @@
-﻿"""
+"""
 Admin Candidates & Interviews API Endpoints — MongoDB.
 """
 import json
@@ -14,7 +14,7 @@ from app.api.admin.middleware import require_admin_auth
 
 router = APIRouter(prefix="/api/admin", tags=["admin-candidates"])
 
-PHASES = ["onboarding", "interview", "summary", "foundation", "documents"]
+PHASES = ["onboarding", "interview", "summary", "foundation", "module", "documents"]
 PHASE_ORDER = {p: i for i, p in enumerate(PHASES)}
 
 
@@ -45,6 +45,8 @@ class CandidateResponse(BaseModel):
     maxAttempts: int = 3
     foundationCourseCompleted: bool = False
     foundationCourseStatus: Optional[str] = "not_started"
+    moduleCompleted: bool = False
+    moduleStatus: Optional[str] = "not_started"
     interviewStatus: Optional[str] = "not_attended"
     isSelected: bool = False
     consentAccepted: Optional[bool] = False
@@ -121,6 +123,8 @@ def _candidate_to_response(cand: dict, user_email: Optional[str]) -> CandidateRe
 
     foundation_completed = cand.get("foundation_course_completed", False)
     foundation_status = cand.get("foundation_course_status", "completed" if foundation_completed else "not_started")
+    module_completed = cand.get("module_completed", False)
+    module_status = cand.get("module_status", "completed" if module_completed else "not_started")
 
     consent_withdrawn = bool(cand.get("consent_withdrawn", False))
     consent_accepted = bool(cand.get("consent_accepted", False) or (cand.get("documents_submitted") and not consent_withdrawn))
@@ -151,6 +155,8 @@ def _candidate_to_response(cand: dict, user_email: Optional[str]) -> CandidateRe
         maxAttempts=3,
         foundationCourseCompleted=foundation_completed,
         foundationCourseStatus=foundation_status,
+        moduleCompleted=module_completed,
+        moduleStatus=module_status,
         interviewStatus=interview_status,
         consentAccepted=consent_accepted,
         consentWithdrawn=consent_withdrawn,
@@ -293,6 +299,8 @@ async def get_candidates(
 
         foundation_completed = cand.get("foundation_course_completed", False)
         foundation_status = cand.get("foundation_course_status", "completed" if foundation_completed else "not_started")
+        module_completed = cand.get("module_completed", False)
+        module_status = cand.get("module_status", "completed" if module_completed else "not_started")
 
         consent_withdrawn = bool(cand.get("consent_withdrawn", False))
         consent_accepted = bool(cand.get("consent_accepted", False) or (cand.get("documents_submitted") and not consent_withdrawn))
@@ -322,7 +330,9 @@ async def get_candidates(
             attemptsDone=attempts_done,
             maxAttempts=3,
             foundationCourseCompleted=foundation_completed,
-            foundationCourseStatus=foundation_status,
+        foundationCourseStatus=foundation_status,
+        moduleCompleted=module_completed,
+        moduleStatus=module_status,
             interviewStatus=c_interview_status,
             consentAccepted=consent_accepted,
             consentWithdrawn=consent_withdrawn,
@@ -715,6 +725,7 @@ def _candidate_funnel(
     district: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    role: Optional[str] = None,
 ) -> List[dict]:
     """One entry per registered person with historical funnel flags, newest first.
 
@@ -740,6 +751,8 @@ def _candidate_funnel(
         if state and state != "All" and rep.get("state") != state:
             continue
         if district and district != "All" and (rep.get("district") or "Unknown") != district:
+            continue
+        if role and role != "All" and rep.get("eligible_role") != role:
             continue
         if date_query is not None:
             registered_at = min((d["created_at"] for d in docs if isinstance(d.get("created_at"), datetime)), default=None)
@@ -879,15 +892,18 @@ async def get_overview_stats(
     district: str = Query(None),
     start_date: str = Query(None),
     end_date: str = Query(None),
+    role: str = Query(None),
     _admin=Depends(require_admin_auth),
 ):
     db = get_sync_db()
 
-    cand_query = {}
+    cand_query = {"is_deleted": {"$ne": True}}
     if state and state != "All":
         cand_query["state"] = state
     if district and district != "All":
         cand_query["district"] = district
+    if role and role != "All":
+        cand_query["eligible_role"] = role
 
     total = db.candidates.count_documents(cand_query)
     by_phase = {}
@@ -940,7 +956,7 @@ async def get_overview_stats(
         "totalFail": total_fail,
         "totalSelected": total_selected,
         # Only the KPI funnel is narrowed by registration date; the other fields keep their existing meaning
-        "funnel": _funnel_counts(_candidate_funnel(db, state, district, start_date, end_date)),
+        "funnel": _funnel_counts(_candidate_funnel(db, state, district, start_date, end_date, role)),
     }
 
 
@@ -990,7 +1006,7 @@ async def get_state_stats(state: str = Query(None), _admin=Depends(require_admin
         phase = row["_id"]["phase"] or "onboarding"
         if phase == "onboarding":
             state_data[s]["onboarding"] += row["count"]
-        elif phase in ("interview", "summary", "foundation", "documents"):
+        elif phase in ("interview", "summary", "foundation", "module", "documents"):
             state_data[s]["interviewed"] += row["count"]
 
     for s, data in state_data.items():
@@ -1094,6 +1110,65 @@ async def backfill_completed_at(_admin=Depends(require_admin_auth)):
 
 
 # ── Get all evaluations (admin view) ──────────────────────────────────────────
+
+def compute_eligible_role(candidate: dict) -> str:
+    education = candidate.get("education", [])
+    if not isinstance(education, list):
+        education = []
+    
+    # If no valid education items
+    if not any(e.get("level") and e.get("discipline") and e.get("status") for e in education):
+        return None
+
+    if any(e.get("status") == "Pursuing" for e in education):
+        return "Intern"
+
+    standalone_msc_disciplines = [
+        'Agriculture', 'Agronomy', 'Soil Science', 'Entomology', 'Plant Pathology',
+        'Agrometeorology', 'Food Technology', 'Agricultural Extension', 
+        'Genetics & Plant Breeding', 'Seed Science & Technology'
+    ]
+
+    has_diploma_agri = any(e.get("level") == "Diploma" and e.get("discipline") == "Agriculture" and e.get("status") == "Completed" for e in education)
+    has_bsc_agri = any(e.get("level") in ["B.Sc.", "B.Sc. (Hons.)"] and e.get("discipline") == "Agriculture" and e.get("status") == "Completed" for e in education)
+    has_msc_hort = any(e.get("level") in ["M.Sc.", "Ph.D."] and e.get("discipline") == "Horticulture" and e.get("status") == "Completed" for e in education)
+    has_bsc_diploma_bg = any(e.get("level") in ["B.Sc.", "B.Sc. (Hons.)", "Diploma"] and e.get("discipline") == "Agriculture" and e.get("status") == "Completed" for e in education)
+    has_msc_agri = any(e.get("level") in ["M.Sc.", "Ph.D."] and e.get("discipline") in standalone_msc_disciplines and e.get("status") == "Completed" for e in education)
+
+    has_completed_qualifying = has_diploma_agri or has_bsc_agri or (has_msc_hort and has_bsc_diploma_bg) or has_msc_agri
+
+    if not has_completed_qualifying:
+        return "Intern"
+
+    max_role = "YP"
+    has_advanced_agri = any(e.get("level") in ["M.Sc.", "Ph.D.", "Postdoctoral"] and e.get("discipline") in standalone_msc_disciplines and e.get("status") == "Completed" for e in education) or (has_msc_hort and has_bsc_diploma_bg)
+    
+    if has_advanced_agri:
+        max_role = "Senior"
+    elif has_bsc_agri:
+        max_role = "Agri"
+    else:
+        max_role = "YP"
+
+    try:
+        exp = float(candidate.get("years_of_experience") or 0)
+    except (ValueError, TypeError):
+        exp = 0
+
+    if exp < 2:
+        raw_role = "YP"
+    elif 2 <= exp < 3:
+        raw_role = "Junior"
+    elif 3 <= exp < 5:
+        raw_role = "Agri"
+    else:
+        raw_role = "Senior"
+
+    role_levels = {'Intern': 0, 'YP': 1, 'Junior': 2, 'Agri': 3, 'Senior': 4}
+    
+    if role_levels.get(raw_role, 0) > role_levels.get(max_role, 0):
+        return max_role
+    return raw_role
 
 @router.get("/evaluations")
 async def get_all_evaluations(
@@ -1222,7 +1297,11 @@ async def get_all_evaluations(
         session_id_str = str(s.get("_id"))
         re_req = re_req_map.get(session_id_str)
 
-        level = candidate.get("eligible_role") if candidate else None
+        level = None
+        if candidate:
+            level = candidate.get("eligible_role")
+            if not level:
+                level = compute_eligible_role(candidate)
         
         from app.services.settings_service import get_evaluation_settings
         eval_settings = get_evaluation_settings(level)
@@ -1429,7 +1508,7 @@ async def get_geo_stats(_admin=Depends(require_admin_auth)):
         phase = row["_id"]["phase"] or "onboarding"
         if phase == "onboarding":
             states_map[s]["pending"] += row["count"]
-        elif phase in ("interview", "summary", "foundation", "documents"):
+        elif phase in ("interview", "summary", "foundation", "module", "documents"):
             states_map[s]["interviewed"] += row["count"]
 
     # Get pass/fail per state
@@ -1496,7 +1575,7 @@ async def get_geo_stats(_admin=Depends(require_admin_auth)):
         phase = row["_id"].get("phase") or "onboarding"
         if phase == "onboarding":
             districts_map[key]["pending"] += row["count"]
-        elif phase in ("interview", "summary", "foundation", "documents"):
+        elif phase in ("interview", "summary", "foundation", "module", "documents"):
             districts_map[key]["interviewed"] += row["count"]
 
     districts_list = []
@@ -1565,7 +1644,7 @@ async def bypass_candidate_course(candidate_id: str, _admin=Depends(require_admi
     current_phase = cand.get("current_phase", "onboarding")
     new_phase = current_phase
     if current_phase in ["onboarding", "interview", "summary", "foundation"]:
-        new_phase = "documents"
+        new_phase = "module"
         
     db.candidates.update_one(
         {"_id": {"$in": _get_id_variants(candidate_id)}},
@@ -1577,6 +1656,32 @@ async def bypass_candidate_course(candidate_id: str, _admin=Depends(require_admi
         }}
     )
     return {"success": True, "message": "Candidate course bypassed successfully."}
+
+@router.post("/candidates/{candidate_id}/bypass-module")
+async def bypass_candidate_module(candidate_id: str, _admin=Depends(require_admin_auth)):
+    db = get_sync_db()
+    from datetime import datetime, timezone
+    
+    cand = db.candidates.find_one({"_id": {"$in": _get_id_variants(candidate_id)}})
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+        
+    now = datetime.now(timezone.utc)
+    current_phase = cand.get("current_phase", "onboarding")
+    new_phase = current_phase
+    if current_phase in ["onboarding", "interview", "summary", "foundation", "module"]:
+        new_phase = "documents"
+        
+    db.candidates.update_one(
+        {"_id": {"$in": _get_id_variants(candidate_id)}},
+        {"$set": {
+            "module_completed": True,
+            "module_status": "completed",
+            "current_phase": new_phase,
+            "updated_at": now
+        }}
+    )
+    return {"success": True, "message": "Candidate module bypassed successfully."}
 @router.delete("/candidates/{candidate_id}")
 def delete_candidate(candidate_id: str, db=Depends(get_sync_db), admin=Depends(require_admin_auth)):
     try:

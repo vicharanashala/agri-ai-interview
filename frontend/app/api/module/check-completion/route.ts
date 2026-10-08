@@ -5,12 +5,18 @@ const BACKEND_URL = process.env.BACKEND_URL
 function getCandidateToken(request: NextRequest): string | null {
   const auth = request.headers.get('authorization') ?? ''
   if (auth.startsWith('Bearer ')) return auth.slice(7)
+  
+  const redisToken = request.headers.get('x-redis-token')
+  if (redisToken) return redisToken
+  
   return request.cookies.get('candidate_session')?.value ?? null
 }
 
 export async function GET(request: NextRequest) {
   try {
     const token = getCandidateToken(request)
+    console.log('[api/module/check-completion] Token present:', !!token, '| auth header:', request.headers.get('authorization'), '| x-redis-token:', request.headers.get('x-redis-token'), '| cookie:', request.cookies.get('candidate_session')?.value);
+    
     if (!token) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }

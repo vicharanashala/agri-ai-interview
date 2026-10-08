@@ -82,22 +82,31 @@ async def check_qc_completion(request: Request):
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(url, headers=headers)
+            
+            qc_data = None
+            try:
+                qc_data = response.json()
+            except Exception:
+                qc_data = response.text
+                
             if response.status_code == 404:
                 # The QC team returns 404 if the user hasn't started the module yet
-                return {"completed": False, "apiError": False}
+                return {"completed": False, "apiError": False, "qcResponse": qc_data}
+                
             response.raise_for_status()
-            data = response.json()
+            data = qc_data
     except Exception as e:
         return {"completed": False, "apiError": True, "details": repr(e)}
 
-    is_completed = data.get("isCompleted", False)
+    is_completed = isinstance(data, dict) and data.get("isCompleted", False)
     
     if is_completed:
         _mark_completed(candidate_id)
 
     return {
         "completed": is_completed,
-        "requirements": data.get("requirements")
+        "requirements": data.get("requirements") if isinstance(data, dict) else None,
+        "qcResponse": data
     }
 
 @router.post("/launch")

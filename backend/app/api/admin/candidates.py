@@ -683,6 +683,7 @@ FUNNEL_KPIS = {
     "documentsPhase": "documents_phase",
     "documentsSubmitted": "documents_submitted",
     "selectedOnboarded": "selected_onboarded",
+    "notSelectedOnboarded": "not_selected_onboarded",
 }
 
 
@@ -845,6 +846,7 @@ def _candidate_funnel(
         e["documents_submitted"] = e["documents_phase"] and docs_submitted
         # is_selected is what the Documents tab's Mark Selected (POST /candidates/{id}/mark-selected) toggles
         e["selected_onboarded"] = e["documents_submitted"] and c.get("is_selected") is True
+        e["not_selected_onboarded"] = e["documents_submitted"] and not e["selected_onboarded"]
     return entries
 
 
@@ -1131,7 +1133,7 @@ def compute_eligible_role(candidate: dict) -> str:
     
     # If no valid education items
     if not any(e.get("level") and e.get("discipline") and e.get("status") for e in education):
-        return None
+        return "Intern"
 
     if any(e.get("status") == "Pursuing" for e in education):
         return "Intern"

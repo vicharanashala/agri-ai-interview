@@ -66,6 +66,15 @@ async def check_qc_completion(request: Request):
     mobile_number = _get_candidate_mobile_from_db(candidate_id)
     url = f"{settings.QC_API_URL.strip()}/api/v1/users/{mobile_number}/anveshan/check-completion"
     auth_key = settings.ANVESHAN_ANNADATHA_AUTH_KEY.strip()
+    
+    if not auth_key:
+        print(f"[QC API] ERROR: Missing ANVESHAN_ANNADATHA_AUTH_KEY environment variable. Request URL: {url}")
+        return {
+            "completed": False, 
+            "apiError": True, 
+            "details": "Server configuration error: QC API authentication key is missing. Please check your .env file."
+        }
+
     headers = {"x-api-key": auth_key}
 
     print(f"[QC API] Request URL: {url} | Auth key present: {bool(auth_key)} (Length: {len(auth_key)})")

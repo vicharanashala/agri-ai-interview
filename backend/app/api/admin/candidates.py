@@ -49,6 +49,7 @@ class CandidateResponse(BaseModel):
     moduleStatus: Optional[str] = "not_started"
     interviewStatus: Optional[str] = "not_attended"
     isSelected: bool = False
+    isNotJoined: bool = False
     consentAccepted: Optional[bool] = False
     consentWithdrawn: Optional[bool] = False
     consentStatus: Optional[str] = "pending"
@@ -162,6 +163,7 @@ def _candidate_to_response(cand: dict, user_email: Optional[str]) -> CandidateRe
         consentWithdrawn=consent_withdrawn,
         consentStatus=consent_status,
             isSelected=cand.get("is_selected", False),
+            isNotJoined=cand.get("is_not_joined", False),
         consentTimestamp=_format_iso(cand.get("consent_timestamp")),
         consentWithdrawnAt=_format_iso(cand.get("consent_withdrawn_at")),
     )
@@ -338,6 +340,7 @@ async def get_candidates(
             consentWithdrawn=consent_withdrawn,
             consentStatus=consent_status,
             isSelected=cand.get("is_selected", False),
+            isNotJoined=cand.get("is_not_joined", False),
             consentTimestamp=_format_iso(cand.get("consent_timestamp")),
             consentWithdrawnAt=_format_iso(cand.get("consent_withdrawn_at")),
         )
@@ -684,6 +687,7 @@ FUNNEL_KPIS = {
     "documentsSubmitted": "documents_submitted",
     "selectedOnboarded": "selected_onboarded",
     "notSelectedOnboarded": "not_selected_onboarded",
+    "notReadyToJoin": "not_ready_to_join",
 }
 
 
@@ -844,9 +848,9 @@ def _candidate_funnel(
         e["documents_phase"] = e["ground_truth_completed"] and reached_documents
         # Same flag the admin Documents tab shows as "Submitted" and gates "Mark Selected" on
         e["documents_submitted"] = e["documents_phase"] and docs_submitted
-        # is_selected is what the Documents tab's Mark Selected (POST /candidates/{id}/mark-selected) toggles
-        e["selected_onboarded"] = e["documents_submitted"] and c.get("is_selected") is True
-        e["not_selected_onboarded"] = e["documents_submitted"] and not e["selected_onboarded"]
+        e["not_ready_to_join"] = e["documents_submitted"] and c.get("is_not_joined") is True
+        e["selected_onboarded"] = e["documents_submitted"] and c.get("is_selected") is True and not e["not_ready_to_join"]
+        e["not_selected_onboarded"] = e["documents_submitted"] and not c.get("is_selected") and not e["not_ready_to_join"]
     return entries
 
 
@@ -1750,6 +1754,29 @@ def mark_candidate_selected(candidate_id: str, db=Depends(get_sync_db), admin=De
             {"$set": {"is_selected": new_status}}
         )
         return {"success": True, "message": "Candidate selected status updated", "is_selected": new_status}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/candidates/{candidate_id}/mark-not-joined")
+def mark_candidate_not_joined(candidate_id: str, db=Depends(get_sync_db), admin=Depends(require_admin_auth)):
+    try:
+        cand = db.candidates.find_one({"_id": {"$in": _get_id_variants(candidate_id)}})
+        if not cand:
+            raise HTTPException(status_code=404, detail="Candidate not found")
+        
+        current_status = cand.get("is_not_joined", False)
+        new_status = not current_status
+        
+        db.candidates.update_one(
+            {"_id": cand["_id"]},
+            {"$set": {"is_not_joined": new_status}}
+        )
+        return {"success": True, "message": "Candidate not joined status updated", "is_not_joined": new_status}
     except HTTPException:
         raise
     except Exception as e:

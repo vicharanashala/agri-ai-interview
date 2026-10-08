@@ -16,6 +16,7 @@ import AnalyticsTab from "../../../components/admin/AnalyticsTab";
 // Types
 interface Candidate {
   isSelected?: boolean;
+  isNotJoined?: boolean;
   id: string;
   fullName: string;
   email?: string;

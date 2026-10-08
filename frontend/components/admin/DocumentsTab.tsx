@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 import styles from './EvaluationsTab.module.css';
@@ -16,6 +16,7 @@ interface CandidateRow {
   consentTimestamp?: string | null;
   consentWithdrawnAt?: string | null;
   isSelected?: boolean;
+  isNotJoined?: boolean;
 }
 
 interface Props {
@@ -52,6 +53,20 @@ export default function DocumentsTab({ adminToken }: Props) {
       
       // Update local state directly for instant feedback
       setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, isSelected: !c.isSelected } : c));
+    } catch (err) {
+      console.error(err);
+      alert("Error updating candidate status");
+    }
+  };
+
+  const handleToggleNotJoined = async (candidateId: string) => {
+    try {
+      const res = await withAuth(`/api/admin/candidates/${candidateId}/mark-not-joined`, {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error("Failed to update candidate status");
+      
+      setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, isNotJoined: !c.isNotJoined } : c));
     } catch (err) {
       console.error(err);
       alert("Error updating candidate status");
@@ -265,22 +280,40 @@ export default function DocumentsTab({ adminToken }: Props) {
                   </td>
                   <td style={{ padding: '10px 12px' }}>
                     {c.documentsSubmitted ? (
-                      <button 
-                        onClick={() => handleToggleSelected(c.id)}
-                        style={{
-                          padding: '6px 12px',
-                          background: c.isSelected ? '#fee2e2' : '#dbeafe',
-                          color: c.isSelected ? '#dc2626' : '#2563eb',
-                          border: '1px solid',
-                          borderColor: c.isSelected ? '#fca5a5' : '#bfdbfe',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          fontSize: 13,
-                          fontWeight: 500,
-                        }}
-                      >
-                        {c.isSelected ? 'Unmark Selected' : 'Mark Selected'}
-                      </button>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button 
+                          onClick={() => handleToggleSelected(c.id)}
+                          style={{
+                            padding: '6px 12px',
+                            background: c.isSelected ? '#d1fae5' : '#dbeafe',
+                            color: c.isSelected ? '#059669' : '#2563eb',
+                            border: '1px solid',
+                            borderColor: c.isSelected ? '#6ee7b7' : '#bfdbfe',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontSize: 13,
+                            fontWeight: 500,
+                          }}
+                        >
+                          {c.isSelected ? 'Unmark Selected' : 'Mark Selected'}
+                        </button>
+                        <button 
+                          onClick={() => handleToggleNotJoined(c.id)}
+                          style={{
+                            padding: '6px 12px',
+                            background: c.isNotJoined ? '#fee2e2' : '#f3f4f6',
+                            color: c.isNotJoined ? '#dc2626' : '#4b5563',
+                            border: '1px solid',
+                            borderColor: c.isNotJoined ? '#fca5a5' : '#d1d5db',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontSize: 13,
+                            fontWeight: 500,
+                          }}
+                        >
+                          {c.isNotJoined ? 'Unmark Not Joined' : 'Mark Not Joined'}
+                        </button>
+                      </div>
                       ) : (
                         <span style={{ color: '#9ca3af', fontSize: 13, fontStyle: 'italic' }}>Not Submitted</span>
                       )}

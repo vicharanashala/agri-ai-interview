@@ -87,17 +87,18 @@ class InterviewGraphManager:
                 logger.error(f"[InterviewGraph] {interview_id}: background evaluation returned None")
 
             # Persist to DB so it survives restarts
-            candidate_id = self._persist_evaluation_sync(interview_id, evaluation)
+            candidate_id, result = self._persist_evaluation_sync(interview_id, evaluation)
             if candidate_id:
                 # Update candidate phase so phase 4 unlocks on the dashboard
                 try:
                     from app.db.mongodb import get_sync_db
                     db = get_sync_db()
+                    new_phase = "foundation" if result == "PASS" else "summary"
                     db.candidates.update_one(
                         {"_id": candidate_id},
-                        {"$set": {"current_phase": "summary"}}
+                        {"$set": {"current_phase": new_phase}}
                     )
-                    logger.info(f"[InterviewGraph] {interview_id}: candidate current_phase set to summary")
+                    logger.info(f"[InterviewGraph] {interview_id}: candidate current_phase set to {new_phase}")
                 except Exception as e:
                     logger.error(f"[InterviewGraph] {interview_id}: failed to update candidate phase: {e}")
 
@@ -202,10 +203,10 @@ class InterviewGraphManager:
                 if update is not None:
                     db.interview_sessions.update_one({"_id": interview_id}, {"$set": update})
                     logger.info(f"[InterviewGraph] {interview_id}: evaluation persisted to MongoDB (score={evaluation.get('overall_score') if evaluation else None})")
-                return candidate_id
+                return candidate_id, update.get("result") if update else None
         except Exception as e:
             logger.error(f"[InterviewGraph] {interview_id}: failed to persist evaluation: {e}")
-            return None
+            return None, None
 
     # ── Convenience: get full evaluation (from cache, DB, or LLM) ────────
 

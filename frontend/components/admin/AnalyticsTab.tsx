@@ -253,6 +253,21 @@ const STAGE_ROWS = [
         ),
       },
       {
+        kpi: "notSelectedOnboarded",
+        of: "documentsSubmitted",
+        label: "Not Selected",
+        tooltip: "Candidates who submitted their documents but are not selected.",
+        accent: "slateCard",
+        icon: (
+          <>
+            <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+            <circle cx="8.5" cy="7" r="4"></circle>
+            <line x1="18" y1="8" x2="23" y2="13"></line>
+            <line x1="23" y1="8" x2="18" y2="13"></line>
+          </>
+        ),
+      },
+      {
         kpi: "selectedOnboarded",
         of: "documentsSubmitted",
         label: "Selected / Onboarded",
@@ -267,10 +282,10 @@ const STAGE_ROWS = [
         ),
       },
       {
-        kpi: "notSelectedOnboarded",
+        kpi: "notReadyToJoin",
         of: "documentsSubmitted",
-        label: "Not Selected / Onboarded",
-        tooltip: "Candidates who submitted their documents but are not yet selected/onboarded.",
+        label: "Not Ready to Join",
+        tooltip: "Candidates who submitted documents and were selected but are not ready to join.",
         accent: "redCard",
         icon: (
           <>

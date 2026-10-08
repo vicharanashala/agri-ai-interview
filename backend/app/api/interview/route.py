@@ -525,6 +525,14 @@ async def get_interview_evaluation(interview_id: str):
                 "result": result,
             }
             db.interview_sessions.update_one({"_id": interview_id}, {"$set": update})
+            
+            if candidate_id:
+                new_phase = "foundation" if result == "PASS" else "summary"
+                db.candidates.update_one(
+                    {"_id": candidate_id},
+                    {"$set": {"current_phase": new_phase}}
+                )
+
             logger.info(f"[evaluation/{interview_id}] On-the-fly evaluation succeeded: score={score}, result={result}")
 
             return {

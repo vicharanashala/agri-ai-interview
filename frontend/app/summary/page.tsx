@@ -144,7 +144,7 @@ export default function SummaryPage() {
           if (data.evaluation) {
             localStorage.setItem('interviewEvaluation', JSON.stringify(data.evaluation));
           }
-          await syncPhaseToDb(data.result === 'PASS' ? 4 : 3);
+          await syncPhaseToDb(data.result === 'PASS' ? 4 : 3, { passedAndVisitedSummary: true });
           setEvaluating(false);
           setLoading(false);
         } else if (data.status === 'error') {
@@ -208,7 +208,8 @@ export default function SummaryPage() {
                 setScore(latest.overall_score ?? null);
                 localStorage.setItem('interviewResult', latest.result ?? '');
                 localStorage.setItem('interviewScore', String(latest.overall_score ?? ''));
-                if (latest.result === 'PASS') await syncPhaseToDb(4);
+                const targetPhase = latest.result === 'PASS' ? 4 : 3;
+                await syncPhaseToDb(targetPhase, { passedAndVisitedSummary: true });
                 setEvaluating(false);
                 setLoading(false);
                 return;
@@ -262,8 +263,9 @@ export default function SummaryPage() {
           if (storedResult) setResult(storedResult);
           if (storedScore) setScore(Number(storedScore));
         } finally {
-          if (localStorage.getItem('interviewResult') === 'PASS') {
-            await syncPhaseToDb(4);
+          const result = localStorage.getItem('interviewResult');
+          if (result) {
+            await syncPhaseToDb(result === 'PASS' ? 4 : 3, { passedAndVisitedSummary: true });
           }
           setPhaseSynced(true);
           setLoading(false);

@@ -31,10 +31,6 @@ export async function syncPhaseToDb(
   try {
     const body: Record<string, unknown> = { phase }
 
-    if (phase >= 3) {
-      body.passedAndVisitedSummary = true
-    }
-
     if (flags) {
       Object.assign(body, flags)
     }

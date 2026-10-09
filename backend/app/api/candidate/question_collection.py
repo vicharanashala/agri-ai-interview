@@ -49,6 +49,7 @@ def _mark_completed(candidate_id: str) -> None:
         {"$set": {
             "module_completed": True,
             "module_status": "completed",
+            "current_phase": "documents",
             "updated_at": datetime.now(timezone.utc)
         }},
     )

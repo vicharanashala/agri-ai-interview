@@ -263,6 +263,13 @@ async def upsert_candidate(request: Request, body: OnboardingRequest):
     except Exception:
         pass
 
+    cand = db.candidates.find_one({"_id": {"$in": id_variants}})
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    if not cand.get("profile_completed_at"):
+        updates["profile_completed_at"] = datetime.now(timezone.utc)
+
     try:
         from pymongo.errors import DuplicateKeyError
         db.candidates.update_one(
@@ -274,10 +281,6 @@ async def upsert_candidate(request: Request, body: OnboardingRequest):
             status_code=400,
             detail="Phone number is already in use by another candidate."
         )
-
-    cand = db.candidates.find_one({"_id": {"$in": id_variants}})
-    if not cand:
-        raise HTTPException(status_code=404, detail="Candidate not found")
 
     return {"success": True, "message": "Candidate data saved", "id": str(cand["_id"])}
 

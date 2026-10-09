@@ -273,7 +273,20 @@ async def end_interview(interview_id: str, request: Optional[EndInterviewRequest
     qa_pairs = getattr(state, "qa_pairs", []) if state else []
     _save_chat_to_db(interview_id, messages, end_reason, qa_pairs)
 
-    # 3. Trigger background LLM evaluation
+    # 3. Synchronously set phase to summary so dashboard reflects completion immediately
+    try:
+        db = get_sync_db()
+        # Find the candidate ID from the session
+        session = db.interview_sessions.find_one({"_id": interview_id})
+        if session and session.get("candidate_id"):
+            db.candidates.update_one(
+                {"_id": session["candidate_id"]},
+                {"$set": {"current_phase": "summary"}}
+            )
+    except Exception as e:
+        logger.error(f"[end] failed to update candidate phase: {e}")
+
+    # 4. Trigger background LLM evaluation
     interview_graph_manager.trigger_evaluation(interview_id)
 
     logger.info(f"[end] {interview_id}: chat saved to DB, background evaluation started")

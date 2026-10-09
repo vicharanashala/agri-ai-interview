@@ -61,50 +61,68 @@ const FUNNEL_CARDS = [
       </>
     ),
   },
-  {
-    kpi: "passedInterview",
-    of: "attendedInterview",
-    label: "Total Candidates Passed Interview",
-    tooltip: "Candidates who passed the interview, out of those who attended.",
-    accent: "greenCard",
-    icon: (
-      <>
-        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-        <polyline points="22 4 12 14.01 9 11.01"></polyline>
-      </>
-    ),
-  },
-  {
-    kpi: "failedInterview",
-    of: "attendedInterview",
-    label: "Total Candidates Failed",
-    tooltip: "Candidates who failed the interview, out of those who attended.",
-    accent: "redCard",
-    icon: (
-      <>
-        <circle cx="12" cy="12" r="10"></circle>
-        <line x1="15" y1="9" x2="9" y2="15"></line>
-        <line x1="9" y1="9" x2="15" y2="15"></line>
-      </>
-    ),
-  },
-  {
-    kpi: "reattempted",
-    of: "attendedInterview",
-    label: "Total Candidates Took Reattempt",
-    tooltip: "Candidates who took a reattempt, out of those who attended.",
-    accent: "purpleCard",
-    icon: (
-      <>
-        <polyline points="23 4 23 10 17 10"></polyline>
-        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
-      </>
-    ),
-  },
 ] as const;
 
 // Post-interview funnel rows below the first row; each card's `of` again names its denominator card
 const STAGE_ROWS = [
+  {
+    title: "Interview Updates",
+    cards: [
+      {
+        kpi: "passedInterview",
+        of: "attendedInterview",
+        label: "Total Candidates Passed Interview",
+        tooltip: "Candidates who passed the interview, out of those who attended.",
+        accent: "greenCard",
+        icon: (
+          <>
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+          </>
+        ),
+      },
+      {
+        kpi: "failedInterview",
+        of: "attendedInterview",
+        label: "Total Candidates Failed",
+        tooltip: "Candidates who failed the interview, out of those who attended.",
+        accent: "redCard",
+        icon: (
+          <>
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="15" y1="9" x2="9" y2="15"></line>
+            <line x1="9" y1="9" x2="15" y2="15"></line>
+          </>
+        ),
+      },
+      {
+        kpi: "passedFirstAttempt",
+        of: "passedInterview",
+        label: "Passed in 1st Attempt",
+        tooltip: "Candidates who passed the interview in their very first attempt.",
+        accent: "greenCard",
+        icon: (
+          <>
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+          </>
+        ),
+      },
+      {
+        kpi: "reattempted",
+        of: "attendedInterview",
+        label: "Total Candidates Took Reattempt",
+        tooltip: "Candidates who took more than one interview attempt (attempts >= 2).",
+        accent: "purpleCard",
+        icon: (
+          <>
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+          </>
+        ),
+      },
+    ]
+  },
   {
     title: "Foundation Course",
     cards: [
@@ -239,6 +257,20 @@ const STAGE_ROWS = [
         ),
       },
       {
+        kpi: "documentsPending",
+        of: "documentsPhase",
+        label: "Documents Submission Pending",
+        tooltip: "Candidates who are in the Documents stage but have not completed their submission.",
+        accent: "amberCard",
+        icon: (
+          <>
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <circle cx="12" cy="14" r="3"></circle>
+          </>
+        ),
+      },
+      {
         kpi: "documentsSubmitted",
         of: "documentsPhase",
         label: "Documents Successfully Submitted",
@@ -342,7 +374,8 @@ export default function AnalyticsTab({
   const [kpiModalState, setKpiModalState] = useState("All");
   const [kpiModalDistrict, setKpiModalDistrict] = useState("All");
   const [kpiModalRole, setKpiModalRole] = useState("All");
-
+  const [kpiPage, setKpiPage] = useState(0);
+  const [kpiLimit, setKpiLimit] = useState(10);
 
 
   const fetchKpiModalData = async (type: string, st: string, dist: string, role: string) => {
@@ -378,6 +411,7 @@ export default function AnalyticsTab({
     setKpiModalState(st);
     setKpiModalDistrict(dist);
     setKpiModalRole(role);
+    setKpiPage(0);
     // A changed filter is fetched by the modal filter effect below; fetch here only when it won't fire
     if (st === kpiModalState && dist === kpiModalDistrict && role === kpiModalRole) fetchKpiModalData(type, st, dist, role);
   };
@@ -386,6 +420,7 @@ export default function AnalyticsTab({
 
   useEffect(() => {
     if (kpiModalOpen) {
+      setKpiPage(0);
       fetchKpiModalData(kpiModalType, kpiModalState, kpiModalDistrict, kpiModalRole);
     }
   }, [kpiModalState, kpiModalDistrict, kpiModalRole]);
@@ -948,7 +983,7 @@ export default function AnalyticsTab({
       </div>
       {kpiModalOpen && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center' }} onClick={() => setKpiModalOpen(false)}>
-          <div style={{ background: 'white', borderRadius: '8px', padding: '24px', width: '90%', maxWidth: '800px', maxHeight: '80vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+          <div style={{ background: 'white', borderRadius: '8px', padding: '24px', width: '95%', maxWidth: '1200px', maxHeight: '85vh', overflowY: 'auto', overflowX: 'hidden' }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <div>
                 <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 'bold' }}>{kpiModalTitle}</h2>
@@ -993,83 +1028,123 @@ export default function AnalyticsTab({
             ) : kpiModalData.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '24px', color: '#666' }}>No candidates found for this KPI.</div>
             ) : (
-              <table className={`${styles.table} ${styles.kpiModalTable}`}>
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Email</th>
-                    <th>State</th>
-                    {ATTEMPT_KPIS.has(kpiModalType) ? (
-                      <>
-                        <th className={styles.attemptCountCol}>Total Attempts</th>
-                        <th className={styles.attemptDateCol}>Date</th>
-                        <th className={styles.attemptResultCol}>Result</th>
-                        <th className={styles.attemptScoreCol}>Score</th>
-                      </>
-                    ) : kpiModalType === 'totalSelected' ? (
-                      <>
-                        <th>Joined Date</th>
-                        <th>Docs Submitted Date</th>
-                        <th>Selected?</th>
-                      </>
-                    ) : (
-                      <>
-                        <th>Phone</th>
-                        <th>Joined Date</th>
-                        <th>Phase</th>
-                      </>
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {kpiModalData.map((cand: any) => (
-                    <tr key={cand.id}>
-                      <td>{cand.fullName}</td>
-                      <td>{cand.email}</td>
-                      <td>{cand.state}</td>
+              <>
+                <table className={`${styles.table} ${styles.kpiModalTable}`}>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Email</th>
+                      {kpiModalType === "registered" && <th>State</th>}
+                      {kpiModalType !== "registered" && <th>District</th>}
+                      {kpiModalType !== "registered" && <th>Role</th>}
+                      {kpiModalType !== "registered" && !ATTEMPT_KPIS.has(kpiModalType) && <th>Phone</th>}
                       {ATTEMPT_KPIS.has(kpiModalType) ? (
                         <>
-                          <td className={styles.attemptCountCol}>{cand.total_attempts}</td>
-                          {cand.attempts && cand.attempts.length > 0 ? (
-                            <>
-                              {/* Same layout as the Detailed Candidate Report: one aligned line per attempt */}
-                              <td className={styles.attemptDateCol}>
-                                {cand.attempts.map((att: any, idx: number) => (
-                                  <div key={idx} className={styles.attemptLine}>{formatDisplayDate(att.date)}</div>
-                                ))}
-                              </td>
-                              <td className={styles.attemptResultCol}>
-                                {cand.attempts.map((att: any, idx: number) => (
-                                  <div key={idx} className={styles.attemptLine}>{att.result || 'PENDING'}</div>
-                                ))}
-                              </td>
-                              <td className={styles.attemptScoreCol}>
-                                {cand.attempts.map((att: any, idx: number) => (
-                                  <div key={idx} className={styles.attemptLine}>{(typeof att.score === 'number' ? att.score : 0).toFixed(1)}</div>
-                                ))}
-                              </td>
-                            </>
-                          ) : (
-                            <td colSpan={3}>No details</td>
-                          )}
+                          <th>Phone</th>
+                          <th className={styles.attemptCountCol}>Total Attempts</th>
+                          <th className={styles.attemptDateCol}>Date</th>
+                          <th className={styles.attemptResultCol}>Result</th>
+                          <th className={styles.attemptScoreCol}>Score</th>
                         </>
-                      ) : kpiModalType === 'totalSelected' ? (
+                      ) : kpiModalType === 'totalSelected' || kpiModalType === 'notSelectedOnboarded' ? (
                         <>
-                          <td>{formatDisplayDate(cand.created_at)}</td>
-                          <td>{formatDisplayDate(cand.documents_submitted_at)}</td>
-                          <td>Yes</td>
+                          <th>Joined Date</th>
+                          <th>Docs Submitted Date</th>
+                          <th>Selected?</th>
+                        </>
+                      ) : kpiModalType === 'profileCompleted' ? (
+                        <>
+                          <th>Joined Date</th>
+                          <th>Date Completed Profile</th>
+                          <th>Phase</th>
+                        </>
+                      ) : kpiModalType === 'foundationCompleted' ? (
+                        <>
+                          <th>Joined Date</th>
+                          <th>Date Completed Foundation</th>
+                          <th>Phase</th>
                         </>
                       ) : (
                         <>
-                          <td>{cand.phone}</td>
-                          <td>{formatDisplayDate(cand.created_at)}</td>
-                          <td><span className={styles.statusBadge}>{cand.current_phase}</span></td>
+                          {kpiModalType === "registered" && <th>Phone</th>}
+                          <th>Joined Date</th>
+                          <th>Phase</th>
                         </>
                       )}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {kpiModalData.slice(kpiPage * kpiLimit, (kpiPage + 1) * kpiLimit).map((cand: any) => (
+                      <tr key={cand.id}>
+                        <td>{cand.fullName}</td>
+                        <td>{cand.email}</td>
+                        {kpiModalType === "registered" && <td>{cand.state}</td>}
+                        {kpiModalType !== "registered" && <td>{cand.district}</td>}
+                        {kpiModalType !== "registered" && <td>{cand.currentRole}</td>}
+                        {kpiModalType !== "registered" && !ATTEMPT_KPIS.has(kpiModalType) && <td>{cand.phone}</td>}
+                        {ATTEMPT_KPIS.has(kpiModalType) ? (
+                          <>
+                            <td>{cand.phone}</td>
+                            <td className={styles.attemptCountCol}>{cand.total_attempts}</td>
+                            {cand.attempts && cand.attempts.length > 0 ? (
+                              <>
+                                <td className={styles.attemptDateCol}>
+                                  {cand.attempts.map((att: any, idx: number) => (
+                                    <div key={idx} className={styles.attemptLine}>{formatDisplayDate(att.date)}</div>
+                                  ))}
+                                </td>
+                                <td className={styles.attemptResultCol}>
+                                  {cand.attempts.map((att: any, idx: number) => (
+                                    <div key={idx} className={styles.attemptLine}>{att.result || 'PENDING'}</div>
+                                  ))}
+                                </td>
+                                <td className={styles.attemptScoreCol}>
+                                  {cand.attempts.map((att: any, idx: number) => (
+                                    <div key={idx} className={styles.attemptLine}>{(typeof att.score === 'number' ? att.score : 0).toFixed(1)}</div>
+                                  ))}
+                                </td>
+                              </>
+                            ) : (
+                              <td colSpan={3}>No details</td>
+                            )}
+                          </>
+                        ) : kpiModalType === 'totalSelected' || kpiModalType === 'notSelectedOnboarded' ? (
+                          <>
+                            <td>{formatDisplayDate(cand.created_at)}</td>
+                            <td>{formatDisplayDate(cand.documents_submitted_at)}</td>
+                            <td>{cand.is_selected ? "Yes" : "No"}</td>
+                          </>
+                        ) : kpiModalType === 'profileCompleted' ? (
+                          <>
+                            <td>{formatDisplayDate(cand.created_at)}</td>
+                            <td>{formatDisplayDate(cand.profileCompletedAt)}</td>
+                            <td><span className={styles.statusBadge}>{cand.current_phase}</span></td>
+                          </>
+                        ) : kpiModalType === 'foundationCompleted' ? (
+                          <>
+                            <td>{formatDisplayDate(cand.created_at)}</td>
+                            <td>{formatDisplayDate(cand.foundationCompletedAt)}</td>
+                            <td><span className={styles.statusBadge}>{cand.current_phase}</span></td>
+                          </>
+                        ) : (
+                          <>
+                            {kpiModalType === "registered" && <td>{cand.phone}</td>}
+                            <td>{formatDisplayDate(cand.created_at)}</td>
+                            <td><span className={styles.statusBadge}>{cand.current_phase}</span></td>
+                          </>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <PageSelector
+                  total={kpiModalData.length}
+                  page={kpiPage}
+                  limit={kpiLimit}
+                  onPageChange={setKpiPage}
+                  onLimitChange={setKpiLimit}
+                />
+              </>
             )}
           </div>
         </div>

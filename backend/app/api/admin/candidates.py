@@ -48,6 +48,8 @@ class CandidateResponse(BaseModel):
     moduleCompleted: bool = False
     moduleStatus: Optional[str] = "not_started"
     interviewStatus: Optional[str] = "not_attended"
+    profileCompletedAt: Optional[str] = None
+    foundationCompletedAt: Optional[str] = None
     isSelected: bool = False
     isNotJoined: bool = False
     consentAccepted: Optional[bool] = False
@@ -150,7 +152,9 @@ def _candidate_to_response(cand: dict, user_email: Optional[str]) -> CandidateRe
         currentPhase=current_phase,
         status="active",
         phases=_build_phases(current_phase),
-        createdAt=cand.get("created_at").isoformat() + "Z" if cand.get("created_at") else datetime.now(timezone.utc).isoformat() + "Z",
+        createdAt=_format_iso(cand.get("created_at")) or datetime.now(timezone.utc).isoformat() + "Z",
+        profileCompletedAt=_format_iso(cand.get("profile_completed_at") or cand.get("updated_at") or cand.get("created_at")),
+        foundationCompletedAt=_format_iso(cand.get("foundation_completed_at") or cand.get("updated_at")),
         documentsSubmitted=cand.get("documents_submitted", False),
         attemptsDone=attempts_done,
         maxAttempts=3,
@@ -327,7 +331,9 @@ async def get_candidates(
             currentPhase=current_phase,
             status="active",
             phases=_build_phases(current_phase),
-            createdAt=cand.get("created_at").isoformat() + "Z" if cand.get("created_at") else datetime.now(timezone.utc).isoformat() + "Z",
+            createdAt=_format_iso(cand.get("created_at")) or datetime.now(timezone.utc).isoformat() + "Z",
+            profileCompletedAt=_format_iso(cand.get("profile_completed_at") or cand.get("updated_at") or cand.get("created_at")),
+            foundationCompletedAt=_format_iso(cand.get("foundation_completed_at") or cand.get("updated_at")),
             documentsSubmitted=cand.get("documents_submitted", False),
             attemptsDone=attempts_done,
             maxAttempts=3,
@@ -673,6 +679,7 @@ FUNNEL_KPIS = {
     "profileCompleted": "profile_completed",
     "attendedInterview": "attended_interview",
     "passedInterview": "passed_interview",
+    "passedFirstAttempt": "passed_first_attempt",
     "failedInterview": "failed_interview",
     "reattempted": "reattempted",
     "foundationPhase": "foundation_phase",
@@ -684,6 +691,7 @@ FUNNEL_KPIS = {
     "groundTruthNotStarted": "ground_truth_not_started",
     "groundTruthCompleted": "ground_truth_completed",
     "documentsPhase": "documents_phase",
+    "documentsPending": "documents_pending",
     "documentsSubmitted": "documents_submitted",
     "selectedOnboarded": "selected_onboarded",
     "notSelectedOnboarded": "not_selected_onboarded",
@@ -806,6 +814,8 @@ def _candidate_funnel(
         e["failed_interview"] = "FAIL" in results and "PASS" not in results
         e["reattempted"] = len(e["attempts"]) >= 2
 
+        e["passed_first_attempt"] = e["passed_interview"] and len(e["attempts"]) == 1
+
         # Post-interview stages. No phase history is stored, so a stage counts as reached when current_phase is at or
         # past it, its status was ever set, or a later stage was reached; a stage counts as completed when its
         # completion field is set or a later stage was reached (as the admin bypass actions also mark it completed).
@@ -846,6 +856,7 @@ def _candidate_funnel(
         )
 
         e["documents_phase"] = e["ground_truth_completed"] and reached_documents
+        e["documents_pending"] = e["documents_phase"] and not docs_submitted
         # Same flag the admin Documents tab shows as "Submitted" and gates "Mark Selected" on
         e["documents_submitted"] = e["documents_phase"] and docs_submitted
         e["not_ready_to_join"] = e["documents_submitted"] and c.get("is_not_joined") is True
@@ -886,9 +897,12 @@ def _funnel_kpi_candidates(
             "phone": c.get("phone") or "",
             "state": c.get("state") or "",
             "district": c.get("district") or "",
+            "currentRole": c.get("current_role") or "",
             "current_phase": c.get("current_phase") or "onboarding",
             "is_selected": c.get("is_selected", False),
             "created_at": c.get("created_at"),
+            "profileCompletedAt": c.get("profile_completed_at") or c.get("updated_at") or c.get("created_at"),
+            "foundationCompletedAt": c.get("foundation_completed_at") or c.get("updated_at"),
             "documents_submitted_at": c.get("consent_timestamp") or c.get("updated_at"),
             "attempts": [
                 {

@@ -34,10 +34,10 @@
   box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 
-/* One row of 6 funnel KPI cards; equal-width columns, and grid stretch keeps every card the same height */
+/* One row of 3 funnel KPI cards; equal-width columns, and grid stretch keeps every card the same height */
 .kpiGrid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 

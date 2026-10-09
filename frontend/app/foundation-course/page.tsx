@@ -10,7 +10,7 @@ import ProfileNavButton from '@/components/ProfileNavButton';
 
 type CourseStatus = 'not_started' | 'completed';
 
-const VIBE_COURSE_URL = 'https://vibe.vicharanashala.ai/student/course-registration/6a2be954ca990e71be4e3752';
+const VIBE_COURSE_URL = 'https://vibe.vicharanashala.ai/student/course-registration/6ac88cb663b0f76f8d98ed2b';
 
 export default function FoundationCoursePage() {
   const [courseStatus, setCourseStatus] = useState<CourseStatus>('not_started');

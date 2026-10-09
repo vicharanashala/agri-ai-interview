@@ -113,6 +113,8 @@ jobs:
             GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
             NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL_PROD }}
             NEXT_PUBLIC_ADMIN_API_URL=${{ vars.NEXT_PUBLIC_API_URL_PROD }}
+            QC_API_URL=${{ vars.QC_API_URL }}
+            ANVESHAN_ANNADATHA_AUTH_KEY=${{ secrets.ANVESHAN_ANNADATHA_AUTH_KEY }}
             INTERNAL_SERVICE_TOKEN=${{ secrets.INTERNAL_SERVICE_TOKEN_PROD }}
             GCS_BUCKET_NAME=${{ vars.GCS_BUCKET_NAME }}
             STORAGE_BACKEND=${{ vars.STORAGE_BACKEND }}
@@ -155,6 +157,7 @@ jobs:
             INTERNAL_SERVICE_TOKEN=${{ secrets.INTERNAL_SERVICE_TOKEN_PROD }}
             BACKEND_URL=${{ vars.NEXT_PUBLIC_API_URL_PROD }}
             NEXT_PUBLIC_ADMIN_API_URL=${{ vars.NEXT_PUBLIC_API_URL_PROD }}
+            NEXT_PUBLIC_QC_URL=${{ vars.NEXT_PUBLIC_QC_URL }}
 
       - name: Generate production Firebase config
         run: |

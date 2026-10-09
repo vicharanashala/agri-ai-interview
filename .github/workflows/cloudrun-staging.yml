@@ -79,6 +79,7 @@ jobs:
             NEXT_PUBLIC_ADMIN_API_URL=${{ vars.NEXT_PUBLIC_API_URL_STAGING }}
             NEXTAUTH_URL=${{ vars.NEXTAUTH_URL_STAGING }}
             BACKEND_URL=${{ vars.NEXT_PUBLIC_API_URL_STAGING }}
+            NEXT_PUBLIC_VIBE_COURSE_VERSION_ID=${{ vars.VIBE_COURSE_VERSION_ID_STAGING }}
 
   deploy_backend:
     name: Deploy Backend to Cloud Run
@@ -116,6 +117,8 @@ jobs:
             GCS_BUCKET_NAME=${{ vars.GCS_BUCKET_NAME }}
             STORAGE_BACKEND=${{ vars.STORAGE_BACKEND }}
             GCS_BASE_PREFIX=${{ vars.GCS_BASE_PREFIX_STAGING }}
+            VIBE_COURSE_ID=${{ vars.VIBE_COURSE_ID_STAGING  }}
+            VIBE_COURSE_VERSION_ID=${{ vars.VIBE_COURSE_VERSION_ID_STAGING }}
 
   deploy_frontend:
     name: Deploy Frontend to Cloud Run

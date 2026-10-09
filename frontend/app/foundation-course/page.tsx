@@ -10,7 +10,9 @@ import ProfileNavButton from '@/components/ProfileNavButton';
 
 type CourseStatus = 'not_started' | 'completed';
 
-const VIBE_COURSE_URL = 'https://vibe.vicharanashala.ai/student/course-registration/6ac88cb663b0f76f8d98ed2b';
+// Overridable at build time via NEXT_PUBLIC_VIBE_COURSE_VERSION_ID (passed as a Docker build arg).
+const VIBE_COURSE_VERSION_ID = process.env.NEXT_PUBLIC_VIBE_COURSE_VERSION_ID || '6ac88cb663b0f76f8d98ed2b';
+const VIBE_COURSE_URL = `https://vibe.vicharanashala.ai/student/course-registration/${VIBE_COURSE_VERSION_ID}`;
 
 export default function FoundationCoursePage() {
   const [courseStatus, setCourseStatus] = useState<CourseStatus>('not_started');

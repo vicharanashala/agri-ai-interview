@@ -34,47 +34,419 @@
   box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 
+/* One row of 6 funnel KPI cards; equal-width columns, and grid stretch keeps every card the same height */
 .kpiGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-  gap: 15px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 1280px) {
+  .kpiGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+  .kpiGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 400px) {
+  .kpiGrid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Rows 2-4: post-interview funnel stages, 3 cards each */
+.kpiStageRow {
+  margin-top: 20px;
+}
+
+.kpiRowTitle {
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0 0 10px;
+  /* Box hugs the text, so tooltip placement only avoids the heading text itself */
+  width: fit-content;
+}
+
+/* Each stage row has equal-width columns for its own card count (Foundation 4, Ground Truth 4, Documents 3) */
+.kpiStageGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.kpiStageGrid[data-cols="4"] {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.kpiStageGrid[data-cols="5"] {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.kpiStageGrid[data-cols="6"] {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+@media (max-width: 1200px) {
+  .kpiStageGrid[data-cols="6"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 900px) {
+  .kpiStageGrid[data-cols="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kpiStageGrid[data-cols="5"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kpiStageGrid[data-cols="6"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+  .kpiStageGrid { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 400px) {
+  .kpiStageGrid[data-cols="4"] { grid-template-columns: minmax(0, 1fr); }
+  .kpiStageGrid[data-cols="5"] { grid-template-columns: minmax(0, 1fr); }
+  .kpiStageGrid[data-cols="6"] { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* KPI header: State/District/date filters wrap under the title on narrower screens */
+.kpiHeaderRow {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.kpiFilters {
+  flex-wrap: wrap;
+}
+
+.kpiFilters input[type="date"] {
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  font-size: 13px;
+  color: #1e293b;
+  font-family: inherit;
 }
 
 .kpiCard {
+  --kpi-accent: #475569;
+  --kpi-accent-bg: #f1f5f9;
+  position: relative;
   background: #fff;
   border: 1px solid #e2e8f0;
+  border-top: 3px solid var(--kpi-accent);
   border-radius: 8px;
-  padding: 15px;
+  padding: 14px;
+  min-height: 112px;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  text-align: center;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-  transition: transform 0.2s, box-shadow 0.2s;
+  gap: 12px;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition: box-shadow 0.2s;
 }
 
 .kpiCard:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
 }
 
-.blueCard { border-top: 4px solid #3b82f6; }
-.greenCard { border-top: 4px solid #10b981; }
-.redCard { border-top: 4px solid #ef4444; }
+.kpiCard:focus-visible {
+  outline: 2px solid var(--kpi-accent);
+  outline-offset: 2px;
+}
 
-.blueCard .kpiLabel, .greenCard .kpiLabel, .redCard .kpiLabel { color: #475569; }
+.blueCard { --kpi-accent: #2563eb; --kpi-accent-bg: #eff6ff; }
+.skyCard { --kpi-accent: #0284c7; --kpi-accent-bg: #f0f9ff; }
+.amberCard { --kpi-accent: #d97706; --kpi-accent-bg: #fffbeb; }
+.greenCard { --kpi-accent: #059669; --kpi-accent-bg: #ecfdf5; }
+.redCard { --kpi-accent: #dc2626; --kpi-accent-bg: #fef2f2; }
+.purpleCard { --kpi-accent: #7c3aed; --kpi-accent-bg: #f5f3ff; }
+.tealCard { --kpi-accent: #0d9488; --kpi-accent-bg: #f0fdfa; }
+.indigoCard { --kpi-accent: #4f46e5; --kpi-accent-bg: #eef2ff; }
+.slateCard { --kpi-accent: #475569; --kpi-accent-bg: #f1f5f9; }
 
-.kpiIcon { font-size: 24px; margin-bottom: 10px; }
-.kpiLabel { font-size: 13px; font-weight: 600; margin-bottom: 10px; line-height: 1.2; color: #475569; }
-.kpiValue { font-size: 28px; font-weight: 700; color: #1e293b; }
+.kpiHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
 
-.blueCard .kpiValue { color: #2563eb; }
-.greenCard .kpiValue { color: #059669; }
-.redCard .kpiValue { color: #dc2626; }
+.kpiIcon {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--kpi-accent-bg);
+  color: var(--kpi-accent);
+}
 
-.kpiIconSmall { font-size: 20px; margin-bottom: 5px; color: #64748b; }
-.kpiLabelSmall { font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 8px; }
-.kpiValueSmall { font-size: 20px; font-weight: 700; color: #1e293b; }
+.kpiLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  line-height: 1.35;
+  min-width: 0;
+}
+
+.kpiValue {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Denominator of the "count / total" fraction */
+.kpiValueTotal {
+  font-size: 16px;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+/* Hover/focus explanation of the metric, spanning the card's width just above it */
+.kpiTooltip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 20;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #0f172a;
+  color: #f8fafc;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.2);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+
+.kpiCard:hover .kpiTooltip,
+.kpiCard:focus-visible .kpiTooltip {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* The active card (and its tooltip) paints above neighbouring cards and rows */
+.kpiCard:hover,
+.kpiCard:focus-visible {
+  z-index: 30;
+}
+
+/* Fallback placements, chosen in AnalyticsTab when "above" would cover a KPI heading or leave the viewport */
+.kpiCard[data-tooltip-placement="below"] .kpiTooltip {
+  bottom: auto;
+  top: calc(100% + 8px);
+}
+
+.kpiCard[data-tooltip-placement="right"] .kpiTooltip,
+.kpiCard[data-tooltip-placement="left"] .kpiTooltip {
+  bottom: auto;
+  top: 50%;
+  width: 100%;
+  box-sizing: border-box;
+  transform: translateY(-50%);
+}
+
+.kpiCard[data-tooltip-placement="right"] .kpiTooltip {
+  left: calc(100% + 8px);
+  right: auto;
+}
+
+.kpiCard[data-tooltip-placement="left"] .kpiTooltip {
+  left: auto;
+  right: calc(100% + 8px);
+}
+
+/* DETAILED DATE-WISE REPORT */
+.reportContainer {
+  background: #fff;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  overflow: hidden;
+}
+
+.reportHeader {
+  padding: 16px 20px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.reportTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #334155;
+  text-transform: uppercase;
+}
+
+.reportBody { padding: 20px; }
+
+.reportFilters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 16px;
+  padding: 16px;
+  margin-bottom: 20px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.reportField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 200px;
+  max-width: 280px;
+  min-width: 0;
+}
+
+.reportActions {
+  margin-left: auto;
+}
+
+.resetBtn {
+  height: 38px;
+  padding: 0 20px;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+.resetBtn:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+.resetBtn:focus-visible {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+@media (max-width: 640px) {
+  .reportField { max-width: none; }
+  .reportActions { margin-left: 0; width: 100%; }
+  .resetBtn { width: 100%; }
+}
+.reportField label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.reportField input,
+.reportField select {
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 13px;
+  color: #1e293b;
+  outline: none;
+}
+.reportField input:focus,
+.reportField select:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+/* Bordered card holding the table and its PageSelector footer */
+.reportTableCard {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.reportTableWrapper {
+  overflow-x: auto;
+}
+
+/* Scoped to the report table only; .table is shared with other sections */
+.reportTableWrapper .table th {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #475569;
+  background-color: #f1f5f9;
+  border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
+}
+.reportTableWrapper .table td {
+  padding: 12px 15px;
+  vertical-align: top;
+}
+.reportTableWrapper .table tbody tr:nth-child(even) { background: #fafbfc; }
+.reportTableWrapper .table tbody tr:hover { background: #f1f5f9; }
+.reportTableWrapper .table tbody tr:last-child td { border-bottom: none; }
+
+/* Name/Email get a fixed share; remaining columns split the rest evenly instead of leaving one large gap */
+.reportTableWrapper .table .reportNameCol {
+  width: 22%;
+  min-width: 160px;
+}
+.reportTableWrapper .table .reportEmailCol {
+  width: 30%;
+  min-width: 220px;
+}
+
+/* Attempt columns (Attended Interview status): compact, one aligned line per attempt */
+.reportTableWrapper .table .attemptCountCol,
+.reportTableWrapper .table .attemptResultCol,
+.reportTableWrapper .table .attemptScoreCol,
+.kpiModalTable .attemptCountCol,
+.kpiModalTable .attemptResultCol,
+.kpiModalTable .attemptScoreCol {
+  text-align: center;
+  white-space: nowrap;
+}
+.reportTableWrapper .table .attemptDateCol,
+.kpiModalTable .attemptDateCol {
+  white-space: nowrap;
+}
+.reportTableWrapper .table .attemptScoreCol,
+.kpiModalTable .attemptScoreCol { font-variant-numeric: tabular-nums; }
+/* KPI modal attempt cells sit at the top so multi-line attempts align with Name/Email */
+.kpiModalTable td { vertical-align: top; }
+.attemptLine {
+  line-height: 20px;
+}
+.attemptLine + .attemptLine {
+  margin-top: 4px;
+}
+
+.reportEmpty,
+.reportTableWrapper .table td.reportEmpty {
+  padding: 32px 16px;
+  text-align: center;
+  color: #64748b;
+  font-size: 13px;
+}
+.reportEmptyTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 4px;
+}
 
 /* TABLE */
 .distributionContainer {

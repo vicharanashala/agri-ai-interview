@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import FullPageSkeleton from '@/components/FullPageSkeleton';
 import { useState, useEffect } from 'react';
@@ -62,7 +62,8 @@ export default function DashboardPage() {
       'interview':  2,
       'summary':    3,
       'foundation': 4,
-      'documents':  5,
+      'module':     5,
+      'documents':  6,
     };
 
     const checkProfile = async () => {
@@ -96,7 +97,6 @@ export default function DashboardPage() {
         // 4. Reconstruct actual phase from DB phase + flags
         let actualPhase: Phase = dbPhaseNum;
 
-        if (summaryVisited       && actualPhase < 4) actualPhase = 4;
         if (foundationCompleted  && actualPhase < 5) actualPhase = 5;
         if (moduleCompleted      && actualPhase < 6) actualPhase = 6;
         if (docsSubmitted        && actualPhase < 6) actualPhase = 6;

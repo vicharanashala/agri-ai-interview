@@ -56,7 +56,7 @@ export default function FoundationCoursePage() {
       if (data.alreadyVerified || data.completed) {
         setCourseStatus('completed');
         localStorage.setItem('foundationCourseCompleted', 'completed');
-        await syncPhaseToDb(4, { foundationCourseCompleted: true });
+        await syncPhaseToDb(5, { foundationCourseCompleted: true });
         setFeedback({
           type: 'success',
           text: 'Foundation Course verified successfully. You can now proceed to the Next Module.',

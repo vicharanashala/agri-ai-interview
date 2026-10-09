@@ -1,4 +1,4 @@
-﻿"""
+"""
 Admin Candidates & Interviews API Endpoints — MongoDB.
 """
 import json
@@ -48,6 +48,10 @@ class CandidateResponse(BaseModel):
     moduleCompleted: bool = False
     moduleStatus: Optional[str] = "not_started"
     interviewStatus: Optional[str] = "not_attended"
+    profileCompletedAt: Optional[str] = None
+    foundationCompletedAt: Optional[str] = None
+    isSelected: bool = False
+    isNotJoined: bool = False
     consentAccepted: Optional[bool] = False
     consentWithdrawn: Optional[bool] = False
     consentStatus: Optional[str] = "pending"
@@ -148,7 +152,9 @@ def _candidate_to_response(cand: dict, user_email: Optional[str]) -> CandidateRe
         currentPhase=current_phase,
         status="active",
         phases=_build_phases(current_phase),
-        createdAt=cand.get("created_at").isoformat() + "Z" if cand.get("created_at") else datetime.now(timezone.utc).isoformat() + "Z",
+        createdAt=_format_iso(cand.get("created_at")) or datetime.now(timezone.utc).isoformat() + "Z",
+        profileCompletedAt=_format_iso(cand.get("profile_completed_at") or cand.get("updated_at") or cand.get("created_at")),
+        foundationCompletedAt=_format_iso(cand.get("foundation_completed_at") or cand.get("updated_at")),
         documentsSubmitted=cand.get("documents_submitted", False),
         attemptsDone=attempts_done,
         maxAttempts=3,
@@ -160,6 +166,8 @@ def _candidate_to_response(cand: dict, user_email: Optional[str]) -> CandidateRe
         consentAccepted=consent_accepted,
         consentWithdrawn=consent_withdrawn,
         consentStatus=consent_status,
+            isSelected=cand.get("is_selected", False),
+            isNotJoined=cand.get("is_not_joined", False),
         consentTimestamp=_format_iso(cand.get("consent_timestamp")),
         consentWithdrawnAt=_format_iso(cand.get("consent_withdrawn_at")),
     )
@@ -176,7 +184,7 @@ async def get_candidates(
     state: Optional[str] = Query(None),
     district: Optional[str] = Query(None),
     interviewStatus: Optional[str] = Query(None),
-    limit: int = Query(10, ge=1, le=500),
+    limit: int = Query(10, ge=1, le=100000),
     offset: int = Query(0, ge=0),
     _admin=Depends(require_admin_auth),
 ):
@@ -265,7 +273,7 @@ async def get_candidates(
         current_phase = cand.get("current_phase", "onboarding")
 
         # Gather variants for this candidate to match sessions
-        c_variants = [str(v) for v in _get_id_variants(cand["_id"])]
+        c_variants = {str(v) for v in _get_id_variants(cand["_id"])}  # set: ObjectId and str forms stringify to the same key
         
         cand_sessions = []
         for cv in c_variants:
@@ -323,7 +331,9 @@ async def get_candidates(
             currentPhase=current_phase,
             status="active",
             phases=_build_phases(current_phase),
-            createdAt=cand.get("created_at").isoformat() + "Z" if cand.get("created_at") else datetime.now(timezone.utc).isoformat() + "Z",
+            createdAt=_format_iso(cand.get("created_at")) or datetime.now(timezone.utc).isoformat() + "Z",
+            profileCompletedAt=_format_iso(cand.get("profile_completed_at") or cand.get("updated_at") or cand.get("created_at")),
+            foundationCompletedAt=_format_iso(cand.get("foundation_completed_at") or cand.get("updated_at")),
             documentsSubmitted=cand.get("documents_submitted", False),
             attemptsDone=attempts_done,
             maxAttempts=3,
@@ -335,6 +345,8 @@ async def get_candidates(
             consentAccepted=consent_accepted,
             consentWithdrawn=consent_withdrawn,
             consentStatus=consent_status,
+            isSelected=cand.get("is_selected", False),
+            isNotJoined=cand.get("is_not_joined", False),
             consentTimestamp=_format_iso(cand.get("consent_timestamp")),
             consentWithdrawnAt=_format_iso(cand.get("consent_withdrawn_at")),
         )
@@ -645,17 +657,286 @@ async def reevaluate_interview(interview_id: str, _admin=Depends(require_admin_a
     }
 
 
+# ── KPI Funnel (Analytics overview cards) ──────────────────────────────────────
+
+# Required onboarding fields written only by the candidate profile form (POST /api/candidate),
+# so their presence means the profile was submitted, whatever the candidate's current_phase is.
+_PROFILE_FIELDS = ("primary_expertise", "crops_grown", "current_role")
+
+# A session is an interview attempt exactly when the attempt limit counts it (queue_manager.start_interview).
+_ATTEMPT_RESULTS = ["PASS", "FAIL", "WITHDRAWN"]
+
+# Pipeline order of current_phase values. "module" is the Ground Truth Module phase (feat/module-phase on main);
+# offer/signing/joining are legacy post-documents phases the Documents tab still lists.
+_FUNNEL_PHASE_ORDER = {
+    "onboarding": 0, "interview": 1, "summary": 2, "foundation": 3, "module": 4,
+    "documents": 5, "offer": 6, "signing": 6, "joining": 6,
+}
+
+# kpi-details keys for the funnel cards, mapped to the funnel flag each one lists
+FUNNEL_KPIS = {
+    "registered": "registered",
+    "profileCompleted": "profile_completed",
+    "attendedInterview": "attended_interview",
+    "passedInterview": "passed_interview",
+    "passedFirstAttempt": "passed_first_attempt",
+    "failedInterview": "failed_interview",
+    "reattempted": "reattempted",
+    "foundationPhase": "foundation_phase",
+    "foundationInProgress": "foundation_in_progress",
+    "foundationNotStarted": "foundation_not_started",
+    "foundationCompleted": "foundation_completed",
+    "groundTruthModule": "ground_truth_module",
+    "groundTruthInProgress": "ground_truth_in_progress",
+    "groundTruthNotStarted": "ground_truth_not_started",
+    "groundTruthCompleted": "ground_truth_completed",
+    "documentsPhase": "documents_phase",
+    "documentsPending": "documents_pending",
+    "documentsSubmitted": "documents_submitted",
+    "selectedOnboarded": "selected_onboarded",
+    "notSelectedOnboarded": "not_selected_onboarded",
+    "notReadyToJoin": "not_ready_to_join",
+}
+
+
+def _created_at_range(start_date: Optional[str], end_date: Optional[str]) -> Optional[dict]:
+    """Registration-date bounds shared by the Detailed Candidate Report and the KPI funnel.
+
+    created_at is stored as a BSON Date, so bounds must be datetimes (a string never matches a Date).
+    Naive datetimes are treated as UTC by pymongo, matching how created_at is stored.
+    """
+    if not start_date and not end_date:
+        return None
+    try:
+        date_query = {}
+        if start_date:
+            date_query["$gte"] = datetime.strptime(start_date, "%Y-%m-%d")
+        if end_date:
+            # Exclusive upper bound at the next midnight so the whole end date is included
+            date_query["$lt"] = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
+    except ValueError:
+        raise HTTPException(400, "start_date and end_date must be in YYYY-MM-DD format")
+    return date_query
+
+
+def _in_created_at_range(created_at: Any, date_query: dict) -> bool:
+    """Python-side twin of the Mongo created_at range match, for checks that run after merging duplicate docs."""
+    if not isinstance(created_at, datetime):
+        return False  # a Mongo Date range never matches a missing or non-Date value
+    if created_at.tzinfo is not None:
+        created_at = created_at.astimezone(timezone.utc).replace(tzinfo=None)
+    if "$gte" in date_query and created_at < date_query["$gte"]:
+        return False
+    if "$lt" in date_query and created_at >= date_query["$lt"]:
+        return False
+    return True
+
+
+def _candidate_funnel(
+    db,
+    state: Optional[str] = None,
+    district: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    role: Optional[str] = None,
+) -> List[dict]:
+    """One entry per registered person with historical funnel flags, newest first.
+
+    Candidate docs sharing a user_id are merged (the email-fallback path in candidate/route.py looks up
+    user_id as a string, so a user registered with an ObjectId user_id can get a second stub doc), and
+    sessions are matched on every ObjectId/str id variant, so nobody is counted twice.
+    start_date/end_date filter on registration date (the person's earliest created_at), as the report does.
+    """
+    date_query = _created_at_range(start_date, end_date)
+    cands = list(db.candidates.find({"is_deleted": {"$ne": True}}).sort("created_at", -1))
+    users = list(db.users.find())
+
+    groups: Dict[str, List[dict]] = {}
+    for c in cands:
+        groups.setdefault(str(c.get("user_id") or c["_id"]), []).append(c)
+
+    for u in users:
+        uid = str(u["_id"])
+        if uid not in groups:
+            groups[uid] = [{
+                "_id": u["_id"],
+                "user_id": u["_id"],
+                "email": u.get("email"),
+                "created_at": u.get("created_at"),
+                "name": u.get("name"),
+            }]
+
+    def has_profile(c: dict) -> bool:
+        return any(c.get(f) for f in _PROFILE_FIELDS)
+
+    entries = []
+    for docs in groups.values():
+        # Representative doc: the one holding the submitted profile (and so the state/district); ties keep the newest
+        rep = max(docs, key=lambda d: (has_profile(d), bool(d.get("state"))))
+        if state and state != "All" and rep.get("state") != state:
+            continue
+        if district and district != "All" and (rep.get("district") or "Unknown") != district:
+            continue
+        if role and role != "All" and rep.get("eligible_role") != role:
+            continue
+        if date_query is not None:
+            registered_at = min((d["created_at"] for d in docs if isinstance(d.get("created_at"), datetime)), default=None)
+            if not _in_created_at_range(registered_at, date_query):
+                continue
+        entries.append({"rep": rep, "docs": docs, "profile": any(has_profile(d) for d in docs)})
+
+    id_variants = []
+    for e in entries:
+        for d in e["docs"]:
+            id_variants.extend(_get_id_variants(d["_id"]))
+    attempts_by_cand: Dict[str, List[dict]] = {}
+    for sess in db.interview_sessions.find(
+        {"candidate_id": {"$in": id_variants}, "status": "completed", "result": {"$in": _ATTEMPT_RESULTS}},
+        {"candidate_id": 1, "started_at": 1, "result": 1, "score": 1, "overall_score": 1},
+    ):
+        attempts_by_cand.setdefault(str(sess["candidate_id"]), []).append(sess)
+
+    for e in entries:
+        attempts = {}
+        for d in e["docs"]:
+            for sess in attempts_by_cand.get(str(d["_id"]), []):
+                attempts[str(sess["_id"])] = sess
+        e["attempts"] = sorted(attempts.values(), key=lambda s: _format_iso(s.get("started_at")) or "")
+
+        results = {s.get("result") for s in e["attempts"]}
+        attended = len(e["attempts"]) > 0
+        e["registered"] = True
+        # Attending an interview implies the profile was submitted, which keeps every stage a subset of the previous one
+        e["profile_completed"] = e["profile"] or attended
+        e["attended_interview"] = attended
+        e["passed_interview"] = "PASS" in results
+        # Failed = attended and never passed, so a later PASS moves a candidate out of Failed
+        e["failed_interview"] = "FAIL" in results and "PASS" not in results
+        e["reattempted"] = len(e["attempts"]) >= 2
+
+        e["passed_first_attempt"] = e["passed_interview"] and len(e["attempts"]) == 1
+
+        # Post-interview stages. No phase history is stored, so a stage counts as reached when current_phase is at or
+        # past it, its status was ever set, or a later stage was reached; a stage counts as completed when its
+        # completion field is set or a later stage was reached (as the admin bypass actions also mark it completed).
+        # Each stage is intersected with the previous one, so every card is a subset of its denominator.
+        c = e["rep"]
+        phase_idx = _FUNNEL_PHASE_ORDER.get(c.get("current_phase") or "onboarding", 0)
+        fc_status, gt_status = c.get("foundation_course_status"), c.get("module_status")
+        docs_submitted = c.get("documents_submitted") is True
+        reached_documents = phase_idx >= _FUNNEL_PHASE_ORDER["documents"] or docs_submitted
+        reached_module = (
+            phase_idx >= _FUNNEL_PHASE_ORDER["module"] or gt_status not in (None, "not_started")
+            or c.get("module_completed") is True or reached_documents
+        )
+        reached_foundation = (
+            phase_idx >= _FUNNEL_PHASE_ORDER["foundation"] or fc_status not in (None, "not_started")
+            or c.get("foundation_course_completed") is True or reached_module
+        )
+
+        e["foundation_phase"] = e["passed_interview"] and reached_foundation
+        e["foundation_completed"] = e["foundation_phase"] and (
+            c.get("foundation_course_completed") is True or fc_status == "completed" or reached_module
+        )
+        # Stored status only (set by Launch Course); someone already counted as completed is not also in progress
+        e["foundation_in_progress"] = e["foundation_phase"] and fc_status == "in_progress" and not e["foundation_completed"]
+        # The rest of the phase: status missing (the admin API's "not_started" default) or explicitly "not_started".
+        # Any unrecognised legacy value (e.g. "incomplete") also lands here, so In Progress + Not Started + Completed
+        # always partition the phase.
+        e["foundation_not_started"] = e["foundation_phase"] and not e["foundation_completed"] and not e["foundation_in_progress"]
+
+        e["ground_truth_module"] = e["foundation_completed"] and reached_module
+        e["ground_truth_completed"] = e["ground_truth_module"] and (
+            c.get("module_completed") is True or gt_status == "completed" or reached_documents
+        )
+        e["ground_truth_in_progress"] = e["ground_truth_module"] and gt_status == "in_progress" and not e["ground_truth_completed"]
+        # Same partition as Foundation: missing or "not_started" module_status (plus any unrecognised legacy value)
+        e["ground_truth_not_started"] = (
+            e["ground_truth_module"] and not e["ground_truth_completed"] and not e["ground_truth_in_progress"]
+        )
+
+        e["documents_phase"] = e["ground_truth_completed"] and reached_documents
+        e["documents_pending"] = e["documents_phase"] and not docs_submitted
+        # Same flag the admin Documents tab shows as "Submitted" and gates "Mark Selected" on
+        e["documents_submitted"] = e["documents_phase"] and docs_submitted
+        e["not_ready_to_join"] = e["documents_submitted"] and c.get("is_not_joined") is True
+        e["selected_onboarded"] = e["documents_submitted"] and c.get("is_selected") is True and not e["not_ready_to_join"]
+        e["not_selected_onboarded"] = e["documents_submitted"] and not c.get("is_selected") and not e["not_ready_to_join"]
+    return entries
+
+
+def _funnel_counts(entries: List[dict]) -> Dict[str, int]:
+    return {kpi: sum(1 for e in entries if e[flag]) for kpi, flag in FUNNEL_KPIS.items()}
+
+
+def _funnel_kpi_candidates(
+    db,
+    kpi: str,
+    state: Optional[str],
+    district: Optional[str],
+    role: Optional[str],
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> List[dict]:
+    flag = FUNNEL_KPIS[kpi]
+    entries = [e for e in _candidate_funnel(db, state, district, start_date, end_date, role) if e[flag]]
+
+    user_ids = []
+    for e in entries:
+        user_ids.extend(_get_id_variants(e["rep"].get("user_id")))
+    user_map = {str(u["_id"]): u.get("email") for u in db.users.find({"_id": {"$in": user_ids}}, {"email": 1})}
+
+    results = []
+    for e in entries:
+        c = e["rep"]
+        user_email = user_map.get(str(c.get("user_id")))
+        results.append({
+            "id": str(c["_id"]),
+            "fullName": c.get("full_name") or c.get("name") or user_email or "",
+            "email": c.get("email") or user_email or "",
+            "phone": c.get("phone") or "",
+            "state": c.get("state") or "",
+            "district": c.get("district") or "",
+            "currentRole": c.get("current_role") or "",
+            "current_phase": c.get("current_phase") or "onboarding",
+            "is_selected": c.get("is_selected", False),
+            "created_at": c.get("created_at"),
+            "profileCompletedAt": c.get("profile_completed_at") or c.get("updated_at") or c.get("created_at"),
+            "foundationCompletedAt": c.get("foundation_completed_at") or c.get("updated_at"),
+            "documents_submitted_at": c.get("consent_timestamp") or c.get("updated_at"),
+            "attempts": [
+                {
+                    "date": s.get("started_at"),
+                    "result": s.get("result"),
+                    "score": s.get("score") or s.get("overall_score") or 0,
+                }
+                for s in e["attempts"]
+            ],
+            "total_attempts": len(e["attempts"]),
+        })
+    return results
+
+
 # ── Dashboard Stats ────────────────────────────────────────────────────────────
 
 @router.get("/stats/overview")
-async def get_overview_stats(state: str = Query(None), district: str = Query(None), _admin=Depends(require_admin_auth)):
+async def get_overview_stats(
+    state: str = Query(None),
+    district: str = Query(None),
+    start_date: str = Query(None),
+    end_date: str = Query(None),
+    role: str = Query(None),
+    _admin=Depends(require_admin_auth),
+):
     db = get_sync_db()
 
-    cand_query = {}
+    cand_query = {"is_deleted": {"$ne": True}}
     if state and state != "All":
         cand_query["state"] = state
     if district and district != "All":
         cand_query["district"] = district
+    if role and role != "All":
+        cand_query["eligible_role"] = role
 
     total = db.candidates.count_documents(cand_query)
     by_phase = {}
@@ -695,6 +976,10 @@ async def get_overview_stats(state: str = Query(None), district: str = Query(Non
     fail_query["result"] = "FAIL"
     total_fail = db.interview_sessions.count_documents(fail_query)
 
+    selected_query = cand_query.copy()
+    selected_query["is_selected"] = True
+    total_selected = db.candidates.count_documents(selected_query)
+
     return {
         "totalCandidates": total,
         "byPhase": by_phase,
@@ -702,6 +987,9 @@ async def get_overview_stats(state: str = Query(None), district: str = Query(Non
         "totalCompleted": total_completed,
         "totalPass": total_pass,
         "totalFail": total_fail,
+        "totalSelected": total_selected,
+        # Only the KPI funnel is narrowed by registration date; the other fields keep their existing meaning
+        "funnel": _funnel_counts(_candidate_funnel(db, state, district, start_date, end_date, role)),
     }
 
 
@@ -770,7 +1058,7 @@ async def get_state_stats(state: str = Query(None), _admin=Depends(require_admin
 
 @router.get("/anti-cheat/violations")
 async def get_anti_cheat_violations(
-    limit: int = Query(10, ge=1, le=500),
+    limit: int = Query(10, ge=1, le=100000),
     offset: int = Query(0, ge=0),
     _admin=Depends(require_admin_auth),
 ):
@@ -855,6 +1143,65 @@ async def backfill_completed_at(_admin=Depends(require_admin_auth)):
 
 
 # ── Get all evaluations (admin view) ──────────────────────────────────────────
+
+def compute_eligible_role(candidate: dict) -> str:
+    education = candidate.get("education", [])
+    if not isinstance(education, list):
+        education = []
+    
+    # If no valid education items
+    if not any(e.get("level") and e.get("discipline") and e.get("status") for e in education):
+        return "Intern"
+
+    if any(e.get("status") == "Pursuing" for e in education):
+        return "Intern"
+
+    standalone_msc_disciplines = [
+        'Agriculture', 'Agronomy', 'Soil Science', 'Entomology', 'Plant Pathology',
+        'Agrometeorology', 'Food Technology', 'Agricultural Extension', 
+        'Genetics & Plant Breeding', 'Seed Science & Technology'
+    ]
+
+    has_diploma_agri = any(e.get("level") == "Diploma" and e.get("discipline") == "Agriculture" and e.get("status") == "Completed" for e in education)
+    has_bsc_agri = any(e.get("level") in ["B.Sc.", "B.Sc. (Hons.)"] and e.get("discipline") == "Agriculture" and e.get("status") == "Completed" for e in education)
+    has_msc_hort = any(e.get("level") in ["M.Sc.", "Ph.D."] and e.get("discipline") == "Horticulture" and e.get("status") == "Completed" for e in education)
+    has_bsc_diploma_bg = any(e.get("level") in ["B.Sc.", "B.Sc. (Hons.)", "Diploma"] and e.get("discipline") == "Agriculture" and e.get("status") == "Completed" for e in education)
+    has_msc_agri = any(e.get("level") in ["M.Sc.", "Ph.D."] and e.get("discipline") in standalone_msc_disciplines and e.get("status") == "Completed" for e in education)
+
+    has_completed_qualifying = has_diploma_agri or has_bsc_agri or (has_msc_hort and has_bsc_diploma_bg) or has_msc_agri
+
+    if not has_completed_qualifying:
+        return "Intern"
+
+    max_role = "YP"
+    has_advanced_agri = any(e.get("level") in ["M.Sc.", "Ph.D.", "Postdoctoral"] and e.get("discipline") in standalone_msc_disciplines and e.get("status") == "Completed" for e in education) or (has_msc_hort and has_bsc_diploma_bg)
+    
+    if has_advanced_agri:
+        max_role = "Senior"
+    elif has_bsc_agri:
+        max_role = "Agri"
+    else:
+        max_role = "YP"
+
+    try:
+        exp = float(candidate.get("years_of_experience") or 0)
+    except (ValueError, TypeError):
+        exp = 0
+
+    if exp < 2:
+        raw_role = "YP"
+    elif 2 <= exp < 3:
+        raw_role = "Junior"
+    elif 3 <= exp < 5:
+        raw_role = "Agri"
+    else:
+        raw_role = "Senior"
+
+    role_levels = {'Intern': 0, 'YP': 1, 'Junior': 2, 'Agri': 3, 'Senior': 4}
+    
+    if role_levels.get(raw_role, 0) > role_levels.get(max_role, 0):
+        return max_role
+    return raw_role
 
 @router.get("/evaluations")
 async def get_all_evaluations(
@@ -983,7 +1330,11 @@ async def get_all_evaluations(
         session_id_str = str(s.get("_id"))
         re_req = re_req_map.get(session_id_str)
 
-        level = candidate.get("eligible_role") if candidate else None
+        level = None
+        if candidate:
+            level = candidate.get("eligible_role")
+            if not level:
+                level = compute_eligible_role(candidate)
         
         from app.services.settings_service import get_evaluation_settings
         eval_settings = get_evaluation_settings(level)
@@ -1367,12 +1718,6 @@ async def bypass_candidate_module(candidate_id: str, _admin=Depends(require_admi
 @router.delete("/candidates/{candidate_id}")
 def delete_candidate(candidate_id: str, db=Depends(get_sync_db), admin=Depends(require_admin_auth)):
     try:
-        from app.utils.helpers import _get_id_variants
-    except ImportError:
-        def _get_id_variants(val):
-            try: return [val, ObjectId(val)]
-            except: return [val]
-    try:
         cand = db.candidates.find_one({"_id": {"$in": _get_id_variants(candidate_id)}})
         if not cand:
             raise HTTPException(status_code=404, detail="Candidate not found")
@@ -1392,12 +1737,6 @@ def delete_candidate(candidate_id: str, db=Depends(get_sync_db), admin=Depends(r
 @router.post("/candidates/{candidate_id}/restore")
 def restore_candidate(candidate_id: str, db=Depends(get_sync_db), admin=Depends(require_admin_auth)):
     try:
-        from app.utils.helpers import _get_id_variants
-    except ImportError:
-        def _get_id_variants(val):
-            try: return [val, ObjectId(val)]
-            except: return [val]
-    try:
         cand = db.candidates.find_one({"_id": {"$in": _get_id_variants(candidate_id)}})
         if not cand:
             raise HTTPException(status_code=404, detail="Candidate not found")
@@ -1413,3 +1752,238 @@ def restore_candidate(candidate_id: str, db=Depends(get_sync_db), admin=Depends(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/candidates/{candidate_id}/mark-selected")
+def mark_candidate_selected(candidate_id: str, db=Depends(get_sync_db), admin=Depends(require_admin_auth)):
+    try:
+        cand = db.candidates.find_one({"_id": {"$in": _get_id_variants(candidate_id)}})
+        if not cand:
+            raise HTTPException(status_code=404, detail="Candidate not found")
+        
+        current_status = cand.get("is_selected", False)
+        new_status = not current_status
+        
+        db.candidates.update_one(
+            {"_id": cand["_id"]},
+            {"$set": {"is_selected": new_status}}
+        )
+        return {"success": True, "message": "Candidate selected status updated", "is_selected": new_status}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/candidates/{candidate_id}/mark-not-joined")
+def mark_candidate_not_joined(candidate_id: str, db=Depends(get_sync_db), admin=Depends(require_admin_auth)):
+    try:
+        cand = db.candidates.find_one({"_id": {"$in": _get_id_variants(candidate_id)}})
+        if not cand:
+            raise HTTPException(status_code=404, detail="Candidate not found")
+        
+        current_status = cand.get("is_not_joined", False)
+        new_status = not current_status
+        
+        db.candidates.update_one(
+            {"_id": cand["_id"]},
+            {"$set": {"is_not_joined": new_status}}
+        )
+        return {"success": True, "message": "Candidate not joined status updated", "is_not_joined": new_status}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/stats/kpi-details")
+def get_kpi_details(
+    kpi: str = Query(...),
+    state: str = Query(None),
+    district: str = Query(None),
+    role: str = Query(None),
+    start_date: str = Query(None),
+    end_date: str = Query(None),
+    db=Depends(get_sync_db),
+    admin=Depends(require_admin_auth),
+):
+    if kpi in FUNNEL_KPIS:
+        return {"candidates": _funnel_kpi_candidates(db, kpi, state, district, role, start_date, end_date)}
+
+    cand_query = {"is_deleted": {"$ne": True}}
+    if state and state != "All": cand_query["state"] = state
+    if district and district != "All": cand_query["district"] = district
+
+    sessions = []
+    if kpi == "totalCandidates":
+        pass # cand_query is already correct
+    elif kpi == "totalSelected":
+        cand_query["is_selected"] = True
+    elif kpi in ["activeInterviews", "totalCompleted", "totalPass", "totalFail"]:
+        # We need to find candidate IDs from interview_sessions
+        sess_query = {}
+        if kpi == "activeInterviews":
+            sess_query["status"] = {"$in": ["active", "interviewing", "paused"]}
+        elif kpi == "totalCompleted":
+            sess_query["status"] = "completed"
+            sess_query["result"] = {"$in": ["PASS", "FAIL"]}
+        elif kpi == "totalPass":
+            sess_query["status"] = "completed"
+            sess_query["result"] = "PASS"
+        elif kpi == "totalFail":
+            sess_query["status"] = "completed"
+            sess_query["result"] = "FAIL"
+            
+        sessions = list(db.interview_sessions.find(sess_query, {"candidate_id": 1, "started_at": 1, "result": 1, "score": 1, "overall_score": 1}))
+
+        cand_ids = []
+        for s in sessions:
+            if s.get("candidate_id"):
+                cand_ids.extend(_get_id_variants(s["candidate_id"]))
+                
+        if cand_query:
+            cand_query["_id"] = {"$in": cand_ids}
+        else:
+            cand_query = {"_id": {"$in": cand_ids}, "is_deleted": {"$ne": True}}
+    else:
+        raise HTTPException(400, "Unknown KPI")
+
+    candidates = list(db.candidates.find(cand_query).sort("created_at", -1))
+    
+    user_ids = [c["user_id"] for c in candidates if c.get("user_id")]
+    user_map = {str(u["_id"]): u.get("email") for u in db.users.find({"_id": {"$in": user_ids}})}
+    
+    sessions_by_cand = {}
+
+    # Only fetch all sessions if we are on a KPI that requires them
+    if kpi in ["activeInterviews", "totalCompleted", "totalPass", "totalFail"]:
+        c_vars = []
+        for c in candidates:
+            c_vars.extend(_get_id_variants(c["_id"]))
+        all_sess = list(db.interview_sessions.find({"candidate_id": {"$in": c_vars}}))
+        for sess in all_sess:
+            cid = str(sess["candidate_id"])
+            if cid not in sessions_by_cand:
+                sessions_by_cand[cid] = []
+            sessions_by_cand[cid].append(sess)
+
+    results = []
+    for c in candidates:
+        cid = str(c["_id"])
+        user_email = user_map.get(str(c.get("user_id")))
+        
+        c_variants = {str(v) for v in _get_id_variants(c["_id"])}  # set: ObjectId and str forms stringify to the same key
+        cand_sessions = []
+        for cv in c_variants:
+            cand_sessions.extend(sessions_by_cand.get(cv, []))
+            
+        cand_sessions.sort(key=lambda x: x.get("started_at") or "")
+        
+        attempt_details = []
+        for sess in cand_sessions:
+            attempt_details.append({
+                "date": sess.get("started_at"),
+                "result": sess.get("result", "PENDING"),
+                "score": sess.get("score") or sess.get("overall_score") or 0
+            })
+
+        results.append({
+            "id": cid,
+            "fullName": c.get("full_name") or c.get("name") or user_email or "",
+            "email": c.get("email") or user_email or "",
+            "phone": c.get("phone") or "",
+            "state": c.get("state") or "",
+            "district": c.get("district") or "",
+            "current_phase": c.get("current_phase") or "onboarding",
+            "is_selected": c.get("is_selected", False),
+            "created_at": c.get("created_at"),
+            "documents_submitted_at": c.get("consent_timestamp") or c.get("updated_at"),
+            "attempts": attempt_details,
+            "total_attempts": len(cand_sessions)
+        })
+        
+    return {"candidates": results}
+
+@router.get("/stats/report")
+def get_candidate_report(
+    start_date: str = Query(None),
+    end_date: str = Query(None),
+    status_filter: str = Query(None),
+    db=Depends(get_sync_db),
+    admin=Depends(require_admin_auth)
+):
+    query = {"is_deleted": {"$ne": True}}
+    
+    date_query = _created_at_range(start_date, end_date)
+    if date_query is not None:
+        query["created_at"] = date_query
+        
+    if status_filter == "onboarded":
+        query["is_selected"] = True
+    elif status_filter == "interviewing" or status_filter == "attended_interview":
+        pass # We will filter this based on actual sessions later
+    elif status_filter == "docs_not_selected":
+        query["documents_submitted"] = True
+        query["is_selected"] = {"$ne": True}
+        
+    candidates = list(db.candidates.find(query).sort("created_at", -1))
+    
+    # Pre-fetch user emails if needed
+    user_ids = [c["user_id"] for c in candidates if c.get("user_id")]
+    user_map = {str(u["_id"]): u.get("email") for u in db.users.find({"_id": {"$in": user_ids}})}
+    
+    # Pre-fetch all sessions for these candidates to build attempt details
+
+    cand_id_variants = []
+    for c in candidates:
+        cand_id_variants.extend(_get_id_variants(c["_id"]))
+        
+    sessions = list(db.interview_sessions.find({"candidate_id": {"$in": cand_id_variants}}).sort("started_at", 1))
+    sessions_by_cand = {}
+    for sess in sessions:
+        cid = str(sess["candidate_id"])
+        if cid not in sessions_by_cand:
+            sessions_by_cand[cid] = []
+        sessions_by_cand[cid].append(sess)
+        
+    results = []
+    for c in candidates:
+        cid = str(c["_id"])
+        c_variants = {str(v) for v in _get_id_variants(c["_id"])}  # set: ObjectId and str forms stringify to the same key
+        
+        cand_sessions = []
+        for cv in c_variants:
+            cand_sessions.extend(sessions_by_cand.get(cv, []))
+            
+        cand_sessions.sort(key=lambda x: x.get("started_at") or "")
+        
+        # If filtering by attended_interview, skip candidates with no sessions
+        if status_filter in ["interviewing", "attended_interview"] and not cand_sessions:
+            continue
+            
+        attempt_details = []
+        for sess in cand_sessions:
+            attempt_details.append({
+                "date": sess.get("started_at"),
+                "result": sess.get("result", "PENDING"),
+                "score": sess.get("score") or sess.get("overall_score") or 0
+            })
+            
+        user_email = user_map.get(str(c.get("user_id")))
+        results.append({
+            "id": cid,
+            "fullName": c.get("full_name") or c.get("name") or user_email or "",
+            "email": c.get("email") or user_email or "",
+            "phone": c.get("phone") or "",
+            "current_phase": c.get("current_phase") or "onboarding",
+            "is_selected": c.get("is_selected", False),
+            "created_at": c.get("created_at"),
+            "documents_submitted_at": c.get("consent_timestamp") or c.get("updated_at"), # best approximation
+            "attempts": attempt_details,
+            "total_attempts": len(cand_sessions)
+        })
+        
+    return {"report": results}

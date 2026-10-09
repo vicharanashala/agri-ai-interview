@@ -80,7 +80,7 @@ export default function ModulePage() {
       if (data.alreadyVerified || data.completed) {
         setCourseStatus('completed');
         localStorage.setItem('moduleCompleted', 'completed');
-        await syncPhaseToDb(5, { moduleCompleted: true });
+        await syncPhaseToDb(6, { moduleCompleted: true });
         setFeedback({
           type: 'success',
           text: 'Module verified successfully. You can now proceed to Upload Documents.',

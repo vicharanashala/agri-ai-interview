@@ -15,6 +15,8 @@ import AnalyticsTab from "../../../components/admin/AnalyticsTab";
 
 // Types
 interface Candidate {
+  isSelected?: boolean;
+  isNotJoined?: boolean;
   id: string;
   fullName: string;
   email?: string;
@@ -369,7 +371,23 @@ export default function AdminDashboard() {
     }
   };
 
-    const handleRestoreCandidate = async (candidateId: string) => {
+      const handleToggleSelectedCandidate = async (candidateId: string) => {
+    setContextMenu(null);
+    try {
+      const res = await withAuth(`/api/admin/candidates/${candidateId}/mark-selected`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        throw new Error("Failed to update candidate status");
+      }
+      loadCandidates();
+    } catch (err) {
+      console.error(err);
+      alert("Error updating candidate status");
+    }
+  };
+
+  const handleRestoreCandidate = async (candidateId: string) => {
     setDeletingCandidate(true);
     setContextMenu(null);
     try {
@@ -869,29 +887,7 @@ export default function AdminDashboard() {
   if (!adminData) {
     return <div className={styles.loading}>Loading...</div>;
   }
-  const handleExportCsv = () => {
-    if (candidates.length === 0) return;
-    const headers = ["Name", "Email", "Phone", "State", "Current Phase", "Interview Status", "Attempts", "Created At"];
-    const csvRows = [headers.join(",")];
-    for (const c of candidates) {
-      csvRows.push([
-        `"${c.fullName || ""}"`,
-        `"${c.email || ""}"`,
-        `"${c.phone || ""}"`,
-        `"${c.state || ""}"`,
-        `"${PHASE_LABELS[c.currentPhase] || c.currentPhase}"`,
-        `"${c.interviewStatus || "not_attended"}"`,
-        c.attemptsDone,
-        `"${c.createdAt ? new Date(c.createdAt).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }) : ""}"`
-      ].join(","));
-    }
-    const blob = new Blob([csvRows.join("\n")], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `candidates_${phaseFilter || "all"}_${Date.now()}.csv`;
-    a.click();
-  };
+
 
   return (
     <div className={styles.container}>
@@ -1035,9 +1031,7 @@ export default function AdminDashboard() {
                 <option value="requested_revaluation">Requested Revaluation</option>
               </select>
               <button onClick={() => loadCandidates(true)} className={styles.searchBtn}>Search</button>
-              <button onClick={handleExportCsv} className={styles.exportBtn} style={{ marginLeft: "auto", background: "#10b981", color: "white", padding: "8px 16px", borderRadius: "6px", border: "none", cursor: "pointer", fontWeight: 600 }}>
-                Export CSV
-              </button>
+
             </div>
 
             {/* Candidates Table */}
@@ -1823,7 +1817,7 @@ export default function AdminDashboard() {
                     <span style={{ fontSize: '0.875rem', color: '#666' }}>seconds</span>
                   </div>
                   <p className={styles.interviewConfigHint}>
-                    After {idleThresholdInput}s of no activity during interview → 1st warning. Same trigger again → interview closed. Default: 15s.
+                    After {idleThresholdInput}s of no activity during interview ? 1st warning. Same trigger again ? interview closed. Default: 15s.
                   </p>
                 </div>
                 <div className={styles.interviewConfigCard} style={{ marginTop: '1rem' }}>
@@ -1883,12 +1877,10 @@ export default function AdminDashboard() {
           }}
           onClick={(e) => e.stopPropagation()}
         >
-                    {activeTab === "trash" ? (
+                                {activeTab === "trash" ? (
             <button
               style={{ display: 'flex', alignItems: 'center', width: '100%', padding: '8px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', color: '#006400', fontWeight: 'bold', fontSize: '14px' }}
-              onClick={() => {
-                handleRestoreCandidate(contextMenu.candidateId);
-              }}
+              onClick={() => handleRestoreCandidate(contextMenu.candidateId)}
               onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#d4edda'}
               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
             >
@@ -1901,7 +1893,9 @@ export default function AdminDashboard() {
               </svg>
               Restore
             </button>
-          ) : (
+                          ) : (
+                <>
+                  
             <button
               style={{ display: 'flex', alignItems: 'center', width: '100%', padding: '8px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', color: '#9c0606', fontWeight: 'bold', fontSize: '14px' }}
               onClick={() => {
@@ -1919,7 +1913,8 @@ export default function AdminDashboard() {
               </svg>
               Remove
             </button>
-          )}
+              </>
+            )}
         </div>
       )}
 

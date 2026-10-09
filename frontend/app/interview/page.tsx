@@ -434,8 +434,7 @@ export default function InterviewPage() {
     sessionStorage.setItem('closingInterviewId', effectiveInterviewId);
     localStorage.setItem('closingInterviewId', effectiveInterviewId);
 
-    // Sync phase=3 to DB immediately (fire-and-forget)
-    syncPhaseToDb(3);
+    // DB phase sync is now handled directly by the backend endpoint in route.py
 
     // Show the closing page immediately
     setClosingInterviewId(effectiveInterviewId);

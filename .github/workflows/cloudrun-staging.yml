@@ -1,4 +1,4 @@
-name: Build, Push & Deploy to Cloud Run (Staging)
+﻿name: Build, Push & Deploy to Cloud Run (Staging)
 
 on:
   workflow_dispatch:
@@ -9,8 +9,8 @@ permissions:
   id-token: write
 
 env:
-  BACKEND_IMAGE: agri-interview-backend
-  FRONTEND_IMAGE: agri-interview-frontend
+  BACKEND_IMAGE: agri-interview-backend-prod
+  FRONTEND_IMAGE: agri-interview-frontend-prod
   GCP_REGION: asia-south1
   GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   BACKEND_SERVICE: agri-interview-backend-staging
@@ -43,8 +43,8 @@ jobs:
           push: true
           platforms: linux/amd64
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.BACKEND_IMAGE }}:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.BACKEND_IMAGE }}:staging-latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.BACKEND_IMAGE }}:staging-${{ github.sha }}
 
   build_frontend:
     name: Build & Push Frontend
@@ -72,8 +72,8 @@ jobs:
           push: true
           platforms: linux/amd64
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.FRONTEND_IMAGE }}:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.FRONTEND_IMAGE }}:staging-latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.FRONTEND_IMAGE }}:staging-${{ github.sha }}
           build-args: |
             NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL_STAGING }}
             NEXT_PUBLIC_ADMIN_API_URL=${{ vars.NEXT_PUBLIC_API_URL_STAGING }}
@@ -96,7 +96,7 @@ jobs:
         with:
           service: ${{ env.BACKEND_SERVICE }}
           region: ${{ env.GCP_REGION }}
-          image: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+          image: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.BACKEND_IMAGE }}:staging-${{ github.sha }}
           project_id: ${{ env.GCP_PROJECT_ID }}
           env_vars: |
             TAILSCALE_AUTHKEY=${{ secrets.TAILSCALE_AUTHKEY }}
@@ -133,7 +133,7 @@ jobs:
         with:
           service: ${{ env.FRONTEND_SERVICE }}
           region: ${{ env.GCP_REGION }}
-          image: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+          image: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.FRONTEND_IMAGE }}:staging-${{ github.sha }}
           project_id: ${{ env.GCP_PROJECT_ID }}
           env_vars: |
             NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL_STAGING }}

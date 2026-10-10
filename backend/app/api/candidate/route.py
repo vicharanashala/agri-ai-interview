@@ -70,7 +70,7 @@ def _get_candidate_id_with_email_fallback(request: Request) -> str:
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
     user_id_str = str(user["_id"])
-    candidate = db.candidates.find_one({"user_id": user_id_str})
+    candidate = db.candidates.find_one({"user_id": {"$in": [user_id_str, user["_id"]]}})
     if not candidate:
         # New user — create candidate record first
         from bson import ObjectId
@@ -301,7 +301,7 @@ async def get_candidate_profile(email: Optional[str] = Query(None)):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    cand = db.candidates.find_one({"user_id": str(user["_id"])})
+    cand = db.candidates.find_one({"user_id": {"$in": [str(user["_id"]), user["_id"]]}})
     if not cand:
         return CandidateProfileResponse(
             id="",

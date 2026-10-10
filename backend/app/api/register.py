@@ -92,11 +92,11 @@ async def register(request: Request, body: RegisterRequest):
     user_id = user["_id"]
 
     # 3. Create candidate record (if not already present)
-    existing_candidate = db.candidates.find_one({"user_id": user_id})
+    existing_candidate = db.candidates.find_one({"user_id": {"$in": [str(user_id), user_id]}})
     if not existing_candidate:
         db.candidates.insert_one({
             "_id": ObjectId(),
-            "user_id": user_id,
+            "user_id": str(user_id),
             "email": email,
             "current_phase": "onboarding",
             "created_at": now,

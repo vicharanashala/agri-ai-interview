@@ -23,7 +23,12 @@ export async function GET(request: NextRequest) {
     if (!res.ok) {
       const text = await res.text()
       console.error('[candidate/documents GET] Backend error:', text)
-      return NextResponse.json({ error: `Backend status ${res.status}: ${text}` }, { status: res.status })
+      let parsedMessage = text;
+      try {
+        const parsed = JSON.parse(text);
+        parsedMessage = parsed.detail || parsed.message || parsed.error || text;
+      } catch (e) {}
+      return NextResponse.json({ error: parsedMessage }, { status: res.status })
     }
 
     const data = await res.json()
@@ -62,7 +67,12 @@ export async function POST(request: NextRequest) {
     if (!res.ok) {
       const text = await res.text()
       console.error('[candidate/documents POST] Backend error:', text)
-      return NextResponse.json({ error: `Backend status ${res.status}: ${text}` }, { status: res.status })
+      let parsedMessage = text;
+      try {
+        const parsed = JSON.parse(text);
+        parsedMessage = parsed.detail || parsed.message || parsed.error || text;
+      } catch (e) {}
+      return NextResponse.json({ error: parsedMessage }, { status: res.status })
     }
 
     const data = await res.json()

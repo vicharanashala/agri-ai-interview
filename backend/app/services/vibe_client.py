@@ -16,16 +16,12 @@ class VibeResponseError(ValueError):
 
 
 def _is_completed_row(row: dict) -> bool:
-    """A leaderboard row counts as completed only at 100% with a real completedAt."""
+    """A leaderboard row counts as completed at 100% completion percentage."""
     percentage = row.get("completionPercentage")
-    completed_at = row.get("completedAt")
     return (
         isinstance(percentage, (int, float))
         and not isinstance(percentage, bool)
-        and percentage == 100
-        and isinstance(completed_at, str)
-        and completed_at.strip() != ""
-        and completed_at.strip() != VIBE_NOT_COMPLETED
+        and percentage >= 100
     )
 
 
@@ -36,10 +32,9 @@ async def get_course_completions() -> List[dict]:
     Calls: GET /users/progress/courses/{course_id}/versions/{version_id}/leaderboard/no-auth
     Auth:  none
 
-    Returns only rows with completionPercentage == 100 and a completedAt other
-    than "Not completed yet". Raises VibeResponseError if the response is not
-    an object with a `data` list of objects, so an invalid response is never
-    mistaken for an empty completion list.
+    Returns only rows with completionPercentage == 100. Raises VibeResponseError if the 
+    response is not an object with a `data` list of objects, so an invalid response is 
+    never mistaken for an empty completion list.
     """
     url = (
         f"{settings.VIBE_API_URL.rstrip('/')}/users/progress/courses/{settings.VIBE_COURSE_ID}"

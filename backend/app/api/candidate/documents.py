@@ -16,7 +16,6 @@ router = APIRouter(prefix="/api/candidate", tags=["candidate-documents"])
 
 ALLOWED_CONTENT_TYPES = {
     "application/pdf",
-    "application/msword",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "image/jpeg",
     "image/jpg",
@@ -42,7 +41,6 @@ MAX_SIZES = {
 
 _CONTENT_TYPES = {
     "pdf": "application/pdf",
-    "doc": "application/msword",
     "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "jpg": "image/jpeg",
     "jpeg": "image/jpeg",
@@ -54,14 +52,14 @@ def _guess_file_type(filename: str) -> str:
     ext = filename.lower().split(".")[-1]
     if ext in ["jpg", "jpeg"]: return "jpg"
     if ext == "png": return "png"
-    return "docx" if ext == "docx" else ("doc" if ext == "doc" else "pdf")
+    return "docx" if ext == "docx" else "pdf"
 
 
 def _validate_file(file: UploadFile, field_name: str) -> bytes:
     content_type = file.content_type or ""
-    allowed_exts = (".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png")
+    allowed_exts = (".pdf", ".docx", ".jpg", ".jpeg", ".png")
     if content_type not in ALLOWED_CONTENT_TYPES and not file.filename.lower().endswith(allowed_exts):
-        raise HTTPException(status_code=400, detail=f"Only PDF, DOCX, JPG, and PNG files are allowed for {field_name}")
+        raise HTTPException(status_code=400, detail=f"Invalid format for {field_name}. Please upload .jpg, .jpeg, .png, .pdf, or .docx only.")
 
     file_bytes = file.file.read()
     max_size = MAX_SIZES.get(field_name, 5 * 1024 * 1024)
@@ -100,9 +98,9 @@ from fastapi import Form
 @router.post("/validate-single")
 async def validate_single_document(file: UploadFile = File(...), field_name: str = Form(...)):
     # Immediately block unsupported extensions like HEIC
-    allowed_exts = (".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png")
+    allowed_exts = (".pdf", ".docx", ".jpg", ".jpeg", ".png")
     if not file.filename.lower().endswith(allowed_exts):
-        return {"success": False, "reason": "Invalid file format. Please upload PDF, DOCX, JPG, or PNG."}
+        return {"success": False, "reason": "Invalid file format. Please upload .jpg, .jpeg, .png, .pdf, or .docx only."}
 
     file_bytes = await file.read()
     mime_type = file.content_type if file.content_type else "image/jpeg"

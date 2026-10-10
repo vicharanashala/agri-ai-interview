@@ -20,7 +20,11 @@ export async function POST(request: NextRequest) {
 
     for (const [key, value] of formData.entries()) {
       if (key !== 'credentials') {
-        backendFormData.append(key, value)
+        if (typeof value === 'object' && 'name' in value) {
+          backendFormData.append(key, value, value.name)
+        } else {
+          backendFormData.append(key, value)
+        }
       }
     }
 

@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -10,7 +10,6 @@ import ProfileNavButton from '@/components/ProfileNavButton';
 
 const ALLOWED_TYPES = [
   'application/pdf',
-  'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'image/jpeg',
   'image/png',
@@ -144,17 +143,16 @@ export default function UploadDocumentsPage() {
     if (
       !ALLOWED_TYPES.includes(file.type) &&
       !file.name.toLowerCase().endsWith('.pdf') &&
-      !file.name.toLowerCase().endsWith('.doc') &&
       !file.name.toLowerCase().endsWith('.docx') &&
       !file.name.toLowerCase().endsWith('.jpg') &&
       !file.name.toLowerCase().endsWith('.jpeg') &&
       !file.name.toLowerCase().endsWith('.png')
     ) {
-      return 'Only PDF, DOCX, JPG, and PNG files allowed';
+      return `Invalid format for ${field.label}. Please upload .jpg, .jpeg, .png, .pdf, or .docx only.`;
     }
 
     if (file.size > field.maxSizeMB * 1024 * 1024) {
-      return `Exceeds ${field.maxSizeMB}MB limit`;
+      return `File too large for ${field.label}. Maximum allowed size is ${field.maxSizeMB}MB.`;
     }
 
     return null;
@@ -204,9 +202,17 @@ export default function UploadDocumentsPage() {
       formData.append('field_name', fieldKey);
 
       const rt = sessionStorage.getItem('candidate_session_token');
-      const headers: HeadersInit = rt ? { 'x-redis-token': rt } : {};
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || '';
       
-      const res = await fetch('/api/candidate/validate-single', {
+      const headers: HeadersInit = rt ? { 
+        'Authorization': `Bearer ${rt}`,
+        // Keep x-redis-token for compatibility if backend expects it
+        'x-redis-token': rt 
+      } : {};
+      
+      const uploadUrl = backendUrl ? `${backendUrl}/api/candidate/validate-single` : '/api/candidate/validate-single';
+      
+      const res = await fetch(uploadUrl, {
         method: 'POST',
         body: formData,
         headers,
@@ -276,17 +282,31 @@ export default function UploadDocumentsPage() {
       }
 
       const rt = sessionStorage.getItem('candidate_session_token');
-      const headers: HeadersInit = rt ? { 'x-redis-token': rt } : {};
-      const res = await fetch('/api/candidate/documents', {
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || '';
+      
+      const headers: HeadersInit = rt ? { 
+        'Authorization': `Bearer ${rt}`,
+        'x-redis-token': rt 
+      } : {};
+      
+      const submitUrl = backendUrl ? `${backendUrl}/api/candidate/documents` : '/api/candidate/documents';
+
+      const res = await fetch(submitUrl, {
         method: 'POST',
         body: formData,
-        credentials: 'include',
+        credentials: backendUrl ? 'omit' : 'include', // don't send cookies to cross-origin API
         headers,
       });
 
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail || 'Upload failed.');
+        let errorMsg = 'Upload failed.';
+        if (res.status === 413) {
+          errorMsg = 'Files are too large. Please compress them and try again.';
+        } else {
+          const data = await res.json().catch(() => ({}));
+          errorMsg = data.detail || data.error || data.message || `Upload failed (Status ${res.status}).`;
+        }
+        throw new Error(errorMsg);
       }
 
       await syncPhaseToDb(6, {
@@ -449,7 +469,7 @@ export default function UploadDocumentsPage() {
                           )}
                           <input
                             type="file"
-                            accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                            accept=".pdf,.docx,.jpg,.jpeg,.png"
                             disabled={validatingFields[field.key]}
                             ref={(el) => {
                               fileInputRefs.current[field.key] = el;

@@ -48,9 +48,23 @@ export default function FoundationCoursePage() {
 
     try {
       const rt = sessionStorage.getItem('candidate_session_token');
-      const res = await fetch('/api/foundation-course/check-completion', {
+      let res = await fetch('/api/foundation-course/check-completion', {
         headers: rt ? { 'x-redis-token': rt } : {},
       });
+
+      if (res.status === 401 && rt) {
+        res = await fetch('/api/foundation-course/check-completion');
+      }
+
+      if (res.status === 401) {
+        setFeedback({
+          type: 'error',
+          text: 'Session expired. Please log out and log in again.',
+        });
+        sessionStorage.removeItem('candidate_session_token');
+        return;
+      }
+
       const data = await res.json();
 
       if (data.alreadyVerified || data.completed) {

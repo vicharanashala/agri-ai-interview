@@ -8,6 +8,7 @@ const protectedRoutes = [
   '/onboarding',
   '/summary',
   '/foundation-course',
+  '/module',
   '/upload-documents',
 ];
 

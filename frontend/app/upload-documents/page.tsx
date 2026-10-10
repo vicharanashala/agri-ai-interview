@@ -91,6 +91,11 @@ export default function UploadDocumentsPage() {
 
       try {
         const res = await fetch('/api/candidate');
+        if (res.status === 401) {
+          sessionStorage.removeItem('candidate_session_token');
+          router.push('/post-login?callbackUrl=/upload-documents');
+          return;
+        }
         if (res.ok) {
           const candidate = await res.json();
           if (candidate && candidate.foundationCourseCompleted) {

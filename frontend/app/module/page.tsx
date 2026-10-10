@@ -37,6 +37,11 @@ export default function ModulePage() {
       }
       try {
         const res = await fetch('/api/candidate');
+        if (res.status === 401) {
+          sessionStorage.removeItem('candidate_session_token');
+          router.push('/post-login?callbackUrl=/module');
+          return;
+        }
         if (res.ok) {
           const candidate = await res.json();
           if (candidate && candidate.moduleCompleted) {
@@ -72,9 +77,24 @@ export default function ModulePage() {
 
     try {
       const rt = sessionStorage.getItem('candidate_session_token');
-      const res = await fetch('/api/module/check-completion', {
+      let res = await fetch('/api/module/check-completion', {
         headers: rt ? { 'x-redis-token': rt } : {},
       });
+
+      // If 401, sessionStorage might be stale. Retry without x-redis-token to use the valid cookie.
+      if (res.status === 401 && rt) {
+        res = await fetch('/api/module/check-completion');
+      }
+
+      if (res.status === 401) {
+        setFeedback({
+          type: 'error',
+          text: 'Session expired. Please log out and log in again.',
+        });
+        sessionStorage.removeItem('candidate_session_token');
+        return;
+      }
+
       const data = await res.json();
 
       if (data.alreadyVerified || data.completed) {

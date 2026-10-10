@@ -69,6 +69,13 @@ export default function DashboardPage() {
     const checkProfile = async () => {
       try {
         const response = await fetch('/api/candidate');
+        
+        if (response.status === 401) {
+          sessionStorage.removeItem('candidate_session_token');
+          router.push('/post-login?callbackUrl=/dashboard');
+          return;
+        }
+
         if (!response.ok) throw new Error('Failed to fetch candidate');
         const candidate = await response.json();
 

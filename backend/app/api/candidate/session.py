@@ -70,7 +70,7 @@ async def create_session(request: Request, response: Response):
     # user_id is stored as string in candidates, so convert consistently
     user_id_str = str(user["_id"])
     candidate = db.candidates.find_one({
-        "user_id": user_id_str,
+        "user_id": {"$in": [user_id_str, user["_id"]]},
     })
     if not candidate:
         raise HTTPException(status_code=401, detail="Invalid session establishment")

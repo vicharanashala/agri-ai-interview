@@ -202,21 +202,22 @@ export default function UploadDocumentsPage() {
       formData.append('field_name', fieldKey);
 
       const rt = sessionStorage.getItem('candidate_session_token');
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || '';
+      const headers: HeadersInit = rt ? { 'x-redis-token': rt } : {};
       
-      const headers: HeadersInit = rt ? { 
-        'Authorization': `Bearer ${rt}`,
-        // Keep x-redis-token for compatibility if backend expects it
-        'x-redis-token': rt 
-      } : {};
-      
-      const uploadUrl = backendUrl ? `${backendUrl}/api/candidate/validate-single` : '/api/candidate/validate-single';
-      
-      const res = await fetch(uploadUrl, {
+      const res = await fetch('/api/candidate/validate-single', {
         method: 'POST',
         body: formData,
         headers,
       });
+      
+      if (!res.ok) {
+        if (res.status === 413) {
+          setErrors((prev) => ({ ...prev, [fieldKey]: `File is too large. Maximum size is ${field.maxSizeMB}MB.` }));
+          return;
+        }
+        setErrors((prev) => ({ ...prev, [fieldKey]: `Validation error (Status ${res.status}).` }));
+        return;
+      }
       
       const data = await res.json();
 
@@ -246,8 +247,8 @@ export default function UploadDocumentsPage() {
           : { ...prev, [fieldKey]: [uploaded] }
       );
       
-    } catch (err) {
-      setErrors((prev) => ({ ...prev, [fieldKey]: 'Failed to connect to validation service.' }));
+    } catch (err: any) {
+      setErrors((prev) => ({ ...prev, [fieldKey]: `Validation request failed: ${err.message || 'Network error'}` }));
     } finally {
       // 5. Remove the "Validating..." spinner
       setValidatingFields((prev) => ({ ...prev, [fieldKey]: false }));
@@ -282,19 +283,12 @@ export default function UploadDocumentsPage() {
       }
 
       const rt = sessionStorage.getItem('candidate_session_token');
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || '';
+      const headers: HeadersInit = rt ? { 'x-redis-token': rt } : {};
       
-      const headers: HeadersInit = rt ? { 
-        'Authorization': `Bearer ${rt}`,
-        'x-redis-token': rt 
-      } : {};
-      
-      const submitUrl = backendUrl ? `${backendUrl}/api/candidate/documents` : '/api/candidate/documents';
-
-      const res = await fetch(submitUrl, {
+      const res = await fetch('/api/candidate/documents', {
         method: 'POST',
         body: formData,
-        credentials: backendUrl ? 'omit' : 'include', // don't send cookies to cross-origin API
+        credentials: 'include',
         headers,
       });
 

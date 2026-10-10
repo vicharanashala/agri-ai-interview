@@ -215,7 +215,13 @@ export default function UploadDocumentsPage() {
           setErrors((prev) => ({ ...prev, [fieldKey]: `File is too large. Maximum size is ${field.maxSizeMB}MB.` }));
           return;
         }
-        setErrors((prev) => ({ ...prev, [fieldKey]: `Validation error (Status ${res.status}).` }));
+        if (res.status === 401) {
+          setErrors((prev) => ({ ...prev, [fieldKey]: 'Your session has expired. Please log in again.' }));
+          return;
+        }
+        const errData = await res.json().catch(() => ({}));
+        const errMsg = errData.detail || errData.error || errData.message || 'Validation error. Please try again.';
+        setErrors((prev) => ({ ...prev, [fieldKey]: errMsg }));
         return;
       }
       
@@ -293,12 +299,22 @@ export default function UploadDocumentsPage() {
       });
 
       if (!res.ok) {
-        let errorMsg = 'Upload failed.';
+        let errorMsg = 'Upload failed. Please try again.';
         if (res.status === 413) {
           errorMsg = 'Files are too large. Please compress them and try again.';
+        } else if (res.status === 401) {
+          errorMsg = 'Your session has expired. Please log in again.';
         } else {
           const data = await res.json().catch(() => ({}));
-          errorMsg = data.detail || data.error || data.message || `Upload failed (Status ${res.status}).`;
+          // Prevent raw JSON string dumps if data.error contains it
+          let parsedError = data.detail || data.error || data.message;
+          if (typeof parsedError === 'string' && parsedError.includes('{')) {
+            try {
+              const innerParse = JSON.parse(parsedError.replace(/^Backend status \d+: /, ''));
+              parsedError = innerParse.detail || innerParse.message || 'Upload failed.';
+            } catch (e) {}
+          }
+          errorMsg = parsedError || 'Upload failed. Please try again.';
         }
         throw new Error(errorMsg);
       }

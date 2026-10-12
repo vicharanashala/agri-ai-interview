@@ -1,10 +1,10 @@
-'use client';
+﻿'use client';
 
-import FullPageSkeleton from '@/components/FullPageSkeleton';
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import styles from './page.module.css';
+import FullPageSkeleton from '@/components/FullPageSkeleton';
 import HowToUseModal from '@/components/HowToUseModal';
 import BrandLogos from '@/components/BrandLogos';
 import ProfileNavButton from '@/components/ProfileNavButton';
@@ -35,6 +35,140 @@ interface Attempt {
   startedAt: string | null;
 }
 
+// ── SVG Phase Step Icons ─────────────────────────────────────────────────────
+function getPhaseStepIcon(phaseId: Phase) {
+  switch (phaseId) {
+    case 1:
+      // Onboarding - User profile icon
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={styles.stepIconSvg}>
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+          <circle cx="12" cy="7" r="4" />
+        </svg>
+      );
+    case 2:
+      // Start Interview - Video camera icon
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={styles.stepIconSvg}>
+          <path d="m22 7-6 5 6 5V7Z" />
+          <rect x="2" y="5" width="14" height="14" rx="3" />
+        </svg>
+      );
+    case 3:
+      // Interview Summary - Document icon
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={styles.stepIconSvg}>
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
+          <line x1="16" y1="13" x2="8" y2="13" />
+          <line x1="16" y1="17" x2="8" y2="17" />
+          <line x1="10" y1="9" x2="8" y2="9" />
+        </svg>
+      );
+    case 4:
+      // Foundation Course - Graduation cap
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={styles.stepIconSvg}>
+          <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+          <path d="M6 12v5c3 3 9 3 12 0v-5" />
+        </svg>
+      );
+    case 5:
+      // Ground Truth Module - Bar chart
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={styles.stepIconSvg}>
+          <line x1="18" y1="20" x2="18" y2="10" />
+          <line x1="12" y1="20" x2="12" y2="4" />
+          <line x1="6" y1="20" x2="6" y2="14" />
+        </svg>
+      );
+    case 6:
+      // Upload Documents - Document with upload arrow
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={styles.stepIconSvg}>
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
+          <path d="M12 18v-6" />
+          <path d="m9 15 3-3 3 3" />
+        </svg>
+      );
+  }
+}
+
+// ── Sprout Mascot SVG (Animated) ─────────────────────────────────────────────
+function SproutMascot() {
+  return (
+    <svg
+      width="76"
+      height="84"
+      viewBox="0 0 100 110"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={styles.sproutMascotSvg}
+      aria-hidden="true"
+    >
+      {/* Sparkles around waving hand */}
+      <g className={styles.sparklesGroup}>
+        <path d="M85 30 L93 25" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" />
+        <path d="M89 39 L97 39" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" />
+        <path d="M83 47 L91 52" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" />
+      </g>
+
+      {/* Feet */}
+      <ellipse cx="38" cy="98" rx="5" ry="3.5" fill="#ffffff" stroke="#1b4332" strokeWidth="2.2" />
+      <ellipse cx="58" cy="98" rx="5" ry="3.5" fill="#ffffff" stroke="#1b4332" strokeWidth="2.2" />
+
+      {/* Left Arm (resting at side) */}
+      <path d="M25 65 C20 67 18 73 21 78 C23 81 26 80 27 75" fill="#ffffff" stroke="#1b4332" strokeWidth="2.2" strokeLinecap="round" />
+
+      {/* Body */}
+      <path
+        d="M48 30 C32 30 22 45 22 68 C22 90 32 99 48 99 C64 99 74 90 74 68 C74 45 64 30 48 30 Z"
+        fill="#ffffff"
+        stroke="#1b4332"
+        strokeWidth="2.4"
+      />
+
+      {/* Soft Belly Shadow */}
+      <path
+        d="M26 75 C28 92 37 97 48 97 C59 97 68 92 70 75 C66 90 56 94 48 94 C40 94 30 90 26 75 Z"
+        fill="#dcfce7"
+        opacity="0.85"
+      />
+
+      {/* Right Arm (waving high with subtle animation) */}
+      <path
+        className={styles.wavingArm}
+        d="M72 60 C78 55 83 46 84 38 C84 34 79 35 77 41 C74 48 71 55 69 63"
+        fill="#ffffff"
+        stroke="#1b4332"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+
+      {/* Stem and Two Leaves on Head */}
+      <path d="M48 30 C48 24 47 18 47 14" stroke="#15803d" strokeWidth="2.5" strokeLinecap="round" />
+      <path d="M47 22 C37 20 30 11 36 6 C42 1 47 14 47 22 Z" fill="#84cc16" stroke="#15803d" strokeWidth="2" strokeLinejoin="round" />
+      <path d="M47 22 C57 20 64 11 58 6 C52 1 47 14 47 22 Z" fill="#84cc16" stroke="#15803d" strokeWidth="2" strokeLinejoin="round" />
+
+      {/* Eyes */}
+      <circle cx="40" cy="58" r="3.2" fill="#1b4332" />
+      <circle cx="41.2" cy="56.8" r="1" fill="#ffffff" />
+
+      <circle cx="58" cy="58" r="3.2" fill="#1b4332" />
+      <circle cx="59.2" cy="56.8" r="1" fill="#ffffff" />
+
+      {/* Blush */}
+      <ellipse cx="34" cy="65" rx="3.5" ry="2" fill="#f87171" opacity="0.45" />
+      <ellipse cx="64" cy="65" rx="3.5" ry="2" fill="#f87171" opacity="0.45" />
+
+      {/* Smile */}
+      <path d="M46 65 Q49 70 52 65" stroke="#1b4332" strokeWidth="2" strokeLinecap="round" fill="none" />
+    </svg>
+  );
+}
+
 export default function DashboardPage() {
   const [currentPhase, setCurrentPhase] = useState<Phase>(1);
   const [documentsSubmitted, setDocumentsSubmitted] = useState(false);
@@ -44,16 +178,14 @@ export default function DashboardPage() {
   const [showAlreadyDoneDialog, setShowAlreadyDoneDialog] = useState(false);
   const [showNoAttemptsLeftDialog, setShowNoAttemptsLeftDialog] = useState(false);
   const [showCooldownDialog, setShowCooldownDialog] = useState(false);
+  const [showInstructionsModal, setShowInstructionsModal] = useState(false);
+  const [showAttemptsModal, setShowAttemptsModal] = useState(false);
   const [cooldownUntil, setCooldownUntil] = useState<string | null>(null);
   const [cooldownTimeLeft, setCooldownTimeLeft] = useState<string | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
   const [showVideoModal, setShowVideoModal] = useState(false);
   const [attempts, setAttempts] = useState<Attempt[]>([]);
   const router = useRouter();
-
-  const handleFaqClick = () => {
-    router.push('/faq');
-  };
 
   useEffect(() => {
     // Map DB phase label → number (source of truth for pipeline progress)
@@ -69,7 +201,7 @@ export default function DashboardPage() {
     const checkProfile = async () => {
       try {
         const response = await fetch('/api/candidate');
-        
+
         if (response.status === 401) {
           sessionStorage.removeItem('candidate_session_token');
           router.push('/post-login?callbackUrl=/dashboard');
@@ -104,9 +236,9 @@ export default function DashboardPage() {
         // 4. Reconstruct actual phase from DB phase + flags
         let actualPhase: Phase = dbPhaseNum;
 
-        if (foundationCompleted  && actualPhase < 5) actualPhase = 5;
-        if (moduleCompleted      && actualPhase < 6) actualPhase = 6;
-        if (docsSubmitted        && actualPhase < 6) actualPhase = 6;
+        if (foundationCompleted && actualPhase < 5) actualPhase = 5;
+        if (moduleCompleted     && actualPhase < 6) actualPhase = 6;
+        if (docsSubmitted       && actualPhase < 6) actualPhase = 6;
 
         setCurrentPhase(actualPhase);
         setHasCompletedInterview(actualPhase >= 3);
@@ -141,16 +273,13 @@ export default function DashboardPage() {
         if (candidate.email)    localStorage.setItem('candidateEmail', candidate.email);
 
         // If interview was just completed (redirect flag set by interview page), go to summary
-        // Only redirect if: phase >= 3 AND summary hasn't already been visited this session
         const justCompleted = sessionStorage.getItem('interviewJustCompleted') === 'true'
           || localStorage.getItem('interviewJustCompleted') === 'true';
         if (actualPhase >= 3 && justCompleted && !summaryVisited) {
-          // Clear flag immediately so re-renders don't re-trigger the redirect
           sessionStorage.removeItem('interviewJustCompleted');
           localStorage.removeItem('interviewJustCompleted');
           setTimeout(() => router.push('/summary'), 500);
         } else {
-          // Summary already visited or flag absent — ensure flag is clean
           sessionStorage.removeItem('interviewJustCompleted');
           localStorage.removeItem('interviewJustCompleted');
         }
@@ -166,10 +295,7 @@ export default function DashboardPage() {
         const res = await fetch('/api/candidate/attempts', { credentials: 'include', cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
-          console.log('[loadAttempts] API response:', JSON.stringify(data));
           setAttempts(data.attempts ?? []);
-          // Always sync cooldown from fresh API response — deadline is computed
-          // dynamically so stale localStorage values must not override it.
           if (data.cooldownUntil) {
             setCooldownUntil(data.cooldownUntil);
             localStorage.setItem('cooldownUntil', data.cooldownUntil);
@@ -279,7 +405,7 @@ export default function DashboardPage() {
         setShowAlreadyDoneDialog(true);
         return;
       }
-      
+
       // Navigate to appropriate page based on phase
       switch (phase.id) {
         case 1:
@@ -300,8 +426,6 @@ export default function DashboardPage() {
               setShowNoAttemptsLeftDialog(true);
               return;
             }
-            // Always go through /post-login to ensure candidate_session_token
-            // is created and stored in sessionStorage before entering /interview.
             router.push('/post-login?callbackUrl=/interview');
           } else {
             router.push('/interview/queue');
@@ -314,267 +438,513 @@ export default function DashboardPage() {
           router.push('/foundation-course');
           break;
         case 5:
-            router.push('/module');
-            break;
-          case 6:
-            router.push('/upload-documents');
-            break;
+          router.push('/module');
+          break;
+        case 6:
+          router.push('/upload-documents');
+          break;
       }
     }
   };
 
-  const getStatusIcon = (phase: PhaseInfo) => {
-    if (phase.id === 2) {
-      if (hasPassed) return '✓';
-      if (attempts.length >= 3 && !hasPassed) return '✗';
-      if (attempts.length > 0 && attempts.length < 3 && !hasPassed) return '▶';
+  // 100% Original completion percentage calculation logic preserved
+  const getCompletionPercentage = () => {
+    if (documentsSubmitted) return 100;
+
+    if (currentPhase === 6) return 80;
+
+    if (currentPhase === 5) return 60;
+
+    if (currentPhase === 4) return 40;
+
+    if (currentPhase === 3) {
+      return hasPassed ? 40 : 20;
     }
-    switch (phase.status) {
-      case 'completed':
-        return '✓';
-      case 'current':
-        return '▶';
-      default:
-        return '○';
-    }
+
+    if (currentPhase === 2) return 20;
+
+    return 0;
   };
- const getCompletionPercentage = () => {
-  if (documentsSubmitted) return 100;
 
-  if (currentPhase === 6) return 80;
+  const completionPercentage = getCompletionPercentage();
 
-  if (currentPhase === 5) return 60;
 
-  if (currentPhase === 4) return 40;
-
-  if (currentPhase === 3) {
-    return hasPassed ? 40 : 20;
-  }
-
-  if (currentPhase === 2) return 20;
-
-  return 0;
-};
-
-const completionPercentage = getCompletionPercentage();
-  const renderPhaseStatus = (phase: PhaseInfo) => {
-    if (phase.id === 2) {
-      if (hasPassed) {
-        return <span className={styles.completedBadge}>Completed</span>;
+  // Dynamic Sprout Speech Bubble Message based on pipeline status
+  const getMascotMessage = () => {
+    if (cooldownTimeLeft) {
+      return (
+        <>
+          Interview cooldown active — take a breather before retrying! ⏳
+        </>
+      );
+    }
+    if (currentPhase === 1) {
+      return (
+        <>
+          Welcome! Complete your <strong>onboarding</strong> to begin your interview journey! 🌱
+        </>
+      );
+    }
+    if (currentPhase === 2) {
+      if (attempts.length > 0 && !hasPassed && hasAttemptsLeft) {
+        return (
+          <>
+            Step 2 re-attempt unlocked — give it your best shot! 🚀
+          </>
+        );
       }
       if (attempts.length >= 3 && !hasPassed) {
-        return <span className={styles.failedBadge}>Failed</span>;
+        return (
+          <>
+            All attempts completed — please view your <strong>interview summary</strong>. 📋
+          </>
+        );
       }
-      if (attempts.length > 0 && attempts.length < 3 && !hasPassed) {
-        return <span className={styles.reattemptBadge}>Re-attempt</span>;
+      return (
+        <>
+          Step 2 unlocked — it&apos;s time for your <strong>interview</strong>! 🎉
+        </>
+      );
+    }
+    if (currentPhase === 3) {
+      if (hasPassed) {
+        return (
+          <>
+            Awesome job! You passed your interview — check your <strong>summary</strong>! 🏆
+          </>
+        );
       }
+      return (
+        <>
+          Interview completed — review your <strong>scores & summary</strong>! 📋
+        </>
+      );
     }
-    
-    if (phase.id === 3) {
-      if (phase.status === 'completed' || phase.status === 'current') {
-        const isFilled = hasPassed || attempts.length >= 3;
-        if (isFilled) {
-          return <span className={styles.completedBadge}>View Summary</span>;
-        } else {
-          return <span className={styles.currentBadge} style={{ background: 'rgba(8, 203, 0, 0.08)', animation: 'none' }}>View Summary</span>;
-        }
+    if (currentPhase === 4) {
+      return (
+        <>
+          Step 4 unlocked — complete the <strong>foundation course</strong> to keep moving! 🎓
+        </>
+      );
+    }
+    if (currentPhase === 5) {
+      return (
+        <>
+          Step 5 unlocked — work on the <strong>ground truth module</strong>! 📊
+        </>
+      );
+    }
+    if (currentPhase === 6) {
+      if (documentsSubmitted) {
+        return (
+          <>
+            All done! You have completed all journey steps successfully! 🌟
+          </>
+        );
       }
+      return (
+        <>
+          Final step — <strong>upload your documents</strong> to complete your hiring process! 📁
+        </>
+      );
     }
-    
-    if (phase.status === 'completed') {
-      return <span className={styles.completedBadge}>Completed</span>;
-    }
-    if (phase.status === 'current') {
-      return <span className={styles.currentBadge}>In Progress</span>;
-    }
-    return <span className={styles.lockedBadge}>🔒 Locked</span>;
+    return <>Complete each step to move forward. You&apos;re doing great! ✨</>;
   };
 
-  const handleAdvancePhase = (completedPhase: Phase) => {
-    // Only advance if the current phase is completed
-    // This is called by child pages when they finish their tasks
-    if (completedPhase === currentPhase && currentPhase < 6) {
-      const nextPhase = (currentPhase + 1) as Phase;
-      setCurrentPhase(nextPhase);
-      sessionStorage.setItem('interviewPhase', String(nextPhase));
+  // Contextual Tips for candidates
+  const getTipMessage = () => {
+    if (currentPhase === 2) {
+      return 'Find a quiet place with a stable internet connection to ensure a smooth interview experience.';
     }
-  };
-
-  const handleLogout = async () => {
-    setLoggingOut(true);
-
-    // Destroy Redis session (best-effort — don't block if it fails)
-    const redisToken = sessionStorage.getItem('candidate_session_token')
-    if (redisToken) {
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL
-      fetch(`${backendUrl}/api/candidate/session/logout`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${redisToken}` },
-      }).catch(() => {})
+    if (currentPhase === 1) {
+      return 'Ensure your full name, email, and mobile number match your official documents before submitting.';
     }
-
-    sessionStorage.clear()
-    localStorage.clear()
-    await signOut({ redirect: false })
-    router.push('/login')
+    if (currentPhase === 3) {
+      return 'Review your evaluation feedback and metric breakdown to see your key areas of performance.';
+    }
+    if (currentPhase === 4) {
+      return 'Sign in or sign up on ViBe using your registered email address to verify course completion.';
+    }
+    if (currentPhase === 5) {
+      return 'Follow all Ground Truth Application instructions carefully to ensure quick approval.';
+    }
+    if (currentPhase === 6) {
+      return 'Ensure document scans or images are clear, legible, and match your submitted profile.';
+    }
+    return 'Find a quiet place with a stable internet connection to ensure a smooth interview experience.';
   };
-
-  const isPassed = interviewResult && interviewResult.overall_score >= 60;
-  const isCompleted = hasCompletedInterview || currentPhase >= 3;
 
   if (isLoading) {
-    return (
-      <FullPageSkeleton />
-    );
+    return <FullPageSkeleton />;
   }
 
   return (
     <main className={styles.container}>
+      {/* Background organic gradients */}
+      <div className={styles.bgDecoration} aria-hidden="true">
+        <div className={styles.bgWaveTopLeft} />
+        <div className={styles.bgWaveBottomRight} />
+      </div>
+
       {/* Top Navbar */}
       <nav className={styles.topNavbar}>
         <div className={styles.navbarContent}>
+          {/* 3 Brand Logos (as before) */}
           <BrandLogos variant="header" />
-          <div className={styles.headerButtons}>
-            <ProfileNavButton />
+
+          {/* Right Header: FAQ & Help + Profile Menu */}
+          <div className={styles.navbarRight}>
+            <ProfileNavButton showFaqHeaderButton={true} />
           </div>
         </div>
       </nav>
 
-      {/* Main Dashboard Content */}
+      {/* Main Content */}
       <div className={styles.contentContainer}>
-        <div className={styles.pageHeader}>
-          <h1 className={styles.dashboardTitle}>Interview Progress Dashboard</h1>
-          <p className={styles.dashboardSubtitle}>Track your journey through the hiring process</p>
-        </div>
-
-        <div className={styles.progressContainer}>
-        <div className={styles.progressBar}>
-          <div 
-            className={styles.progressFill} 
-           style={{
-              width: `${completionPercentage}%`
-            }}
-          />
-        </div>
-        <span className={styles.progressPercent}>
-          {completionPercentage}% Complete
-        </span>
-      </div>
-
-      {/* How to Use / Tutorial Video */}
-      <div className={styles.tutorialWrapper}>
-        <div
-          onClick={() => setShowVideoModal(true)}
-          className={styles.tutorialCard}
-        >
-          <div className={styles.tutorialPlayIcon}>
-            ▶
-          </div>
-          <div className={styles.tutorialContent}>
-            <p className={styles.tutorialTitle}>
-              🎥 Watch: How to Use This App & Take the Interview
-            </p>
-            <p className={styles.tutorialSub}>
-              Click to watch the tutorial video before proceeding
+        {/* Centered Hero Header + Centered Action Buttons Below */}
+        <section className={styles.heroSection}>
+          <div className={styles.heroCenter}>
+            <h1 className={styles.journeyTitle}>
+              Your <span className={styles.titleHighlight}>Interview Journey</span>
+            </h1>
+            <p className={styles.journeySubtitle}>
+              Complete each step to move forward. You&apos;re doing great! ✨
             </p>
           </div>
-          <span className={styles.tutorialArrow}>→</span>
-        </div>
-      </div>
 
-      <div className={styles.instructionsCard}>
-        <p className={styles.instructionsTitle}>Important Instructions</p>
-        <p className={styles.instructionsText}>
-          1. The candidate will be allowed maximum 3 attempts.<br/>
-          2. On failing the interview there will be a cooldown period after which candidate is allowed next attempt.<br/>
-          3. Please read the interview instructions carefully, failing which may lead to interview closure.
-        </p>
-      </div>
+          {/* Action Row: 3 Action Buttons on the left + White Progress Card on the right */}
+          <div className={styles.topActionsRow}>
+            <div className={styles.topButtonsGroup}>
+              {/* 1. Important Instructions */}
+              <button
+                type="button"
+                className={styles.pillButton}
+                onClick={() => setShowInstructionsModal(true)}
+                title="Important Instructions"
+              >
+                <svg
+                  className={styles.pillIcon}
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="16" y1="13" x2="8" y2="13" />
+                  <line x1="16" y1="17" x2="8" y2="17" />
+                  <line x1="10" y1="9" x2="8" y2="9" />
+                </svg>
+                <span>Important Instructions</span>
+              </button>
 
-      {/* Cooldown countdown banner */}
-      {cooldownTimeLeft && (
-        <div className={styles.attemptsCard}>
-          <h2 className={styles.attemptsTitle}>⏳ Interview Cooldown Active</h2>
-          <p style={{ color: '#374151', fontSize: '15px', margin: 0 }}>
-            You can retry the interview after <strong style={{ fontWeight: 700 }}>{cooldownTimeLeft}</strong>.
-          </p>
-        </div>
-      )}
+              {/* 2. Interview Attempts */}
+              <button
+                type="button"
+                className={styles.pillButton}
+                onClick={() => setShowAttemptsModal(true)}
+                title="Interview Attempts"
+              >
+                <svg
+                  className={styles.pillIcon}
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
+                <span>Interview Attempts</span>
+                <span className={styles.attemptsPillBadge}>{attempts.length}/3</span>
+              </button>
 
-      {/* Past Interview Attempts */}
-      {attempts.length > 0 && (
-        <div className={styles.attemptsCard}>
-          <h2 className={styles.attemptsTitle}>
-            Interview Attempts ({attempts.length}/3)
-          </h2>
-          <div className={styles.attemptsList}>
-            {attempts.map((attempt, index) => {
-              const date = (attempt.completedAt
-                ? new Date(attempt.completedAt)
-                : attempt.startedAt
-                ? new Date(attempt.startedAt)
-                : null
-              )?.toLocaleDateString('en-IN', {
-                  day: '2-digit',
-                  month: 'short',
-                  year: 'numeric',
-                }) ?? '—';
+              {/* 3. Watch Tutorial */}
+              <button
+                type="button"
+                className={styles.pillButton}
+                onClick={() => setShowVideoModal(true)}
+                title="Watch Tutorial"
+              >
+                <span className={styles.playIconCircle}>▶</span>
+                <span>Watch Tutorial</span>
+              </button>
+            </div>
 
-              const badgeClass =
-                attempt.result === 'PASS'
-                  ? styles.badgePass
-                  : attempt.result === 'FAIL'
-                  ? styles.badgeFail
-                  : attempt.result === 'WITHDRAWN'
-                  ? styles.badgeWithdrawn
-                  : attempt.result === 'ANTI_CHEAT'
-                  ? styles.badgeAntiCheat
-                  : styles.badgeCompleted;
-
-              return (
-                <div key={attempt.id} className={styles.attemptRow}>
-                  <span className={styles.attemptNumber}>#{index + 1}</span>
-                  <span className={badgeClass}>
-                    {attempt.result ?? 'COMPLETED'}
-                  </span>
-                  {attempt.overall_score != null && (
-                    <span className={styles.attemptScore}>
-                      Score: {attempt.overall_score}/100
-                    </span>
-                  )}
-                  <span className={styles.attemptDate}>{date}</span>
+            {/* Overall Progress White Container (as in reference mockup) */}
+            <div className={styles.progressCard}>
+              <div className={styles.progressCardHeader}>
+                <span className={styles.progressCardTitle}>Overall Progress</span>
+                <span className={styles.progressCardCount}>
+                  {phases.filter((p) => p.status === 'completed').length} / 6 Completed
+                </span>
+              </div>
+              <div className={styles.progressCardBarRow}>
+                <div className={styles.progressCardTrack}>
+                  <div
+                    className={styles.progressCardFill}
+                    style={{ width: `${completionPercentage}%` }}
+                  />
                 </div>
-              );
-            })}
+                <span className={styles.progressCardPercent}>{completionPercentage}%</span>
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        </section>
 
-      <div className={styles.phasesList}>
-        {phases.map((phase, index) => (
-          <div
-            key={phase.id}
-            className={`${styles.phaseCard} ${styles[phase.status]}`}
-            onClick={() => handlePhaseClick(phase)}
-          >
-            <div className={styles.phaseNumber}>{phase.id}</div>
-            <div className={styles.phaseIcon}>{getStatusIcon(phase)}</div>
-            <div className={styles.phaseContent}>
-              <h3 className={styles.phaseName}>{phase.name}</h3>
-              <p className={styles.phaseDescription}>{phase.description}</p>
+        {/* Journey Stepper (Horizontal Timeline matching reference) */}
+        <section className={styles.stepperWrapper}>
+          <div className={styles.stepperRow}>
+            {phases.map((phase, index) => (
+              <React.Fragment key={phase.id}>
+                <div
+                  className={`${styles.stepNode} ${styles[phase.status]}`}
+                  onClick={() => handlePhaseClick(phase)}
+                  role="button"
+                  tabIndex={phase.status !== 'locked' ? 0 : -1}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handlePhaseClick(phase);
+                    }
+                  }}
+                  title={`${phase.name}: ${phase.description}`}
+                >
+                  <div className={styles.circleOuter}>
+                    {/* Active Radar Beacon Ripple (Interactive wow effect) */}
+                    {phase.status === 'current' && (
+                      <span className={styles.radarRing} aria-hidden="true" />
+                    )}
+
+                    {/* Top Number Badge */}
+                    <span className={styles.topBadge}>{phase.id}</span>
+
+                    {/* Main Inner Icon */}
+                    <div className={styles.circleInner}>
+                      {getPhaseStepIcon(phase.id)}
+                    </div>
+
+                    {/* Bottom Status Badge */}
+                    {phase.status === 'completed' && (
+                      <span className={styles.bottomBadge}>
+                        <svg viewBox="0 0 12 12" className={styles.badgeSvg}>
+                          <path
+                            d="M2.5 6.5L4.8 8.8L9.5 3.5"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </span>
+                    )}
+                    {phase.status === 'locked' && (
+                      <span className={styles.bottomBadge}>
+                        <svg viewBox="0 0 12 12" className={styles.badgeSvg}>
+                          <rect x="2.5" y="5" width="7" height="5.5" rx="1" fill="currentColor" />
+                          <path
+                            d="M4 5V3.5a2 2 0 1 1 4 0V5"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                          />
+                        </svg>
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Step Label */}
+                  <span className={styles.stepTitle}>{phase.name}</span>
+                </div>
+
+                {/* Connector Line to next step */}
+                {index < phases.length - 1 && (
+                  <div
+                    className={`${styles.stepConnector} ${
+                      phase.status === 'completed' ? styles.connectorActive : styles.connectorInactive
+                    }`}
+                  />
+                )}
+              </React.Fragment>
+            ))}
+          </div>
+        </section>
+
+
+        {/* Mascot & Tip Banner (Bottom Card matching reference) */}
+        <section className={styles.mascotBannerCard}>
+          <div className={styles.mascotSection}>
+            <div className={styles.sproutMascotWrapper}>
+              <SproutMascot />
             </div>
-            <div className={styles.phaseStatus}>
-              {renderPhaseStatus(phase)}
+            <div className={styles.speechBubble}>
+              {getMascotMessage()}
             </div>
           </div>
-        ))}
+
+          <div className={styles.bannerDivider} />
+
+          <div className={styles.tipSection}>
+            <span className={styles.tipIcon}>💡</span>
+            <div className={styles.tipContent}>
+              <span className={styles.tipLabel}>Tip</span>
+              <p className={styles.tipText}>{getTipMessage()}</p>
+            </div>
+          </div>
+        </section>
+
+        {/* Cooldown Active Banner */}
+        {cooldownTimeLeft && (
+          <section className={styles.cooldownBanner}>
+            <span className={styles.cooldownIcon}>⏳</span>
+            <div className={styles.cooldownTextGroup}>
+              <h2 className={styles.cooldownTitle}>Interview Cooldown Active</h2>
+              <p className={styles.cooldownDescription}>
+                You can retry the interview after <strong>{cooldownTimeLeft}</strong>.
+              </p>
+            </div>
+          </section>
+        )}
       </div>
 
-
-
-      {/* Video Modal */}
+      {/* Tutorial Video Modal */}
       {showVideoModal && (
         <HowToUseModal onClose={() => setShowVideoModal(false)} videoUrl="https://youtu.be/D22IYyDw5ME" />
+      )}
+
+      {/* Important Instructions Modal */}
+      {showInstructionsModal && (
+        <div className={styles.popupOverlay} onClick={() => setShowInstructionsModal(false)}>
+          <div className={styles.popupDialog} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.popupIcon}>📋</div>
+            <h2 className={styles.popupTitle}>Important Instructions</h2>
+            <p className={styles.popupMessage}>Please review the candidate guidelines carefully:</p>
+            <ol className={styles.instructionsModalList}>
+              <li>The candidate will be allowed a maximum of 3 attempts.</li>
+              <li>On failing the interview there will be a cooldown period after which candidate is allowed next attempt.</li>
+              <li>Please read the interview instructions carefully, failing which may lead to interview closure.</li>
+            </ol>
+            <div className={styles.popupButtons}>
+              <button
+                type="button"
+                className={styles.popupPrimaryButton}
+                onClick={() => setShowInstructionsModal(false)}
+              >
+                Understood
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Interview Attempts Modal */}
+      {showAttemptsModal && (
+        <div className={styles.popupOverlay} onClick={() => setShowAttemptsModal(false)}>
+          <div className={`${styles.popupDialog} ${styles.attemptsModalDialog}`} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.attemptsModalHeader}>
+              <div className={styles.attemptsModalIcon}>🎯</div>
+              <div className={styles.attemptsModalTitleGroup}>
+                <h2 className={styles.attemptsModalTitle}>Interview Attempts</h2>
+                <p className={styles.attemptsModalSub}>
+                  Maximum 3 attempts permitted • <strong>{attempts.length}/3</strong> used
+                </p>
+              </div>
+              <button
+                type="button"
+                className={styles.modalCloseBtn}
+                onClick={() => setShowAttemptsModal(false)}
+                title="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className={styles.attemptsModalBody}>
+              {cooldownTimeLeft && (
+                <div className={styles.modalCooldownAlert}>
+                  <span>⏳</span>
+                  <span>Cooldown Active — Retry available in <strong>{cooldownTimeLeft}</strong></span>
+                </div>
+              )}
+
+              {attempts.length === 0 ? (
+                <div className={styles.attemptsEmptyState}>
+                  <div className={styles.emptyIcon}>📝</div>
+                  <p className={styles.emptyTitle}>No Attempts Yet</p>
+                  <p className={styles.emptyDesc}>
+                    You haven&apos;t taken an interview session yet. Your scores, evaluation results, and dates will appear here once you take an interview.
+                  </p>
+                </div>
+              ) : (
+                <div className={styles.attemptsModalList}>
+                  {attempts.map((attempt, index) => {
+                    const date = (attempt.completedAt
+                      ? new Date(attempt.completedAt)
+                      : attempt.startedAt
+                      ? new Date(attempt.startedAt)
+                      : null
+                    )?.toLocaleDateString('en-IN', {
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    }) ?? '—';
+
+                    const badgeClass =
+                      attempt.result === 'PASS'
+                        ? styles.badgePass
+                        : attempt.result === 'FAIL'
+                        ? styles.badgeFail
+                        : attempt.result === 'WITHDRAWN'
+                        ? styles.badgeWithdrawn
+                        : attempt.result === 'ANTI_CHEAT'
+                        ? styles.badgeAntiCheat
+                        : styles.badgeCompleted;
+
+                    return (
+                      <div key={attempt.id} className={styles.modalAttemptCard}>
+                        <div className={styles.modalAttemptTop}>
+                          <div className={styles.attemptBadgeGroup}>
+                            <span className={styles.modalAttemptNum}>Attempt #{index + 1}</span>
+                            <span className={badgeClass}>{attempt.result ?? 'COMPLETED'}</span>
+                          </div>
+                          {attempt.overall_score != null && (
+                            <span className={styles.modalAttemptScore}>
+                              Score: <strong>{attempt.overall_score}/100</strong>
+                            </span>
+                          )}
+                        </div>
+                        <div className={styles.modalAttemptBottom}>
+                          <span className={styles.modalAttemptDate}>📅 {date}</span>
+                          {attempt.status && (
+                            <span className={styles.modalAttemptStatus}>Status: {attempt.status}</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className={styles.popupButtons}>
+              <button
+                type="button"
+                className={styles.popupPrimaryButton}
+                onClick={() => setShowAttemptsModal(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Interview Already Done Popup */}
@@ -587,13 +957,15 @@ const completionPercentage = getCompletionPercentage();
               You have already completed your interview. Would you like to view your results or retake the interview?
             </p>
             <div className={styles.popupButtons}>
-              <button 
+              <button
+                type="button"
                 className={styles.popupSecondaryButton}
                 onClick={() => setShowAlreadyDoneDialog(false)}
               >
                 Cancel
               </button>
-              <button 
+              <button
+                type="button"
                 className={styles.popupPrimaryButton}
                 onClick={() => {
                   setShowAlreadyDoneDialog(false);
@@ -618,6 +990,7 @@ const completionPercentage = getCompletionPercentage();
             </p>
             <div className={styles.popupButtons}>
               <button
+                type="button"
                 className={styles.popupSecondaryButton}
                 onClick={() => setShowNoAttemptsLeftDialog(false)}
               >
@@ -635,12 +1008,17 @@ const completionPercentage = getCompletionPercentage();
             <div className={styles.popupIcon}>⏳</div>
             <h2 className={styles.popupTitle}>Cooldown Active</h2>
             <p className={styles.popupMessage}>
-              {cooldownTimeLeft
-                ? <>You can retry the interview in <strong>{cooldownTimeLeft}</strong>.</>
-                : 'You are currently in cooldown and cannot start a new interview yet.'}
+              {cooldownTimeLeft ? (
+                <>
+                  You can retry the interview in <strong>{cooldownTimeLeft}</strong>.
+                </>
+              ) : (
+                'You are currently in cooldown and cannot start a new interview yet.'
+              )}
             </p>
             <div className={styles.popupButtons}>
               <button
+                type="button"
                 className={styles.popupSecondaryButton}
                 onClick={() => setShowCooldownDialog(false)}
               >
@@ -650,7 +1028,6 @@ const completionPercentage = getCompletionPercentage();
           </div>
         </div>
       )}
-      </div>
     </main>
   );
 }

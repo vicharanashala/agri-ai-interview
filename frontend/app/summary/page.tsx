@@ -209,7 +209,13 @@ export default function SummaryPage() {
                 localStorage.setItem('interviewResult', latest.result ?? '');
                 localStorage.setItem('interviewScore', String(latest.overall_score ?? ''));
                 const targetPhase = latest.result === 'PASS' ? 4 : 3;
-                await syncPhaseToDb(targetPhase, { passedAndVisitedSummary: true });
+                const alreadyVisited = localStorage.getItem('passedAndVisitedSummary') === 'true';
+                const fcCompleted = localStorage.getItem('foundationCourseCompleted') === 'completed' || localStorage.getItem('foundationCourseCompleted') === 'true';
+                const modCompleted = localStorage.getItem('moduleCompleted') === 'completed' || localStorage.getItem('moduleCompleted') === 'true';
+                if (!alreadyVisited && !fcCompleted && !modCompleted) {
+                  await syncPhaseToDb(targetPhase, { passedAndVisitedSummary: true });
+                  localStorage.setItem('passedAndVisitedSummary', 'true');
+                }
                 setEvaluating(false);
                 setLoading(false);
                 return;
@@ -265,7 +271,13 @@ export default function SummaryPage() {
         } finally {
           const result = localStorage.getItem('interviewResult');
           if (result) {
-            await syncPhaseToDb(result === 'PASS' ? 4 : 3, { passedAndVisitedSummary: true });
+            const alreadyVisited = localStorage.getItem('passedAndVisitedSummary') === 'true';
+            const fcCompleted = localStorage.getItem('foundationCourseCompleted') === 'completed' || localStorage.getItem('foundationCourseCompleted') === 'true';
+            const modCompleted = localStorage.getItem('moduleCompleted') === 'completed' || localStorage.getItem('moduleCompleted') === 'true';
+            if (!alreadyVisited && !fcCompleted && !modCompleted) {
+              await syncPhaseToDb(result === 'PASS' ? 4 : 3, { passedAndVisitedSummary: true });
+              localStorage.setItem('passedAndVisitedSummary', 'true');
+            }
           }
           setPhaseSynced(true);
           setLoading(false);

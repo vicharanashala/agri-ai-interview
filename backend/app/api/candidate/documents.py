@@ -298,7 +298,7 @@ IMPORTANT OUTPUT RULES:
             }
         ],
         "temperature": 0.1,
-        "max_tokens": 150
+        "max_tokens": 500
     }
     
     try:
@@ -320,8 +320,14 @@ IMPORTANT OUTPUT RULES:
                 ai_text = ai_data["choices"][0]["message"]["content"]
                 
                 try:
-                    # Clean markdown formatting in case the AI wraps it in ```json
-                    clean_text = ai_text.strip("`").replace("json\n", "")
+                    # Robust JSON extraction: find first '{' and last '}'
+                    first_brace = ai_text.find("{")
+                    last_brace = ai_text.rfind("}")
+                    if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+                        clean_text = ai_text[first_brace:last_brace + 1]
+                    else:
+                        clean_text = ai_text.strip("`").replace("json\n", "")
+                        
                     result = json.loads(clean_text)
                     
                     if result.get("is_valid"):

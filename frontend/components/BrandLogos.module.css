@@ -89,21 +89,43 @@
 
 @media (max-width: 640px) {
   .logoGroup {
-    gap: 10px;
+    gap: 8px;
   }
   .annamLogo {
-    height: 20px;
-    max-width: 95px;
-  }
-  .samagamaLogo {
-    height: 20px;
-    max-width: 70px;
-  }
-  .vibeLogo {
-    height: 24px;
+    height: 19px;
     max-width: 85px;
   }
+  .samagamaLogo {
+    height: 19px;
+    max-width: 65px;
+  }
+  .vibeLogo {
+    height: 22px;
+    max-width: 75px;
+  }
   .divider {
-    height: 16px;
+    height: 15px;
   }
 }
+
+@media (max-width: 480px) {
+  .logoGroup {
+    gap: 6px;
+  }
+  .annamLogo {
+    height: 17px;
+    max-width: 68px;
+  }
+  .samagamaLogo {
+    height: 17px;
+    max-width: 50px;
+  }
+  .vibeLogo {
+    height: 19px;
+    max-width: 60px;
+  }
+  .divider {
+    height: 13px;
+  }
+}
+

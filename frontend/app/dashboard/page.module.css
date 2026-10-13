@@ -435,6 +435,17 @@
   }
 }
 
+/* In-progress step without pulsing animation (e.g. Interview Summary while Interview is in progress) */
+.stepNode.noPulse .circleOuter {
+  animation: none !important;
+  box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.16) !important;
+  transform: none !important;
+}
+
+.stepNode.noPulse .stepIconSvg {
+  animation: none !important;
+}
+
 /* ─── Interactive Radar Beacon Ring on Active Step ─── */
 .radarRing {
   position: absolute;
@@ -840,6 +851,214 @@
   font-size: 13.5px;
   color: #78350f;
   margin: 0;
+}
+
+/* ─── Phase Completion Celebration Banner held by Mascot Avatar ──────── */
+.celebrationOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  animation: celebrationOverlayFade 0.6s ease-out;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+@keyframes celebrationOverlayFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.celebrationOverlayExiting {
+  animation: celebrationOverlayFadeOut 0.6s ease-out forwards !important;
+}
+
+@keyframes celebrationOverlayFadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+.avatarBannerWrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 380px;
+  position: relative;
+  /* 1.8s smooth, visible float-up from bottom center into center */
+  animation: riseFromBottomCenter 1.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes riseFromBottomCenter {
+  0% {
+    opacity: 0;
+    transform: translateY(115vh) scale(0.85);
+  }
+  20% {
+    opacity: 1;
+  }
+  88% {
+    transform: translateY(-8px) scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.avatarBannerWrapperExiting {
+  animation: sinkToBottomCenter 0.6s cubic-bezier(0.32, 0, 0.67, 0) forwards !important;
+}
+
+@keyframes sinkToBottomCenter {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  15% {
+    transform: translateY(-8px) scale(1.02);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(115vh) scale(0.85);
+  }
+}
+
+.heldPosterCard {
+  background: #ffffff;
+  border: 1.5px solid rgba(16, 185, 129, 0.35);
+  border-radius: 24px;
+  padding: 24px 22px 18px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 20px 40px -10px rgba(16, 185, 129, 0.22), 0 10px 25px -5px rgba(0, 0, 0, 0.08);
+  position: relative;
+  overflow: hidden;
+  z-index: 1;
+}
+
+.bannerCloseBtn {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  background: transparent;
+  border: none;
+  font-size: 16px;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px;
+  line-height: 1;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+  z-index: 3;
+}
+
+.bannerCloseBtn:hover {
+  color: #0f172a;
+  background: #f1f5f9;
+}
+
+.bannerContent {
+  margin-top: 4px;
+}
+
+.celebrationTag {
+  display: inline-block;
+  padding: 3px 12px;
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.bannerTitle {
+  font-size: 22px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 6px 0;
+  letter-spacing: -0.4px;
+}
+
+.bannerMessage {
+  font-size: 15px;
+  color: #334155;
+  margin: 0 0 6px 0;
+  line-height: 1.45;
+}
+
+.bannerMessage strong {
+  color: #047857;
+  font-weight: 800;
+}
+
+.bannerSub {
+  font-size: 12.5px;
+  color: #64748b;
+  margin: 0 0 14px 0;
+  line-height: 1.45;
+}
+
+/* 3-Second Animated Countdown Timer Bar (Starts after 1.8s arrival at center) */
+.timerBarTrack {
+  width: 100%;
+  height: 4px;
+  background: #f1f5f9;
+  border-radius: 9999px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.timerBarFill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #10b981 0%, #34d399 100%);
+  border-radius: 9999px;
+  animation: countdownShrink 3s linear 1.8s forwards;
+}
+
+@keyframes countdownShrink {
+  0% {
+    width: 100%;
+  }
+  100% {
+    width: 0%;
+  }
+}
+
+.mascotHolder {
+  position: relative;
+  z-index: 2;
+  margin-top: -14px; /* Hands overlap bottom rim of the held poster card */
+  animation: mascotHoistFloat 2.2s ease-in-out infinite;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.08));
+}
+
+@keyframes mascotHoistFloat {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.mascotHoldingSvg {
+  width: 130px;
+  height: 105px;
+  display: block;
 }
 
 /* ─── Modals & Popup Overlays ────────────────────────────────── */

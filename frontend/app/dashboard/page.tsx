@@ -8,6 +8,7 @@ import FullPageSkeleton from '@/components/FullPageSkeleton';
 import HowToUseModal from '@/components/HowToUseModal';
 import BrandLogos from '@/components/BrandLogos';
 import ProfileNavButton from '@/components/ProfileNavButton';
+import confetti from 'canvas-confetti';
 
 type Phase = 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -47,22 +48,25 @@ function getPhaseStepIcon(phaseId: Phase) {
         </svg>
       );
     case 2:
-      // Start Interview - Video camera icon
+      // Start Interview - Online interview via AI chat / evaluation bot
       return (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={styles.stepIconSvg}>
-          <path d="m22 7-6 5 6 5V7Z" />
-          <rect x="2" y="5" width="14" height="14" rx="3" />
+          <path d="M12 5V2" />
+          <path d="M9 2h6" />
+          <path d="M20 15a2 2 0 0 1-2 2H8l-4 4V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8z" />
+          <circle cx="9" cy="11" r="1.5" fill="currentColor" stroke="none" />
+          <circle cx="15" cy="11" r="1.5" fill="currentColor" stroke="none" />
+          <path d="M10 14c.7.7 1.3 1 2 1s1.3-.3 2-1" />
         </svg>
       );
     case 3:
-      // Interview Summary - Document icon
+      // Interview Summary - Evaluation report card with checkmark & score line
       return (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={styles.stepIconSvg}>
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-          <polyline points="14 2 14 8 20 8" />
-          <line x1="16" y1="13" x2="8" y2="13" />
-          <line x1="16" y1="17" x2="8" y2="17" />
-          <line x1="10" y1="9" x2="8" y2="9" />
+          <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+          <rect x="8" y="2" width="8" height="4" rx="1" />
+          <path d="m9 13 2 2 4-4" />
+          <path d="M8 18h8" />
         </svg>
       );
     case 4:
@@ -74,12 +78,11 @@ function getPhaseStepIcon(phaseId: Phase) {
         </svg>
       );
     case 5:
-      // Ground Truth Module - Bar chart
+      // Ground Truth Module - Verified shield with checkmark
       return (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={styles.stepIconSvg}>
-          <line x1="18" y1="20" x2="18" y2="10" />
-          <line x1="12" y1="20" x2="12" y2="4" />
-          <line x1="6" y1="20" x2="6" y2="14" />
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+          <path d="m9 12 2 2 4-4" />
         </svg>
       );
     case 6:
@@ -169,9 +172,55 @@ function SproutMascot() {
   );
 }
 
+// ── Confetti Celebration Animation ───────────────────────────────────────────
+function triggerCelebrationConfetti() {
+  try {
+    // Initial vibrant burst
+    confetti({
+      particleCount: 90,
+      spread: 75,
+      origin: { y: 0.6 },
+      colors: ['#10b981', '#34d399', '#f59e0b', '#fbbf24', '#38bdf8', '#a855f7'],
+      zIndex: 100001,
+    });
+
+    // Gentle side cannons lasting ~2.2s
+    const duration = 2.2 * 1000;
+    const end = Date.now() + duration;
+
+    const frame = () => {
+      confetti({
+        particleCount: 3,
+        angle: 60,
+        spread: 55,
+        origin: { x: 0, y: 0.7 },
+        colors: ['#10b981', '#34d399', '#f59e0b', '#fbbf24'],
+        zIndex: 100001,
+      });
+      confetti({
+        particleCount: 3,
+        angle: 120,
+        spread: 55,
+        origin: { x: 1, y: 0.7 },
+        colors: ['#10b981', '#34d399', '#f59e0b', '#fbbf24'],
+        zIndex: 100001,
+      });
+
+      if (Date.now() < end) {
+        requestAnimationFrame(frame);
+      }
+    };
+    frame();
+  } catch (err) {
+    console.error('Confetti animation error:', err);
+  }
+}
+
 export default function DashboardPage() {
   const [currentPhase, setCurrentPhase] = useState<Phase>(1);
   const [documentsSubmitted, setDocumentsSubmitted] = useState(false);
+  const [celebrationPhase, setCelebrationPhase] = useState<string | null>(null);
+  const [isExitingCelebration, setIsExitingCelebration] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [interviewResult, setInterviewResult] = useState<EvaluationResult | null>(null);
   const [hasCompletedInterview, setHasCompletedInterview] = useState(false);
@@ -342,6 +391,8 @@ export default function DashboardPage() {
 
   const hasPassed = attempts.some(a => a.result === 'PASS');
   const hasAttemptsLeft = attempts.length < 3;
+  const isInterviewCompleted = hasPassed || attempts.length >= 3;
+  const isInterviewFailedAllAttempts = attempts.length >= 3 && !hasPassed;
 
   // Compute phases dynamically based on state
   const phases: PhaseInfo[] = [
@@ -355,12 +406,8 @@ export default function DashboardPage() {
       id: 2,
       name: 'Start Interview',
       description: 'Take your AI-powered interview session',
-      status: hasPassed
+      status: isInterviewCompleted
         ? 'completed'
-        : (attempts.length > 0 && !hasAttemptsLeft)
-        ? 'completed' // Failed all attempts
-        : (attempts.length > 0 && hasAttemptsLeft)
-        ? 'current'   // Re-attempt is active
         : currentPhase >= 2
         ? 'current'
         : 'locked',
@@ -369,12 +416,10 @@ export default function DashboardPage() {
       id: 3,
       name: 'Interview Summary',
       description: 'View your interview results and scores',
-      status: currentPhase > 3
+      status: hasPassed
         ? 'completed'
-        : (attempts.length > 0 && !hasPassed && hasAttemptsLeft)
-        ? 'completed' // Unlocked but not active (re-attempt is active)
-        : currentPhase === 3
-        ? 'current'   // Active summary
+        : (attempts.length > 0 || currentPhase >= 3)
+        ? 'current'
         : 'locked',
     },
     {
@@ -396,6 +441,104 @@ export default function DashboardPage() {
       status: documentsSubmitted ? 'completed' : currentPhase === 6 ? 'current' : 'locked',
     },
   ];
+
+  // ── Auto-dismiss celebration banner: 1.8s rise + 3s stay + smooth sink ──
+  useEffect(() => {
+    if (!celebrationPhase) {
+      setIsExitingCelebration(false);
+      return;
+    }
+    setIsExitingCelebration(false);
+
+    // Takes ~1.8s to rise smoothly from bottom to center, then stays at center for 3 seconds
+    const exitTimer = setTimeout(() => {
+      setIsExitingCelebration(true);
+    }, 4800); // 1.8s rise + 3.0s stay = 4.8s
+
+    // After exit animation completes (5.4s total), clear celebration state
+    const closeTimer = setTimeout(() => {
+      setCelebrationPhase(null);
+      setIsExitingCelebration(false);
+    }, 5400);
+
+    return () => {
+      clearTimeout(exitTimer);
+      clearTimeout(closeTimer);
+    };
+  }, [celebrationPhase]);
+
+  const handleCloseCelebration = () => {
+    setIsExitingCelebration(true);
+    setTimeout(() => {
+      setCelebrationPhase(null);
+      setIsExitingCelebration(false);
+    }, 350);
+  };
+
+  // ── Single-time Celebration trigger when eligible phase is completed ──────
+  useEffect(() => {
+    if (isLoading) return;
+
+    // Unique candidate identifier to ensure per-candidate tracking
+    const candidateKey =
+      sessionStorage.getItem('candidateId') ||
+      sessionStorage.getItem('candidateEmail') ||
+      localStorage.getItem('candidateEmail') ||
+      localStorage.getItem('candidateName') ||
+      'default_candidate';
+
+    const storageKey = `celebrated_completed_phases_${candidateKey}`;
+
+    let celebratedIds: number[] = [];
+    try {
+      const stored = localStorage.getItem(storageKey);
+      if (stored) celebratedIds = JSON.parse(stored);
+    } catch {
+      celebratedIds = [];
+    }
+
+    // Rules:
+    // 1. Phase 3 (Interview Summary) is NEVER celebrated
+    // 2. Phase 2 (Start Interview) is ONLY celebrated if candidate PASSED (hasPassed === true)
+    //    If all 3 attempts failed, phase is completed but NO congrats/confetti
+    const eligibleCompletedPhases = phases.filter((p) => {
+      if (p.status !== 'completed') return false;
+      if (p.id === 3) return false; // Interview Summary is never celebrated
+      if (p.id === 2 && !hasPassed) return false; // 3 failed attempts: no celebration
+      return true;
+    });
+
+    // Mute any completed phases that should not celebrate from re-evaluating
+    const allCompletedPhases = phases.filter((p) => p.status === 'completed');
+    if (allCompletedPhases.length > 0) {
+      const excludedIds = allCompletedPhases
+        .filter((p) => p.id === 3 || (p.id === 2 && !hasPassed))
+        .map((p) => p.id);
+      if (excludedIds.some((id) => !celebratedIds.includes(id))) {
+        const updated = Array.from(new Set([...celebratedIds, ...excludedIds]));
+        localStorage.setItem(storageKey, JSON.stringify(updated));
+        celebratedIds = updated;
+      }
+    }
+
+    // Find eligible completed phases that have not yet been celebrated
+    const uncelebrated = eligibleCompletedPhases.filter((p) => !celebratedIds.includes(p.id));
+
+    if (uncelebrated.length > 0) {
+      // Pick latest newly completed phase to celebrate
+      const latestCompleted = uncelebrated[uncelebrated.length - 1];
+
+      // Mark all completed phases up to this point as celebrated (strictly once!)
+      const updated = Array.from(new Set([...celebratedIds, ...allCompletedPhases.map((p) => p.id)]));
+      localStorage.setItem(storageKey, JSON.stringify(updated));
+
+      // Trigger celebratory confetti and Sprout-held celebration banner
+      setTimeout(() => {
+        triggerCelebrationConfetti();
+        setCelebrationPhase(latestCompleted.name);
+      }, 500);
+    }
+  }, [isLoading, currentPhase, documentsSubmitted, hasPassed, attempts.length]);
 
   const handlePhaseClick = async (phase: PhaseInfo) => {
     // Allow clicking on current or completed phases
@@ -471,6 +614,30 @@ export default function DashboardPage() {
 
   // Dynamic Sprout Speech Bubble Message based on pipeline status
   const getMascotMessage = () => {
+    // If candidate took an interview attempt and did not pass
+    if (attempts.length > 0 && !hasPassed) {
+      const remainingAttempts = 3 - attempts.length;
+      if (hasAttemptsLeft) {
+        if (cooldownTimeLeft) {
+          return (
+            <>
+              Interview attempt not cleared — cooldown active ({cooldownTimeLeft}). Please re-attempt your interview once cooldown expires ({remainingAttempts} attempt{remainingAttempts > 1 ? 's' : ''} left)! 🎯
+            </>
+          );
+        }
+        return (
+          <>
+            Interview attempt not cleared — Please re-attempt your interview.
+          </>
+        );
+      }
+      return (
+        <>
+          Interview not cleared — all 3 attempts completed.
+        </>
+      );
+    }
+
     if (cooldownTimeLeft) {
       return (
         <>
@@ -486,20 +653,6 @@ export default function DashboardPage() {
       );
     }
     if (currentPhase === 2) {
-      if (attempts.length > 0 && !hasPassed && hasAttemptsLeft) {
-        return (
-          <>
-            Step 2 re-attempt unlocked — give it your best shot! 🚀
-          </>
-        );
-      }
-      if (attempts.length >= 3 && !hasPassed) {
-        return (
-          <>
-            All attempts completed — please view your <strong>interview summary</strong>. 📋
-          </>
-        );
-      }
       return (
         <>
           Step 2 unlocked — it&apos;s time for your <strong>interview</strong>! 🎉
@@ -516,7 +669,7 @@ export default function DashboardPage() {
       }
       return (
         <>
-          Interview completed — review your <strong>scores & summary</strong>! 📋
+          Interview attempt completed — review your <strong>scores & summary</strong>! 📋
         </>
       );
     }
@@ -553,14 +706,14 @@ export default function DashboardPage() {
 
   // Contextual Tips for candidates
   const getTipMessage = () => {
+    if (currentPhase === 3 || (currentPhase === 2 && attempts.length > 0)) {
+      return 'Review your result score in the interview summary. You can also request a re-evaluation from the interview summary page.';
+    }
     if (currentPhase === 2) {
       return 'Find a quiet place with a stable internet connection to ensure a smooth interview experience.';
     }
     if (currentPhase === 1) {
       return 'Ensure your full name, email, and mobile number match your official documents before submitting.';
-    }
-    if (currentPhase === 3) {
-      return 'Review your evaluation feedback and metric breakdown to see your key areas of performance.';
     }
     if (currentPhase === 4) {
       return 'Sign in or sign up on ViBe using your registered email address to verify course completion.';
@@ -699,50 +852,69 @@ export default function DashboardPage() {
         {/* Journey Stepper (Horizontal Timeline matching reference) */}
         <section className={styles.stepperWrapper}>
           <div className={styles.stepperRow}>
-            {phases.map((phase, index) => (
-              <React.Fragment key={phase.id}>
-                <div
-                  className={`${styles.stepNode} ${styles[phase.status]}`}
-                  onClick={() => handlePhaseClick(phase)}
-                  role="button"
-                  tabIndex={phase.status !== 'locked' ? 0 : -1}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      handlePhaseClick(phase);
-                    }
-                  }}
-                  title={`${phase.name}: ${phase.description}`}
-                >
-                  <div className={styles.circleOuter}>
-                    {/* Active Radar Beacon Ripple (Interactive wow effect) */}
-                    {phase.status === 'current' && (
-                      <span className={styles.radarRing} aria-hidden="true" />
-                    )}
+            {phases.map((phase, index) => {
+              const isPulsing = phase.status === 'current' && !(phase.id === 3 && !isInterviewCompleted);
+              const isFailedCompleted = phase.id === 2 && isInterviewFailedAllAttempts;
 
-                    {/* Top Number Badge */}
-                    <span className={styles.topBadge}>{phase.id}</span>
+              return (
+                <React.Fragment key={phase.id}>
+                  <div
+                    className={`${styles.stepNode} ${styles[phase.status]} ${
+                      phase.status === 'current' && !isPulsing ? styles.noPulse : ''
+                    }`}
+                    onClick={() => handlePhaseClick(phase)}
+                    role="button"
+                    tabIndex={phase.status !== 'locked' ? 0 : -1}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handlePhaseClick(phase);
+                      }
+                    }}
+                    title={`${phase.name}: ${phase.description}`}
+                  >
+                    <div className={styles.circleOuter}>
+                      {/* Active Radar Beacon Ripple (Interactive wow effect) */}
+                      {isPulsing && (
+                        <span className={styles.radarRing} aria-hidden="true" />
+                      )}
 
-                    {/* Main Inner Icon */}
-                    <div className={styles.circleInner}>
-                      {getPhaseStepIcon(phase.id)}
-                    </div>
+                      {/* Top Number Badge */}
+                      <span className={styles.topBadge}>{phase.id}</span>
 
-                    {/* Bottom Status Badge */}
-                    {phase.status === 'completed' && (
-                      <span className={styles.bottomBadge}>
-                        <svg viewBox="0 0 12 12" className={styles.badgeSvg}>
-                          <path
-                            d="M2.5 6.5L4.8 8.8L9.5 3.5"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      </span>
-                    )}
+                      {/* Main Inner Icon */}
+                      <div className={styles.circleInner}>
+                        {getPhaseStepIcon(phase.id)}
+                      </div>
+
+                      {/* Bottom Status Badge */}
+                      {phase.status === 'completed' && (
+                        <span className={styles.bottomBadge}>
+                          {isFailedCompleted ? (
+                            <svg viewBox="0 0 12 12" className={styles.badgeSvg}>
+                              <path
+                                d="M3 3L9 9M9 3L3 9"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          ) : (
+                            <svg viewBox="0 0 12 12" className={styles.badgeSvg}>
+                              <path
+                                d="M2.5 6.5L4.8 8.8L9.5 3.5"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          )}
+                        </span>
+                      )}
                     {phase.status === 'locked' && (
                       <span className={styles.bottomBadge}>
                         <svg viewBox="0 0 12 12" className={styles.badgeSvg}>
@@ -772,7 +944,8 @@ export default function DashboardPage() {
                   />
                 )}
               </React.Fragment>
-            ))}
+            );
+          })}
           </div>
         </section>
 
@@ -812,6 +985,147 @@ export default function DashboardPage() {
           </section>
         )}
       </div>
+
+      {/* Phase Completion Celebration Banner held by Mascot Avatar */}
+      {celebrationPhase && (
+        <div
+          className={`${styles.celebrationOverlay} ${
+            isExitingCelebration ? styles.celebrationOverlayExiting : ''
+          }`}
+          onClick={handleCloseCelebration}
+        >
+          <div
+            className={`${styles.avatarBannerWrapper} ${
+              isExitingCelebration ? styles.avatarBannerWrapperExiting : ''
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Held Celebration Poster / Banner Card (Raised ABOVE Avatar's Head) */}
+            <div className={styles.heldPosterCard}>
+              <button
+                type="button"
+                className={styles.bannerCloseBtn}
+                onClick={handleCloseCelebration}
+                title="Close"
+              >
+                ✕
+              </button>
+
+              <div className={styles.bannerContent}>
+                <span className={styles.celebrationTag}>
+                  {celebrationPhase === 'Start Interview' ? '🎉 Interview Passed!' : '🎉 Phase Completed!'}
+                </span>
+                <h2 className={styles.bannerTitle}>Congratulations!</h2>
+                <p className={styles.bannerMessage}>
+                  {celebrationPhase === 'Start Interview' ? (
+                    <>
+                      You passed your <strong>Interview</strong>! 🎉
+                    </>
+                  ) : (
+                    <>
+                      You completed <strong>{celebrationPhase}</strong>!
+                    </>
+                  )}
+                </p>
+                <p className={styles.bannerSub}>
+                  {celebrationPhase === 'Start Interview'
+                    ? "Great job! You've successfully passed the interview. Complete each step to move forward! ✨"
+                    : "Complete each step to move forward. You're doing great! ✨"}
+                </p>
+              </div>
+
+              {/* 3-second animated countdown timer bar */}
+              <div className={styles.timerBarTrack} title="Closes automatically in 3 seconds">
+                <div className={styles.timerBarFill} />
+              </div>
+            </div>
+
+            {/* Mascot Avatar Raising Hands Up Holding Banner Above Head */}
+            <div className={styles.mascotHolder}>
+              <svg
+                viewBox="0 0 160 120"
+                className={styles.mascotHoldingSvg}
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                aria-hidden="true"
+              >
+                {/* Left & Right Celebratory Sparkles */}
+                <g className={styles.sparklesGroup}>
+                  <path d="M26 34 L16 28" stroke="#f59e0b" strokeWidth="2.8" strokeLinecap="round" />
+                  <path d="M22 46 L10 46" stroke="#f59e0b" strokeWidth="2.8" strokeLinecap="round" />
+                  <path d="M28 58 L18 64" stroke="#f59e0b" strokeWidth="2.8" strokeLinecap="round" />
+
+                  <path d="M134 34 L144 28" stroke="#f59e0b" strokeWidth="2.8" strokeLinecap="round" />
+                  <path d="M138 46 L150 46" stroke="#f59e0b" strokeWidth="2.8" strokeLinecap="round" />
+                  <path d="M132 58 L142 64" stroke="#f59e0b" strokeWidth="2.8" strokeLinecap="round" />
+                </g>
+
+                {/* Feet */}
+                <ellipse cx="68" cy="110" rx="8" ry="4.5" fill="#ffffff" stroke="#1b4332" strokeWidth="2.4" />
+                <ellipse cx="92" cy="110" rx="8" ry="4.5" fill="#ffffff" stroke="#1b4332" strokeWidth="2.4" />
+
+                {/* Body */}
+                <path
+                  d="M80 34 C58 34 46 50 46 76 C46 96 58 106 80 106 C102 106 114 96 114 76 C114 50 102 34 80 34 Z"
+                  fill="#ffffff"
+                  stroke="#1b4332"
+                  strokeWidth="2.8"
+                />
+
+                {/* Belly soft light green tint */}
+                <path
+                  d="M54 86 C58 98 68 103 80 103 C92 103 102 98 106 86 C100 96 90 100 80 100 C70 100 60 96 54 86 Z"
+                  fill="#dcfce7"
+                  opacity="0.85"
+                />
+
+                {/* Left Arm reaching UP holding the bottom of the banner */}
+                <path
+                  d="M56 64 C42 54 36 32 46 12 C50 12 52 16 52 22 C45 36 50 48 64 58 Z"
+                  fill="#ffffff"
+                  stroke="#1b4332"
+                  strokeWidth="2.5"
+                  strokeLinejoin="round"
+                />
+
+                {/* Right Arm reaching UP holding the bottom of the banner */}
+                <path
+                  d="M104 64 C118 54 124 32 114 12 C110 12 108 16 108 22 C115 36 110 48 96 58 Z"
+                  fill="#ffffff"
+                  stroke="#1b4332"
+                  strokeWidth="2.5"
+                  strokeLinejoin="round"
+                />
+
+                {/* Left Paw holding banner bottom rim */}
+                <ellipse cx="46" cy="10" rx="8.5" ry="5.5" fill="#ffffff" stroke="#1b4332" strokeWidth="2.5" />
+
+                {/* Right Paw holding banner bottom rim */}
+                <ellipse cx="114" cy="10" rx="8.5" ry="5.5" fill="#ffffff" stroke="#1b4332" strokeWidth="2.5" />
+
+                {/* Head Stem and Two Leaves (proudly between raised arms) */}
+                <path d="M80 34 C80 27 79 20 79 16" stroke="#15803d" strokeWidth="2.8" strokeLinecap="round" />
+                <path d="M79 24 C67 22 58 12 65 6 C73 1 79 15 79 24 Z" fill="#84cc16" stroke="#15803d" strokeWidth="2.2" strokeLinejoin="round" />
+                <path d="M79 24 C91 22 100 12 93 6 C85 1 79 15 79 24 Z" fill="#84cc16" stroke="#15803d" strokeWidth="2.2" strokeLinejoin="round" />
+
+                {/* Cute Happy Eyes */}
+                <circle cx="68" cy="62" r="4.2" fill="#1b4332" />
+                <circle cx="69.6" cy="60.4" r="1.3" fill="#ffffff" />
+
+                <circle cx="92" cy="62" r="4.2" fill="#1b4332" />
+                <circle cx="93.6" cy="60.4" r="1.3" fill="#ffffff" />
+
+                {/* Cheerful Blush Cheeks */}
+                <ellipse cx="60" cy="70" rx="4.5" ry="2.6" fill="#f87171" opacity="0.5" />
+                <ellipse cx="100" cy="70" rx="4.5" ry="2.6" fill="#f87171" opacity="0.5" />
+
+                {/* Big Happy Smile */}
+                <path d="M75 70 Q80 77 85 70" stroke="#1b4332" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+              </svg>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tutorial Video Modal */}
       {showVideoModal && (

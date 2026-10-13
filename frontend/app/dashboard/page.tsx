@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -645,6 +645,13 @@ export default function DashboardPage() {
         </>
       );
     }
+    if (documentsSubmitted) {
+      return (
+        <>
+          All done! You have completed all journey steps successfully. 🌟
+        </>
+      );
+    }
     if (currentPhase === 1) {
       return (
         <>
@@ -688,13 +695,6 @@ export default function DashboardPage() {
       );
     }
     if (currentPhase === 6) {
-      if (documentsSubmitted) {
-        return (
-          <>
-            All done! You have completed all journey steps successfully! 🌟
-          </>
-        );
-      }
       return (
         <>
           Final step — <strong>upload your documents</strong> to complete your hiring process! 📁
@@ -706,6 +706,9 @@ export default function DashboardPage() {
 
   // Contextual Tips for candidates
   const getTipMessage = () => {
+    if (documentsSubmitted) {
+      return 'All documents submitted successfully. Our hiring team will review your application and connect with you shortly with next steps!';
+    }
     if (currentPhase === 3 || (currentPhase === 2 && attempts.length > 0)) {
       return 'Review your result score in the interview summary. You can also request a re-evaluation from the interview summary page.';
     }
@@ -1013,13 +1016,21 @@ export default function DashboardPage() {
 
               <div className={styles.bannerContent}>
                 <span className={styles.celebrationTag}>
-                  {celebrationPhase === 'Start Interview' ? '🎉 Interview Passed!' : '🎉 Phase Completed!'}
+                  {celebrationPhase === 'Start Interview'
+                    ? '🎉 Interview Passed!'
+                    : celebrationPhase === 'Upload Documents'
+                    ? '🎉 Document Submission Completed!'
+                    : '🎉 Phase Completed!'}
                 </span>
                 <h2 className={styles.bannerTitle}>Congratulations!</h2>
                 <p className={styles.bannerMessage}>
                   {celebrationPhase === 'Start Interview' ? (
                     <>
                       You passed your <strong>Interview</strong>! 🎉
+                    </>
+                  ) : celebrationPhase === 'Upload Documents' ? (
+                    <>
+                      You completed <strong>document submission</strong>! 🎉
                     </>
                   ) : (
                     <>
@@ -1030,6 +1041,8 @@ export default function DashboardPage() {
                 <p className={styles.bannerSub}>
                   {celebrationPhase === 'Start Interview'
                     ? "Great job! You've successfully passed the interview. Complete each step to move forward! ✨"
+                    : celebrationPhase === 'Upload Documents'
+                    ? "All documents submitted successfully. Our hiring team will review your application and connect with you shortly with next steps! 🌟"
                     : "Complete each step to move forward. You're doing great! ✨"}
                 </p>
               </div>

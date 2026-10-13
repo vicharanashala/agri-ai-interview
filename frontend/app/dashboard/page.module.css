@@ -103,7 +103,7 @@
   width: 100%;
   max-width: 1140px;
   margin: 0 auto;
-  padding: 10px 24px 14px;
+  padding: 28px 24px 44px;
   display: flex;
   flex-direction: column;
   justify-content: space-evenly;
@@ -174,7 +174,7 @@
   width: 100%;
   max-width: 980px;
   gap: 16px;
-  margin-top: 18px; /* Clear spacing between heading and actions row */
+  margin-top: 36px; /* Generous spacing between heading and actions row */
   flex-wrap: wrap;
 }
 
@@ -264,8 +264,28 @@
   width: 100%;
   background: transparent;
   padding: 8px 0;
+  margin-top: 40px; /* Generous spacing between 3 buttons / progress bar and 6 phases */
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(16, 185, 129, 0.3) transparent;
+}
+
+.stepperWrapper::-webkit-scrollbar {
+  height: 5px;
+}
+
+.stepperWrapper::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.stepperWrapper::-webkit-scrollbar-thumb {
+  background: rgba(16, 185, 129, 0.25);
+  border-radius: 9999px;
+}
+
+.stepperWrapper::-webkit-scrollbar-thumb:hover {
+  background: rgba(16, 185, 129, 0.5);
 }
 
 .stepperRow {
@@ -650,7 +670,7 @@
   gap: 24px;
   box-shadow: 0 4px 18px rgba(16, 185, 129, 0.04);
   transition: transform 0.25s ease, box-shadow 0.25s ease;
-  margin-top: 16px; /* Clean breathing room between 6 phases and banner */
+  margin-top: 44px; /* Generous breathing room between 6 phases and banner */
 }
 
 .mascotBannerCard:hover {
@@ -1422,45 +1442,373 @@
   letter-spacing: 0.5px;
 }
 
-/* ─── Responsive Queries ─────────────────────────────────────── */
+/* ─── Responsive Queries (100% Responsive for All Screen Sizes) ─── */
+
+/* Short Viewport Heights (laptops, mobile landscape) */
+@media (max-height: 760px) {
+  .container {
+    max-height: none;
+    height: auto;
+    overflow-y: auto;
+  }
+  .contentContainer {
+    justify-content: flex-start;
+    flex: none;
+    min-height: auto;
+    padding-bottom: 28px;
+    gap: 14px;
+  }
+}
+
+/* Medium screens & tablets */
+@media (max-width: 1024px) {
+  .container {
+    max-height: none;
+    height: auto;
+    min-height: 100vh;
+    overflow-y: auto;
+  }
+  .contentContainer {
+    justify-content: flex-start;
+    flex: none;
+    min-height: auto;
+    padding: 20px 20px 36px;
+    gap: 16px;
+  }
+  .topActionsRow {
+    max-width: 100%;
+    margin-top: 24px;
+  }
+  .stepperWrapper {
+    margin-top: 26px;
+  }
+  .mascotBannerCard {
+    margin-top: 28px;
+  }
+}
+
 @media (max-width: 900px) {
   .journeyTitle {
-    font-size: 28px;
+    font-size: 26px;
+  }
+  .journeySubtitle {
+    font-size: 14px;
+  }
+  .topActionsRow {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    margin-top: 20px;
+  }
+  .topButtonsGroup {
+    justify-content: center;
+    width: 100%;
+    gap: 8px;
+  }
+  .progressCard {
+    width: 100%;
+    max-width: 100%;
+  }
+  .stepperRow {
+    min-width: 720px;
+    padding: 20px 14px 12px;
+  }
+  .stepperWrapper {
+    margin-top: 22px;
   }
   .mascotBannerCard {
     flex-direction: column;
     align-items: stretch;
-    gap: 18px;
+    gap: 16px;
+    padding: 16px 20px;
+    margin-top: 22px;
   }
   .bannerDivider {
     width: 100%;
     height: 1px;
+    margin: 0;
   }
 }
 
+/* Standard Mobile Devices (<= 640px) */
 @media (max-width: 640px) {
+  .topNavbar {
+    height: 58px;
+  }
   .navbarContent {
-    padding: 0 16px;
+    padding: 0 14px;
   }
   .contentContainer {
-    padding: 20px 16px 60px;
+    padding: 12px 14px 44px;
+    gap: 12px;
   }
   .journeyTitle {
-    font-size: 24px;
+    font-size: 22px;
+    letter-spacing: -0.3px;
   }
-  .topActionsGroup {
+  .journeySubtitle {
+    font-size: 12.5px;
+    line-height: 1.35;
+  }
+
+  /* Top Actions Row & Pill Buttons */
+  .topActionsRow {
     gap: 10px;
+    margin-top: 14px;
+  }
+  .topButtonsGroup {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
   }
   .pillButton {
-    padding: 6px 14px;
+    padding: 6px 11px;
+    font-size: 11.5px;
+    flex: 1 1 auto;
+    min-width: 0;
+    justify-content: center;
+  }
+  .playIconCircle {
+    width: 16px;
+    height: 16px;
+    font-size: 7px;
+  }
+  .pillIcon {
+    width: 14px;
+    height: 14px;
+  }
+  .attemptsPillBadge {
+    padding: 1.5px 6px;
+    font-size: 10px;
+  }
+
+  /* Overall Progress Card */
+  .progressCard {
+    width: 100%;
+    max-width: 100%;
+    padding: 10px 14px;
+    border-radius: 14px;
+    gap: 5px;
+  }
+  .progressCardTitle,
+  .progressCardCount {
+    font-size: 11.5px;
+  }
+  .progressCardTrack {
+    height: 7px;
+  }
+  .progressCardPercent {
     font-size: 12.5px;
   }
-  .progressLegendRow {
-    flex-direction: column;
-    align-items: flex-start;
+
+  /* Compact Stepper & Horizontal Touch Navigation */
+  .stepperWrapper {
+    padding: 4px 0 10px;
+    margin-top: 14px;
   }
-  .progressPercent {
-    margin-left: 0;
+  .stepperRow {
+    min-width: 550px;
+    padding: 16px 10px 10px;
+  }
+  .stepNode {
+    width: 74px;
+    gap: 6px;
+  }
+  .circleOuter {
+    width: 52px;
+    height: 52px;
+  }
+  .topBadge {
+    top: -6px;
+    width: 18px;
+    height: 18px;
+    font-size: 10px;
+  }
+  .bottomBadge {
+    bottom: -6px;
+    width: 18px;
+    height: 18px;
+  }
+  .badgeSvg {
+    width: 10px;
+    height: 10px;
+  }
+  .stepIconSvg {
+    width: 21px;
+    height: 21px;
+  }
+  .stepConnector {
+    min-width: 16px;
+    margin-top: 26px; /* 52px / 2 = 26px */
+    height: 2.5px;
+  }
+  .stepTitle {
+    font-size: 11px;
+    line-height: 1.25;
+  }
+
+  /* Mascot & Tip Banner (Conversational Chat Row) */
+  .mascotBannerCard {
+    padding: 12px 14px;
+    border-radius: 18px;
+    gap: 12px;
+    margin-top: 14px;
+  }
+  .mascotSection {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 10px;
+    text-align: left;
+  }
+  .sproutMascotWrapper {
+    width: 50px;
+    height: 50px;
+    flex-shrink: 0;
+  }
+  .sproutMascotSvg {
+    width: 50px;
+    height: 50px;
+  }
+  .speechBubble {
+    flex: 1;
+    font-size: 13px;
+    padding: 9px 12px;
+    border-radius: 14px;
+    line-height: 1.4;
+  }
+  .speechBubble::before {
+    display: block !important;
+    top: 16px;
+    left: -7px;
+    transform: none;
+    border-top: 5px solid transparent;
+    border-bottom: 5px solid transparent;
+    border-right: 7px solid #ffffff;
+    border-left: none;
+  }
+  .speechBubble::after {
+    display: block !important;
+    top: 16px;
+    left: -9px;
+    transform: none;
+    border-top: 5px solid transparent;
+    border-bottom: 5px solid transparent;
+    border-right: 8px solid #d1fae5;
+    border-left: none;
+  }
+  .tipSection {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .tipIcon {
+    font-size: 16px;
+    margin-top: 1px;
+  }
+  .tipLabel {
+    font-size: 11px;
+  }
+  .tipText {
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  /* Celebration Avatar Placard */
+  .avatarBannerWrapper {
+    max-width: 320px;
+  }
+  .heldPosterCard {
+    padding: 18px 16px 14px;
+    border-radius: 20px;
+  }
+  .bannerTitle {
+    font-size: 18px;
+  }
+  .bannerMessage {
+    font-size: 13.5px;
+  }
+  .bannerSub {
+    font-size: 11px;
+    margin-bottom: 10px;
+  }
+  .mascotHoldingSvg {
+    width: 105px;
+    height: 85px;
+  }
+
+  /* Popups and Modals */
+  .popupOverlay {
+    padding: 12px;
+  }
+  .popupDialog {
+    padding: 24px 18px;
+    border-radius: 20px;
+    max-width: 100%;
+    max-height: 85vh;
+    overflow-y: auto;
+  }
+  .popupIcon {
+    width: 48px;
+    height: 48px;
+    font-size: 20px;
+    margin-bottom: 12px;
+  }
+  .popupTitle {
+    font-size: 18px;
+    margin-bottom: 8px;
+  }
+  .popupMessage {
+    font-size: 13.5px;
+    margin-bottom: 18px;
+  }
+  .instructionsModalList {
+    font-size: 12.5px;
+    line-height: 1.6;
+    padding-left: 16px;
+    margin-bottom: 18px;
+  }
+  .videoIframe {
+    height: 200px;
+  }
+}
+
+/* Extra Small Mobile Screens (e.g., iPhone SE: <= 380px) */
+@media (max-width: 380px) {
+  .journeyTitle {
+    font-size: 20px;
+  }
+  .topButtonsGroup {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .pillButton {
+    width: 100%;
+    justify-content: center;
+  }
+  .stepperRow {
+    min-width: 520px;
+    padding: 14px 8px 8px;
+  }
+  .stepNode {
+    width: 70px;
+  }
+  .circleOuter {
+    width: 48px;
+    height: 48px;
+  }
+  .stepConnector {
+    min-width: 14px;
+    margin-top: 24px;
+  }
+  .stepIconSvg {
+    width: 19px;
+    height: 19px;
+  }
+  .stepTitle {
+    font-size: 10.5px;
   }
   .mascotSection {
     flex-direction: column;
@@ -1469,6 +1817,6 @@
   }
   .speechBubble::before,
   .speechBubble::after {
-    display: none;
+    display: none !important;
   }
 }

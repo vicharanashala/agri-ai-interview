@@ -12,6 +12,93 @@ import uuid
 from app.db.mongodb import get_sync_db
 from app.api.admin.middleware import require_admin_auth
 
+# ── Effective eligible role (admin display only; never written back) ─────────
+
+VALID_ROLES = ("Intern", "YP", "Junior", "Agri", "Senior")
+_ROLE_LEVELS = {r: i for i, r in enumerate(VALID_ROLES)}
+
+# Analytics role filter value for candidates whose role is neither stored nor reliably calculable
+NOT_AVAILABLE = "Not Available"
+
+# Values the candidate forms can submit: onboarding page list + frontend/data/education-data.ts (profile page)
+_EDU_STATUSES = {"Completed", "Pursuing"}
+_EDU_OTHER_LEVELS = {"Other", "Other Bachelor's Degree", "Other Master's Degree"}
+_EDU_LEVELS = {
+    "Diploma", "B.Sc.", "B.Sc. (Hons.)", "B.Tech.", "B.E.", "B.A.", "B.Com.", "BCA", "BBA", "B.Pharm.",
+    "B.V.Sc. & A.H.", "B.F.Sc.", "LLB", "MBBS", "BDS", "BAMS", "BHMS", "Other Bachelor's Degree",
+    "M.Sc.", "M.Tech.", "M.E.", "MCA", "MBA", "M.Com.", "M.A.", "M.Pharm.", "M.V.Sc.", "M.F.Sc.", "MSW",
+    "LLM", "MD", "MS", "Other Master's Degree", "PG Diploma", "M.Phil.", "Ph.D.", "D.Sc.", "D.Litt.",
+    "Postdoctoral", "Other",
+}
+_EDU_DISCIPLINES = {
+    "Agriculture", "Agronomy", "Horticulture", "Agricultural Engineering", "Agricultural Economics",
+    "Agricultural Extension", "Soil Science", "Entomology", "Plant Pathology", "Genetics & Plant Breeding",
+    "Seed Science & Technology", "Agrometeorology", "Food Technology", "Biotechnology", "Botany", "Zoology",
+    "Microbiology", "Environmental Science", "Computer Science", "Computer Applications",
+    "Information Technology", "Data Science", "Engineering", "Management", "Commerce", "Economics",
+    "Mathematics", "Statistics", "Physics", "Chemistry", "Life Sciences", "Veterinary Science",
+    "Fisheries Science", "Forestry", "Pharmacy", "Medicine", "Nursing", "Law", "Arts & Humanities",
+    "Social Sciences", "Other", "Electronics & Communication", "Mechanical Engineering", "Civil Engineering",
+    "Electrical Engineering", "Business Administration / Management", "English / Literature", "History",
+    "Political Science", "Sociology", "Psychology", "Social Work", "Medicine / Surgery",
+}
+
+
+def _filled(value: Any) -> bool:
+    return value is not None and (not isinstance(value, str) or value.strip() != "")
+
+
+def _calculated_role(cand: dict) -> Optional[str]:
+    """
+    compute_eligible_role() on the stored education[] and years_of_experience, but only when those inputs are
+    usable — otherwise None. Never reads highest_education, and never yields Intern merely for lack of data.
+    """
+    education = cand.get("education")
+    if not isinstance(education, list) or not education:
+        return None  # no education[] (incl. legacy highest_education-only profiles)
+    if not all(isinstance(e, dict) and _filled(e.get("level")) and _filled(e.get("discipline"))
+               and e.get("status") in _EDU_STATUSES for e in education):
+        return None  # an entry is incomplete or has an unrecognised status
+    years = cand.get("years_of_experience")
+    if isinstance(years, bool) or not isinstance(years, (int, float)) or not 0 <= years < float("inf"):
+        return None  # missing / non-numeric / negative experience (the rules would silently use 0)
+
+    role = compute_eligible_role(cand)
+    band = "YP" if years < 2 else "Junior" if years < 3 else "Agri" if years < 5 else "Senior"
+    if not any(e["status"] == "Pursuing" for e in education) and _ROLE_LEVELS[role] < _ROLE_LEVELS[band]:
+        # Education is what limits the role; an entry the rules cannot read (unknown value or "Other" free
+        # text) might be a qualifying degree, so the result would be a guess.
+        for e in education:
+            if (e["level"] not in _EDU_LEVELS or e["discipline"] not in _EDU_DISCIPLINES
+                    or e["level"] in _EDU_OTHER_LEVELS or e["discipline"] == "Other"):
+                return None
+    return role
+
+
+def _effective_role(cand: Optional[dict]) -> Optional[str]:
+    """Stored eligible_role when valid; otherwise the calculated role; None means 'Not Available'."""
+    if not cand:
+        return None
+    stored = cand.get("eligible_role")
+    if stored in _ROLE_LEVELS:
+        return stored
+    return _calculated_role(cand)
+
+
+def _role_source(cand: Optional[dict]) -> Optional[str]:
+    """'stored' | 'calculated' | None — lets the API say where the effective role came from."""
+    if cand and cand.get("eligible_role") in _ROLE_LEVELS:
+        return "stored"
+    return "calculated" if _effective_role(cand) else None
+
+
+def _role_matches(role: Optional[str], cand: Optional[dict]) -> bool:
+    """Analytics role selector on the effective role ('All'/empty = no filter)."""
+    if not role or role == "All":
+        return True
+    effective = _effective_role(cand)
+    return effective is None if role == NOT_AVAILABLE else effective == role
+
 router = APIRouter(prefix="/api/admin", tags=["admin-candidates"])
 
 PHASES = ["onboarding", "interview", "summary", "foundation", "module", "documents"]
@@ -777,7 +864,7 @@ def _candidate_funnel(
             continue
         if district and district != "All" and (rep.get("district") or "Unknown") != district:
             continue
-        if role and role != "All" and rep.get("eligible_role") != role:
+        if not _role_matches(role, rep):
             continue
         if date_query is not None:
             registered_at = min((d["created_at"] for d in docs if isinstance(d.get("created_at"), datetime)), default=None)
@@ -898,6 +985,8 @@ def _funnel_kpi_candidates(
             "state": c.get("state") or "",
             "district": c.get("district") or "",
             "currentRole": c.get("current_role") or "",
+            "eligibleRole": _effective_role(c),
+            "eligibleRoleSource": _role_source(c),
             "current_phase": c.get("current_phase") or "onboarding",
             "is_selected": c.get("is_selected", False),
             "created_at": c.get("created_at"),
@@ -936,7 +1025,9 @@ async def get_overview_stats(
     if district and district != "All":
         cand_query["district"] = district
     if role and role != "All":
-        cand_query["eligible_role"] = role
+        # The effective role is partly calculated, so match it in Python and narrow the counts to those ids
+        role_proj = {"eligible_role": 1, "education": 1, "years_of_experience": 1}
+        cand_query["_id"] = {"$in": [c["_id"] for c in db.candidates.find(cand_query, role_proj) if _role_matches(role, c)]}
 
     total = db.candidates.count_documents(cand_query)
     by_phase = {}
@@ -1330,12 +1421,9 @@ async def get_all_evaluations(
         session_id_str = str(s.get("_id"))
         re_req = re_req_map.get(session_id_str)
 
-        level = None
-        if candidate:
-            level = candidate.get("eligible_role")
-            if not level:
-                level = compute_eligible_role(candidate)
-        
+        # Stored role, else calculated from usable education/experience, else None ("Not Available")
+        level = _effective_role(candidate)
+
         from app.services.settings_service import get_evaluation_settings
         eval_settings = get_evaluation_settings(level)
         pass_threshold = eval_settings.get("pass_threshold", 60)
@@ -1363,6 +1451,7 @@ async def get_all_evaluations(
             "reEvaluationReason": re_req.get("reason") if re_req else None,
             "reEvaluationRequestedAt": _format_iso(re_req.get("requested_at")) if re_req else None,
             "level": level,
+            "levelSource": _role_source(candidate),
             "passThreshold": pass_threshold,
         })
 
@@ -1816,7 +1905,6 @@ def get_kpi_details(
     cand_query = {"is_deleted": {"$ne": True}}
     if state and state != "All": cand_query["state"] = state
     if district and district != "All": cand_query["district"] = district
-
     sessions = []
     if kpi == "totalCandidates":
         pass # cand_query is already correct
@@ -1852,7 +1940,9 @@ def get_kpi_details(
         raise HTTPException(400, "Unknown KPI")
 
     candidates = list(db.candidates.find(cand_query).sort("created_at", -1))
-    
+    # Same effective-role filter as the overview counts these lists belong to
+    candidates = [c for c in candidates if _role_matches(role, c)]
+
     user_ids = [c["user_id"] for c in candidates if c.get("user_id")]
     user_map = {str(u["_id"]): u.get("email") for u in db.users.find({"_id": {"$in": user_ids}})}
     
@@ -1897,6 +1987,8 @@ def get_kpi_details(
             "phone": c.get("phone") or "",
             "state": c.get("state") or "",
             "district": c.get("district") or "",
+            "eligibleRole": _effective_role(c),
+            "eligibleRoleSource": _role_source(c),
             "current_phase": c.get("current_phase") or "onboarding",
             "is_selected": c.get("is_selected", False),
             "created_at": c.get("created_at"),

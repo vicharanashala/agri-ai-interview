@@ -120,6 +120,31 @@ class OnboardingRequest(BaseModel):
     eligibleRole: Optional[str] = None
 
 
+# OnboardingRequest field -> candidates field (education is converted separately)
+_ONBOARDING_FIELDS = {
+    "fullName": "full_name",
+    "phone": "phone",
+    "state": "state",
+    "district": "district",
+    "pincode": "pincode",
+    "address": "address",
+    "currentRole": "current_role",
+    "yearsOfExperience": "years_of_experience",
+    "highestEducation": "highest_education",
+    "institution": "institution",
+    "educationStatus": "education_status",
+    "discipline": "discipline",
+    "disciplineOther": "discipline_other",
+    "nonAgriConsent": "non_agri_consent",
+    "isInternshipConsent": "is_internship_consent",
+    "farmingBackground": "farming_background",
+    "cropsGrown": "crops_grown",
+    "farmSize": "farm_size",
+    "primaryExpertise": "primary_expertise",
+    "eligibleRole": "eligible_role",
+}
+
+
 class CandidateProfileResponse(BaseModel):
     id: str
     email: str
@@ -229,30 +254,17 @@ async def upsert_candidate(request: Request, body: OnboardingRequest):
     from app.db.mongodb import get_sync_db
     db = get_sync_db()
 
+    # Write only the fields the client actually sent. Omitted Optional fields default to None on the model,
+    # so writing them all would null e.g. eligible_role and the consent flags, which the profile page omits.
+    provided = body.model_fields_set
     updates = {
-        "full_name": body.fullName,
-        "phone": body.phone,
-        "state": body.state,
-        "district": body.district,
-        "pincode": body.pincode,
-        "address": body.address,
-        "current_role": body.currentRole,
-        "years_of_experience": body.yearsOfExperience,
-        "highest_education": body.highestEducation,
-        "institution": body.institution,
-        "education": [e.model_dump() for e in body.education] if body.education else [],
-        "education_status": body.educationStatus,
-        "discipline": body.discipline,
-        "discipline_other": body.disciplineOther,
-        "non_agri_consent": body.nonAgriConsent,
-        "is_internship_consent": body.isInternshipConsent,
-        "farming_background": body.farmingBackground,
-        "crops_grown": body.cropsGrown,
-        "farm_size": body.farmSize,
-        "primary_expertise": body.primaryExpertise,
-        "eligible_role": body.eligibleRole,
-        "updated_at": datetime.now(timezone.utc),
+        mongo_key: getattr(body, api_key)
+        for api_key, mongo_key in _ONBOARDING_FIELDS.items()
+        if api_key in provided
     }
+    if "education" in provided:
+        updates["education"] = [e.model_dump() for e in body.education] if body.education else []
+    updates["updated_at"] = datetime.now(timezone.utc)
 
     # Safely get ObjectId variant
     id_variants = [candidate_id]

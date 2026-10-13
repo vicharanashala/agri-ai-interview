@@ -776,6 +776,7 @@ export default function AnalyticsTab({
               <option value="Junior">Junior</option>
               <option value="Agri">Agri</option>
               <option value="Senior">Senior</option>
+              <option value="Not Available">Not Available</option>
             </select>
             <label htmlFor="kpi-start-date">Start Date:</label>
             <input id="kpi-start-date" type="date" value={kpiStartDate} max={kpiEndDate || undefined} onChange={(e) => setKpiStartDate(e.target.value)} />
@@ -1020,6 +1021,7 @@ export default function AnalyticsTab({
                 <option value="Junior">Junior</option>
                 <option value="Agri">Agri</option>
                 <option value="Senior">Senior</option>
+                <option value="Not Available">Not Available</option>
               </select>
             </div>
 
@@ -1080,7 +1082,7 @@ export default function AnalyticsTab({
                         <td>{cand.email}</td>
                         {kpiModalType === "registered" && <td>{cand.state}</td>}
                         {kpiModalType !== "registered" && <td>{cand.district}</td>}
-                        {kpiModalType !== "registered" && <td>{cand.currentRole}</td>}
+                        {kpiModalType !== "registered" && <td>{cand.eligibleRole || "Not Available"}</td>}
                         {kpiModalType !== "registered" && !ATTEMPT_KPIS.has(kpiModalType) && <td>{cand.phone}</td>}
                         {ATTEMPT_KPIS.has(kpiModalType) ? (
                           <>

@@ -723,7 +723,7 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken, onCandidat
                             <span className={styles.candidateEmail}>{evaluation.phone || "—"}</span>
                           </td>
                           <td>
-                            <span style={{ fontSize: "12px", background: "#f1f5f9", padding: "4px 8px", borderRadius: "12px", color: "#475569" }}>{evaluation.level || "—"}</span>
+                            <span style={{ fontSize: "12px", background: "#f1f5f9", padding: "4px 8px", borderRadius: "12px", color: "#475569" }}>{evaluation.level || "Not Available"}</span>
                           </td>
                           <td>
                             <span className={styles.candidateEmail}>{evaluation.passThreshold != null ? `${evaluation.passThreshold}/100` : "—"}</span>

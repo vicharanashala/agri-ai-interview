@@ -776,7 +776,6 @@ export default function AnalyticsTab({
               <option value="Junior">Junior</option>
               <option value="Agri">Agri</option>
               <option value="Senior">Senior</option>
-              <option value="Not Available">Not Available</option>
             </select>
             <label htmlFor="kpi-start-date">Start Date:</label>
             <input id="kpi-start-date" type="date" value={kpiStartDate} max={kpiEndDate || undefined} onChange={(e) => setKpiStartDate(e.target.value)} />
@@ -1021,7 +1020,6 @@ export default function AnalyticsTab({
                 <option value="Junior">Junior</option>
                 <option value="Agri">Agri</option>
                 <option value="Senior">Senior</option>
-                <option value="Not Available">Not Available</option>
               </select>
             </div>
 

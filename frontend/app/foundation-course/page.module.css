@@ -237,6 +237,15 @@
   font-weight: 700;
 }
 
+.note ol {
+  margin: 6px 0 0;
+  padding-left: 20px;
+}
+
+.note li + li {
+  margin-top: 4px;
+}
+
 .primaryButton,
 .secondaryButton,
 .backButton {

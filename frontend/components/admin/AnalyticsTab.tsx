@@ -1080,7 +1080,7 @@ export default function AnalyticsTab({
                         <td>{cand.email}</td>
                         {kpiModalType === "registered" && <td>{cand.state}</td>}
                         {kpiModalType !== "registered" && <td>{cand.district}</td>}
-                        {kpiModalType !== "registered" && <td>{cand.currentRole}</td>}
+                        {kpiModalType !== "registered" && <td>{cand.eligibleRole || "Not Available"}</td>}
                         {kpiModalType !== "registered" && !ATTEMPT_KPIS.has(kpiModalType) && <td>{cand.phone}</td>}
                         {ATTEMPT_KPIS.has(kpiModalType) ? (
                           <>

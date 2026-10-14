@@ -165,9 +165,13 @@ export default function FoundationCoursePage() {
                   {isChecking ? 'Checking...' : 'Check Completion'}
                 </button>
               </div>
-              <p className={styles.note}>
-                <strong>Note:</strong> Please sign in/sign up on ViBe using the same email address registered on Anveshan. This is required to verify your Foundation Course completion.
-              </p>
+              <div className={styles.note}>
+                <strong>Note:</strong>
+                <ol>
+                  <li>Please sign in or sign up on ViBe using the same email address registered on Anveshan. This is required to verify your Foundation Course completion.</li>
+                  <li>Enroll in and complete only the <strong>Foundation Course For Farm Advisors</strong>. Completing other courses on ViBe is not required for this step.</li>
+                </ol>
+              </div>
             </>
           ) : (
             <>

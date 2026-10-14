@@ -192,6 +192,12 @@ export default function ModulePage() {
                     {isChecking ? 'Checking...' : 'Check Completion'}
                   </button>
                 </div>
+                <div className={styles.note}>
+                  <strong>Note:</strong>
+                  <ol>
+                    <li>Please sign in or sign up on the Ground Truth platform using the same mobile number registered on Anveshan. This is required to verify your identity and track your progress.</li>
+                  </ol>
+                </div>
 
                 </>
             ) : (

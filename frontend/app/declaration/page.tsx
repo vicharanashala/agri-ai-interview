@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import styles from './page.module.css';
 import BrandLogos from '@/components/BrandLogos';
@@ -70,6 +70,41 @@ export default function DeclarationPage() {
   const [docFullName, setDocFullName] = useState('');
   const [docAgreed, setDocAgreed] = useState(false);
   const [docSignature, setDocSignature] = useState('');
+
+  // Scroll completion tracking for each of the 4 slides
+  // Consent tick boxes are only clickable after the candidate scrolls through the document
+  const [slide1Scrolled, setSlide1Scrolled] = useState(false);
+  const [slide2Scrolled, setSlide2Scrolled] = useState(false);
+  const [slide3Scrolled, setSlide3Scrolled] = useState(false);
+  const [slide4Scrolled, setSlide4Scrolled] = useState(false);
+  const docPaneRef = useRef<HTMLDivElement | null>(null);
+
+  const handleScroll = (slideIndex: number, e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.currentTarget;
+    if (target.scrollHeight - target.scrollTop <= target.clientHeight + 25) {
+      if (slideIndex === 0) setSlide1Scrolled(true);
+      else if (slideIndex === 1) setSlide2Scrolled(true);
+      else if (slideIndex === 2) setSlide3Scrolled(true);
+      else if (slideIndex === 3) setSlide4Scrolled(true);
+    }
+  };
+
+
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (docPaneRef.current) {
+        const el = docPaneRef.current;
+        if (el.scrollHeight <= el.clientHeight + 25) {
+          if (currentSlide === 0) setSlide1Scrolled(true);
+          else if (currentSlide === 1) setSlide2Scrolled(true);
+          else if (currentSlide === 2) setSlide3Scrolled(true);
+          else if (currentSlide === 3) setSlide4Scrolled(true);
+        }
+      }
+    }, 120);
+    return () => clearTimeout(timer);
+  }, [currentSlide]);
 
   // Helper to apply candidate name and email across all form inputs and signatures
   const applyCandidateData = (name: string, mail: string) => {
@@ -182,10 +217,10 @@ export default function DeclarationPage() {
     session?.user?.name ||
     '';
 
-  const isSlide1Valid = slide1Agreed && (slide1Signature.trim().length > 0 || candidateName.length > 0);
-  const isSlide2Valid = vibeAgreed && (vibeSignature.trim().length > 0 || candidateName.length > 0);
-  const isSlide3Valid = gtAgreed && (gtSignature.trim().length > 0 || candidateName.length > 0);
-  const isSlide4Valid = docAgreed && (docSignature.trim().length > 0 || candidateName.length > 0);
+  const isSlide1Valid = slide1Scrolled && slide1Agreed && (slide1Signature.trim().length > 0 || candidateName.length > 0);
+  const isSlide2Valid = slide2Scrolled && vibeAgreed && (vibeSignature.trim().length > 0 || candidateName.length > 0);
+  const isSlide3Valid = slide3Scrolled && gtAgreed && (gtSignature.trim().length > 0 || candidateName.length > 0);
+  const isSlide4Valid = slide4Scrolled && docAgreed && (docSignature.trim().length > 0 || candidateName.length > 0);
 
   const handleNext = () => {
     setErrorMsg(null);
@@ -502,7 +537,11 @@ export default function DeclarationPage() {
               </p>
             </div>
 
-            <div className={styles.documentPane}>
+            <div
+              className={styles.documentPane}
+              ref={currentSlide === 0 ? docPaneRef : undefined}
+              onScroll={(e) => handleScroll(0, e)}
+            >
               <div className={styles.docAlert}>
                 <strong>Voluntary Participation Notice:</strong> I, the undersigned candidate, hereby acknowledge that I am voluntarily participating in an AI-enabled interview and assessment process and agree to the following terms governing my participation, use of the platform, processing of my responses, and communication of concerns.
               </div>
@@ -692,13 +731,34 @@ export default function DeclarationPage() {
             </div>
 
             <div className={styles.acceptanceCard}>
+              {!slide1Scrolled ? (
+                <div className={styles.scrollHintBanner}>
+                  <span className={styles.scrollHintText}>
+                    <strong>Please scroll through the entire document above</strong> to read all points. The consent checkbox will unlock once you reach the bottom.
+                  </span>
+                </div>
+              ) : (
+                <div className={styles.scrollCompleteBanner}>
+                  <span className={styles.scrollCompleteIcon}>✓</span>
+                  <span>Declaration read and acknowledged. You may now tick the consent box to proceed.</span>
+                </div>
+              )}
+
               <label
-                className={`${styles.checkboxContainer} ${slide1Agreed ? styles.checkboxContainerChecked : ''}`}
+                className={`${styles.checkboxContainer} ${slide1Agreed ? styles.checkboxContainerChecked : ''} ${!slide1Scrolled ? styles.checkboxContainerDisabled : ''}`}
+                onClick={(e) => {
+                  if (!slide1Scrolled) {
+                    e.preventDefault();
+                  }
+                }}
               >
                 <input
                   type="checkbox"
                   checked={slide1Agreed}
-                  onChange={(e) => setSlide1Agreed(e.target.checked)}
+                  disabled={!slide1Scrolled}
+                  onChange={(e) => {
+                    if (slide1Scrolled) setSlide1Agreed(e.target.checked);
+                  }}
                   className={styles.customCheckbox}
                 />
                 <span className={styles.checkboxText}>
@@ -773,7 +833,11 @@ export default function DeclarationPage() {
               </p>
             </div>
 
-            <div className={styles.documentPane}>
+            <div
+              className={styles.documentPane}
+              ref={currentSlide === 1 ? docPaneRef : undefined}
+              onScroll={(e) => handleScroll(1, e)}
+            >
               <div className={styles.docSection}>
                 <h3 className={styles.docSectionTitle}>
                   <span className={styles.docSectionNumber}>2</span>
@@ -961,13 +1025,34 @@ export default function DeclarationPage() {
 
             {/* Acceptance Section (PDF 1 Page 6) */}
             <div className={styles.acceptanceCard}>
+              {!slide2Scrolled ? (
+                <div className={styles.scrollHintBanner}>
+                  <span className={styles.scrollHintText}>
+                    <strong>Please scroll through the entire document above</strong> to read all points. The consent checkbox will unlock once you reach the bottom.
+                  </span>
+                </div>
+              ) : (
+                <div className={styles.scrollCompleteBanner}>
+                  <span className={styles.scrollCompleteIcon}>✓</span>
+                  <span>ViBe declaration reviewed. You may now tick the acceptance box below.</span>
+                </div>
+              )}
+
               <label
-                className={`${styles.checkboxContainer} ${vibeAgreed ? styles.checkboxContainerChecked : ''}`}
+                className={`${styles.checkboxContainer} ${vibeAgreed ? styles.checkboxContainerChecked : ''} ${!slide2Scrolled ? styles.checkboxContainerDisabled : ''}`}
+                onClick={(e) => {
+                  if (!slide2Scrolled) {
+                    e.preventDefault();
+                  }
+                }}
               >
                 <input
                   type="checkbox"
                   checked={vibeAgreed}
-                  onChange={(e) => setVibeAgreed(e.target.checked)}
+                  disabled={!slide2Scrolled}
+                  onChange={(e) => {
+                    if (slide2Scrolled) setVibeAgreed(e.target.checked);
+                  }}
                   className={styles.customCheckbox}
                 />
                 <span className={styles.checkboxText}>
@@ -1061,7 +1146,11 @@ export default function DeclarationPage() {
               </p>
             </div>
 
-            <div className={styles.documentPane}>
+            <div
+              className={styles.documentPane}
+              ref={currentSlide === 2 ? docPaneRef : undefined}
+              onScroll={(e) => handleScroll(2, e)}
+            >
               <div className={styles.docSection}>
                 <h3 className={styles.docSectionTitle}>
                   <span className={styles.docSectionNumber}>1</span>
@@ -1152,13 +1241,34 @@ export default function DeclarationPage() {
 
             {/* Acceptance Section (PDF 2 Page 2) */}
             <div className={styles.acceptanceCard}>
+              {!slide3Scrolled ? (
+                <div className={styles.scrollHintBanner}>
+                  <span className={styles.scrollHintText}>
+                    <strong>Please scroll through the entire document above</strong> to read all points. The consent checkbox will unlock once you reach the bottom.
+                  </span>
+                </div>
+              ) : (
+                <div className={styles.scrollCompleteBanner}>
+                  <span className={styles.scrollCompleteIcon}>✓</span>
+                  <span>Ground Truth assessment terms reviewed. You may now confirm your consent below.</span>
+                </div>
+              )}
+
               <label
-                className={`${styles.checkboxContainer} ${gtAgreed ? styles.checkboxContainerChecked : ''}`}
+                className={`${styles.checkboxContainer} ${gtAgreed ? styles.checkboxContainerChecked : ''} ${!slide3Scrolled ? styles.checkboxContainerDisabled : ''}`}
+                onClick={(e) => {
+                  if (!slide3Scrolled) {
+                    e.preventDefault();
+                  }
+                }}
               >
                 <input
                   type="checkbox"
                   checked={gtAgreed}
-                  onChange={(e) => setGtAgreed(e.target.checked)}
+                  disabled={!slide3Scrolled}
+                  onChange={(e) => {
+                    if (slide3Scrolled) setGtAgreed(e.target.checked);
+                  }}
                   className={styles.customCheckbox}
                 />
                 <span className={styles.checkboxText}>
@@ -1244,7 +1354,11 @@ export default function DeclarationPage() {
               </p>
             </div>
 
-            <div className={styles.documentPane}>
+            <div
+              className={styles.documentPane}
+              ref={currentSlide === 3 ? docPaneRef : undefined}
+              onScroll={(e) => handleScroll(3, e)}
+            >
               <div className={styles.docSection}>
                 <p className={styles.docParagraph}>
                   By registering on this recruitment platform and submitting my application and/or documents, I acknowledge that I have read and understood the information provided regarding the collection and processing of my personal data.
@@ -1281,13 +1395,34 @@ export default function DeclarationPage() {
 
             {/* Acceptance Section (DPDP Document Consent) */}
             <div className={styles.acceptanceCard}>
+              {!slide4Scrolled ? (
+                <div className={styles.scrollHintBanner}>
+                  <span className={styles.scrollHintText}>
+                    <strong>Please scroll through the entire document above</strong> to read all points. The consent checkbox will unlock once you reach the bottom.
+                  </span>
+                </div>
+              ) : (
+                <div className={styles.scrollCompleteBanner}>
+                  <span className={styles.scrollCompleteIcon}>✓</span>
+                  <span>Data Protection Notice reviewed. You may now provide your final consent below.</span>
+                </div>
+              )}
+
               <label
-                className={`${styles.checkboxContainer} ${docAgreed ? styles.checkboxContainerChecked : ''}`}
+                className={`${styles.checkboxContainer} ${docAgreed ? styles.checkboxContainerChecked : ''} ${!slide4Scrolled ? styles.checkboxContainerDisabled : ''}`}
+                onClick={(e) => {
+                  if (!slide4Scrolled) {
+                    e.preventDefault();
+                  }
+                }}
               >
                 <input
                   type="checkbox"
                   checked={docAgreed}
-                  onChange={(e) => setDocAgreed(e.target.checked)}
+                  disabled={!slide4Scrolled}
+                  onChange={(e) => {
+                    if (slide4Scrolled) setDocAgreed(e.target.checked);
+                  }}
                   className={styles.customCheckbox}
                 />
                 <span className={styles.checkboxText}>

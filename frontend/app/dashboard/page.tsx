@@ -1042,7 +1042,7 @@ export default function DashboardPage() {
                   {celebrationPhase === 'Start Interview'
                     ? "Great job! You've successfully passed the interview. Complete each step to move forward! ✨"
                     : celebrationPhase === 'Upload Documents'
-                    ? "All documents submitted successfully. Our hiring team will review your application and connect with you shortly with next steps! 🌟"
+                    ? "Our hiring team will connect with you soon! 🌟"
                     : "Complete each step to move forward. You're doing great! ✨"}
                 </p>
               </div>

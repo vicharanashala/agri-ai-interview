@@ -123,6 +123,27 @@ async def validate_single_document(file: UploadFile = File(...), field_name: str
     # Convert to base64 for the OpenAI Vision payload
     base64_file = base64.b64encode(file_bytes).decode('utf-8')
     
+    FIELD_NAMES_MAP = {
+        "aadhaar_front": "Aadhaar Card (Front side)",
+        "aadhaar_back": "Aadhaar Card (Back side)",
+        "pan_front": "PAN Card (Front side)",
+        "pan_back": "PAN Card (Back side)",
+        "bank_details": "Bank Proof",
+        "updated_resume": "Resume / Curriculum Vitae",
+        "marksheet_10": "10th Class Marksheet",
+        "marksheet_12": "12th Class Marksheet",
+        "grad_marksheets": "Graduation Marksheet / Degree Certificate",
+        "grad_certificate": "Graduation Degree Certificate",
+        "pg_marksheets": "Post-Graduation Marksheet / Degree Certificate",
+        "pg_certificate": "Post-Graduation Degree Certificate",
+        "noc": "NOC (No Objection Certificate)",
+        "experience_letter": "Offer Letter / Experience Letter",
+        "salary_slips": "Salary Slips",
+        "other_docs": "Supporting Document",
+    }
+    
+    canonical_name = FIELD_NAMES_MAP.get(field_name, field_name)
+    
     field_rules = {
         "Aadhaar Card (Front side)": (
             "Rule 1: MUST clearly contain the exact word 'Aadhaar' or the Government of India emblem.\n"
@@ -144,25 +165,55 @@ async def validate_single_document(file: UploadFile = File(...), field_name: str
             "Rule 4: CRITICAL: Reject Aadhaar cards or anything without a photo."
         ),
 
+        "PAN Card (Back side)": (
+            "Rule 1: MUST be the back side of a PAN Card.\n"
+            "Rule 2: CRITICAL: Reject Aadhaar card front with a face photo."
+        ),
+
         "10th Class Marksheet": (
-            "Rule 1: MUST contain words like 'Secondary School', 'Class X', '10th', or 'Matriculation'.\n"
-            "Rule 2: CRITICAL: If it clearly says 'Class XII', '12th', or 'Senior Secondary', REJECT IT immediately."
+            "Rule 1: MUST contain words like 'Secondary School', 'Class X', '10th', 'Matriculation', or 'SSLC'.\n"
+            "Rule 2: CRITICAL: If it clearly says 'Class XII', '12th', 'Senior Secondary', or 'HSC', REJECT IT immediately."
         ),
 
         "12th Class Marksheet": (
-            "Rule 1: MUST contain words like 'Senior Secondary', 'Class XII', '12th', or 'Intermediate'.\n"
+            "Rule 1: MUST contain words like 'Senior Secondary', 'Class XII', '12th', 'Intermediate', or 'HSC'.\n"
             "Rule 2: CRITICAL: If it clearly says 'Class X', '10th', or 'Matriculation', REJECT IT immediately."
         ),
 
         "Bank Proof": (
-            "Rule 1: MUST contain a Bank Logo/Name, Account Number, and IFSC code.\n"
+            "Rule 1: MUST contain a Bank Logo/Name, Passbook, Cheque, Account Number, or IFSC code.\n"
             "Rule 2: CRITICAL: Reject PAN cards, Aadhaar cards, or blank images."
+        ),
+
+        "Resume / Curriculum Vitae": (
+            "Rule 1: MUST be a Resume, CV, or Curriculum Vitae listing candidate background, education, or experience.\n"
+            "Rule 2: CRITICAL: Reject Aadhaar cards, PAN cards, or blank images."
+        ),
+
+        "Graduation Marksheet / Degree Certificate": (
+            "Rule 1: MUST be a university degree certificate or semester marksheets (e.g., B.Tech, B.Sc, B.Com, BA, Degree).\n"
+            "Rule 2: CRITICAL: Reject Aadhaar cards, PAN cards, or blank images."
+        ),
+
+        "Post-Graduation Marksheet / Degree Certificate": (
+            "Rule 1: MUST be a post-graduate degree certificate or university marksheets (e.g., M.Tech, MBA, MCA, M.Sc).\n"
+            "Rule 2: CRITICAL: Reject Aadhaar cards, PAN cards, or blank images."
+        ),
+
+        "Offer Letter / Experience Letter": (
+            "Rule 1: MUST be an offer letter, experience certificate, or relieving letter from an employer.\n"
+            "Rule 2: CRITICAL: Reject Aadhaar cards, PAN cards, or blank images."
+        ),
+
+        "Salary Slips": (
+            "Rule 1: MUST be a salary slip or payslip showing salary/earnings or company details.\n"
+            "Rule 2: CRITICAL: Reject Aadhaar cards, PAN cards, or blank images."
         )
     }
 
     specific_rule = field_rules.get(
-        field_name,
-        f"Verify that the document matches the category: {field_name}."
+        canonical_name,
+        f"Verify that the document matches the category: {canonical_name}."
     )
 
     prompt_text = f"""
@@ -170,7 +221,7 @@ You are a strict document verification AI.
 
 The candidate uploaded an image for the following document field:
 
-DOCUMENT TYPE: "{field_name}"
+DOCUMENT TYPE: "{canonical_name}"
 
 Your task is to determine whether the uploaded image satisfies the requirements for this
 specific document type.
@@ -256,8 +307,8 @@ Return ONLY valid JSON.
     "placeholder_values": false
   }},
   "detected_text": [
-    "Aadhaar",
-    "Government of India"
+    "Sample Heading",
+    "Sample Keyword"
   ],
   "failed_rules": [],
   "reason": "Short explanation based only on visible evidence."
@@ -270,7 +321,7 @@ IMPORTANT OUTPUT RULES:
 - Do NOT invent text, numbers, photos, logos, QR codes, or other features.
 - If something cannot be verified because of image quality, treat it as not verified
   rather than guessing.
-- "detected_text" must contain only text that is actually visible in the image.
+- "detected_text" must contain at most 3 to 5 key identifying words or headings (do NOT transcribe the whole document).
 - "failed_rules" must list the specific rules that are violated.
 - "reason" must be short and factual.
 - Do NOT provide chain-of-thought or hidden reasoning.
@@ -298,12 +349,13 @@ IMPORTANT OUTPUT RULES:
             }
         ],
         "temperature": 0.1,
-        "max_tokens": 500
+        "max_tokens": 800
     }
     
     try:
         import json
         import os
+        import re
         
         # We detect if the Tailscale entrypoint script is running by checking the env var it sets.
         # If it is running, we MUST send our request through the local HTTP proxy on port 1056.
@@ -335,7 +387,18 @@ IMPORTANT OUTPUT RULES:
                     else:
                         return {"success": False, "reason": result.get("reason", "AI rejected this document.")}
                 except json.JSONDecodeError:
-                    # Fallback if AI doesn't return perfect JSON
+                    # Robust regex fallback if JSON was slightly truncated or had unescaped quotes
+                    valid_match = re.search(r'"is_valid"\s*:\s*(true|false)', ai_text, re.IGNORECASE)
+                    if valid_match:
+                        is_valid = valid_match.group(1).lower() == 'true'
+                        if is_valid:
+                            return {"success": True}
+                        else:
+                            reason_match = re.search(r'"reason"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"', ai_text)
+                            reason = reason_match.group(1) if reason_match else "AI rejected this document."
+                            return {"success": False, "reason": reason}
+
+                    # Fallback if AI doesn't return parseable output
                     print("Failed to parse AI JSON:", ai_text)
                     return {"success": True, "reason": "Could not parse AI response, bypassing."}
             else:

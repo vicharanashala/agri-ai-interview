@@ -7,7 +7,7 @@ import { syncPhaseToDb } from '@/lib/phaseSync';
 import { INDIA_STATES_DISTRICTS, INDIAN_STATES } from '@/data/india-states-districts';
 import SearchableSelect from '@/components/SearchableSelect';
 import { interceptAuthFetch } from '@/lib/auth-fetch';
-import { signOut } from 'next-auth/react';
+import { signOut, useSession } from 'next-auth/react';
 import BrandLogos from '@/components/BrandLogos';
 
 interface ResumeData {
@@ -167,7 +167,18 @@ export default function OnboardingPage() {
   const [isFrozen, setIsFrozen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
+  const { data: session } = useSession();
   const [loggingOut, setLoggingOut] = useState(false);
+
+  // Pre-fill full name from active session when available
+  useEffect(() => {
+    if (session?.user?.name) {
+      setFormData((prev) => ({
+        ...prev,
+        fullName: prev.fullName || session.user.name || '',
+      }));
+    }
+  }, [session]);
 
   const handleLogout = async () => {
     setLoggingOut(true);
@@ -198,77 +209,74 @@ export default function OnboardingPage() {
         const response = await fetch('/api/candidate', { cache: 'no-store' });
         if (response.ok) {
           const candidate = await response.json();
-          // Only freeze the form if the candidate has at least one meaningful field filled in.
-          // An empty candidate record (created at signup) means onboarding is not complete yet.
-          const hasProfileData = candidate && (
-            candidate.fullName ||
-            candidate.phone ||
-            candidate.state ||
-            candidate.district ||
-            candidate.pincode ||
-            candidate.address ||
-            candidate.currentRole ||
-            candidate.yearsOfExperience ||
-            candidate.highestEducation ||
-            candidate.institution ||
-            candidate.farmingBackground ||
-            candidate.cropsGrown ||
-            candidate.primaryExpertise
+          // Candidate has completed onboarding ONLY if they actually submitted the profile:
+          // 1. profileCompleted flag is explicitly true or profileCompletedAt exists
+          // 2. OR currentPhase is beyond onboarding (interview, summary, documents, etc.)
+          // 3. OR essential profile submission fields (phone AND address AND education/highestEducation) exist
+          const isProfileComplete = Boolean(
+            candidate && (
+              candidate.profileCompleted === true ||
+              Boolean(candidate.profileCompletedAt) ||
+              (candidate.currentPhase && candidate.currentPhase !== 'onboarding') ||
+              (Boolean(candidate.phone) && Boolean(candidate.address) && (Boolean(candidate.highestEducation) || (Array.isArray(candidate.education) && candidate.education.length > 0)))
+            )
           );
-          if (hasProfileData) {
-            setIsFrozen(true);
-            setFormData({
-              fullName: candidate.fullName || '',
-              phone: candidate.phone || '',
-              state: candidate.state || '',
-              district: candidate.district || '',
-              pincode: candidate.pincode || '',
-              address: candidate.address || '',
-              currentRole: candidate.currentRole || '',
-              yearsOfExperience: candidate.yearsOfExperience?.toString() || '',
-              nonAgriConsent: !!(candidate.nonAgriConsent || candidate.isInternshipConsent),
-              farmingBackground: candidate.farmingBackground || '',
-              cropsGrown: candidate.cropsGrown || '',
-              primaryExpertise: candidate.primaryExpertise || '',
-              districtCustom: candidate.districtCustom || '',
+
+          setIsFrozen(isProfileComplete);
+
+          // Populate form data (prefills fullName from registration)
+          setFormData((prev) => ({
+            ...prev,
+            fullName: candidate?.fullName || prev.fullName || session?.user?.name || '',
+            phone: candidate?.phone || prev.phone || '',
+            state: candidate?.state || prev.state || '',
+            district: candidate?.district || prev.district || '',
+            pincode: candidate?.pincode || prev.pincode || '',
+            address: candidate?.address || prev.address || '',
+            currentRole: candidate?.currentRole || prev.currentRole || '',
+            yearsOfExperience: candidate?.yearsOfExperience?.toString() || prev.yearsOfExperience || '',
+            nonAgriConsent: !!(candidate?.nonAgriConsent || candidate?.isInternshipConsent || prev.nonAgriConsent),
+            farmingBackground: candidate?.farmingBackground || prev.farmingBackground || '',
+            cropsGrown: candidate?.cropsGrown || prev.cropsGrown || '',
+            primaryExpertise: candidate?.primaryExpertise || prev.primaryExpertise || '',
+            districtCustom: candidate?.districtCustom || prev.districtCustom || '',
+          }));
+
+          if (candidate?.education && Array.isArray(candidate.education) && candidate.education.length > 0) {
+            setEducation(
+              candidate.education.map((e: any) => ({
+                id: Math.random().toString(36).substring(2, 9),
+                level: e.level || '',
+                levelOther: e.levelOther || '',
+                discipline: e.discipline || '',
+                disciplineOther: e.disciplineOther || '',
+                status: e.status || '',
+                institution: e.institution || '',
+                yearOfCompletion: e.yearOfCompletion || '',
+              }))
+            );
+          } else if (candidate?.highestEducation) {
+            setEducation([
+              {
+                id: Math.random().toString(36).substring(2, 9),
+                level: candidate.highestEducation || '',
+                levelOther: '',
+                discipline: candidate.discipline || '',
+                disciplineOther: candidate.disciplineOther || '',
+                status: candidate.educationStatus || '',
+                institution: candidate.institution || '',
+                yearOfCompletion: '',
+              },
+            ]);
+          }
+
+          if (candidate?.resumeName) {
+            setResume({
+              id: candidate.resumeId,
+              name: candidate.resumeName,
+              size: '',
+              data: null,
             });
-
-            if (candidate.education && Array.isArray(candidate.education) && candidate.education.length > 0) {
-              setEducation(
-                candidate.education.map((e: any) => ({
-                  id: Math.random().toString(36).substring(2, 9),
-                  level: e.level || '',
-                  levelOther: e.levelOther || '',
-                  discipline: e.discipline || '',
-                  disciplineOther: e.disciplineOther || '',
-                  status: e.status || '',
-                  institution: e.institution || '',
-                  yearOfCompletion: e.yearOfCompletion || '',
-                }))
-              );
-            } else if (candidate.highestEducation) {
-              setEducation([
-                {
-                  id: Math.random().toString(36).substring(2, 9),
-                  level: candidate.highestEducation || '',
-                  levelOther: '',
-                  discipline: candidate.discipline || '',
-                  disciplineOther: candidate.disciplineOther || '',
-                  status: candidate.educationStatus || '',
-                  institution: candidate.institution || '',
-                  yearOfCompletion: '',
-                },
-              ]);
-            }
-
-            if (candidate.resumeName) {
-              setResume({
-                id: candidate.resumeId,
-                name: candidate.resumeName,
-                size: '',
-                data: null,
-              });
-            }
           }
         }
       } catch (error) {
@@ -281,7 +289,7 @@ export default function OnboardingPage() {
     return () => {
       restore();
     };
-  }, []);
+  }, [session]);
 
   // ── Education Management ───────────────────────────────────────────────────
   const isOtherLevel = (level: string) =>
@@ -933,6 +941,12 @@ export default function OnboardingPage() {
         <div className={styles.navbarContent}>
           <BrandLogos variant="header" />
           <div className={styles.headerButtons}>
+            <button
+              onClick={() => window.open('/raise-ticket.html', '_blank')}
+              className={styles.raiseTicketBtn}
+            >
+              ⚠️ Raise Tickets
+            </button>
             <button
               onClick={handleFaqClick}
               className={styles.faqHelpBtn}

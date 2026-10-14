@@ -159,6 +159,8 @@ class CandidateProfileResponse(BaseModel):
     consentWithdrawnAt: Optional[str] = None
     declarationAccepted: Optional[bool] = False
     declarations: Optional[dict] = None
+    profileCompleted: Optional[bool] = False
+    profileCompletedAt: Optional[str] = None
 
 
 class CandidatePatchRequest(BaseModel):
@@ -374,6 +376,19 @@ async def get_candidate_profile(email: Optional[str] = Query(None)):
         resume_id = str(resume["_id"])
         resume_status = resume.get("status")
 
+    # Check if onboarding profile has truly been completed
+    profile_completed_val = cand.get("profile_completed_at")
+    profile_completed_iso = (
+        profile_completed_val.isoformat()
+        if isinstance(profile_completed_val, datetime)
+        else (str(profile_completed_val) if profile_completed_val else None)
+    )
+    is_profile_completed = bool(
+        profile_completed_val
+        or (cand.get("current_phase") and cand.get("current_phase") != "onboarding")
+        or (cand.get("phone") and cand.get("address"))
+    )
+
     return CandidateProfileResponse(
         id=str(cand["_id"]),
         email=resolved_email,
@@ -413,6 +428,8 @@ async def get_candidate_profile(email: Optional[str] = Query(None)):
         consentWithdrawnAt=cand.get("consent_withdrawn_at"),
         declarationAccepted=has_all_declarations,
         declarations=declarations_dict,
+        profileCompleted=is_profile_completed,
+        profileCompletedAt=profile_completed_iso,
     )
 
 

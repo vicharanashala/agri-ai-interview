@@ -50,6 +50,7 @@ export const authOptions = {
       if (session.user) {
         if (token.sub) (session.user as { id?: string }).id = token.sub
         if (token.email) (session.user as { email?: string }).email = token.email as string
+        if (token.name) (session.user as { name?: string }).name = token.name as string
         if (token.candidateId)
           (session.user as { candidateId?: string }).candidateId = token.candidateId as string
       }
@@ -57,11 +58,13 @@ export const authOptions = {
     },
     async jwt({ token, user, account, trigger }) {
       if (user) {
+        token.sub = user.id
+        token.email = user.email
+        if (user.name) token.name = user.name
         if (account?.provider === 'credentials') {
-          token.sub = user.id
-          token.email = user.email
           const cand = await getBackendCandidateByEmail(user.email!)
           if (cand?.id) token.candidateId = cand.id
+          if (cand?.fullName && !token.name) token.name = cand.fullName
         }
       }
       return token
@@ -75,7 +78,7 @@ export const authOptions = {
         httpOnly: true,
         sameSite: 'lax',
         path: '/',
-        secure: true,
+        secure: process.env.NODE_ENV === 'production',
       },
     },
   },

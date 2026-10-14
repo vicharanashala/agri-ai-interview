@@ -98,10 +98,22 @@ async def register(request: Request, body: RegisterRequest):
             "_id": ObjectId(),
             "user_id": str(user_id),
             "email": email,
+            "full_name": name,
             "current_phase": "onboarding",
             "created_at": now,
             "updated_at": now,
         })
+    else:
+        db.candidates.update_one(
+            {"_id": existing_candidate["_id"]},
+            {
+                "$set": {
+                    "full_name": name,
+                    "email": email,
+                    "updated_at": now,
+                }
+            }
+        )
 
     return {
         "id": str(user_id),

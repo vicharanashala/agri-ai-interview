@@ -35,7 +35,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(err, { status: res.status, headers })
     }
 
-    return NextResponse.json(await res.json(), { headers })
+    const data = await res.json()
+    if (!data.fullName && session?.user?.name) {
+      data.fullName = session.user.name
+    }
+    if (!data.email && session?.user?.email) {
+      data.email = session.user.email
+    }
+
+    return NextResponse.json(data, { headers })
   } catch (error) {
     console.error('[api/candidate GET]', error)
     return NextResponse.json({ error: 'Bad gateway' }, { status: 502, headers })

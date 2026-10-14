@@ -9,6 +9,7 @@ const PROTECTED_CANDIDATE_ROUTES = [
   '/interview',
   '/onboarding',
   '/foundation-course',
+  '/module',
   '/upload-documents',
   '/summary',
   '/profile',
@@ -29,11 +30,11 @@ export default function GlobalCandidateGuard({ children }: { children: React.Rea
 
     const checkDeclaration = async () => {
       try {
-        const res = await fetch('/api/candidate');
+        const res = await fetch('/api/candidate', { cache: 'no-store' });
         if (res.ok) {
           const cand = await res.json();
-          if (cand && cand.declarationAccepted === false) {
-            console.log('[GlobalGuard] Candidate has not accepted declaration, redirecting...');
+          if (cand && !cand.declarationAccepted) {
+            console.log('[GlobalGuard] Candidate has not accepted declaration, redirecting to /declaration...');
             router.replace('/declaration');
           }
         }

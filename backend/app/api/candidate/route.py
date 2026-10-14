@@ -158,6 +158,9 @@ class CandidateProfileResponse(BaseModel):
     consentWithdrawn: Optional[bool] = False
     consentWithdrawnAt: Optional[str] = None
     declarationAccepted: Optional[bool] = False
+    declarations: Optional[dict] = None
+    profileCompleted: Optional[bool] = False
+    profileCompletedAt: Optional[str] = None
 
 
 class CandidatePatchRequest(BaseModel):
@@ -173,6 +176,7 @@ class CandidatePatchRequest(BaseModel):
     consentWithdrawn: Optional[bool] = None
     consentWithdrawnAt: Optional[str] = None
     declarationAccepted: Optional[bool] = None
+    declarations: Optional[dict] = None
 
 
 class CandidatePatchResponse(BaseModel):
@@ -199,7 +203,7 @@ async def verify_password(request: Request, body: dict):
         raise HTTPException(status_code=400, detail="email and password required")
 
     db = get_sync_db()
-    user = db.users.find_one({"email": email})
+    user = db.users.find_one({"email": email.lower().strip()})
     if not user or not user.get("password"):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
@@ -214,7 +218,8 @@ async def verify_password(request: Request, body: dict):
     if not bcrypt.checkpw(password.encode("utf-8"), user["password"].encode("utf-8")):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    return {"id": str(user["_id"]), "email": user["email"], "name": user.get("name", "")}
+    user_name = user.get("name") or user.get("fullName") or user.get("full_name") or ""
+    return {"id": str(user["_id"]), "email": user["email"], "name": user_name}
 
 
 @router.post("", response_model=dict)
@@ -285,6 +290,24 @@ async def upsert_candidate(request: Request, body: OnboardingRequest):
     return {"success": True, "message": "Candidate data saved", "id": str(cand["_id"])}
 
 
+def check_all_declarations_accepted(user: Optional[dict] = None, cand: Optional[dict] = None) -> bool:
+    """
+    Returns True if and only if the candidate has consented to all 4 declaration forms:
+    1. slide1_aiAssessment
+    2. slide2_vibePlatform
+    3. slide3_groundTruthModule
+    4. slide4_documentVerificationDPDP
+    """
+    user_decls = (user.get("declarations") if user else None) or (cand.get("declarations") if cand else None) or {}
+    if not isinstance(user_decls, dict):
+        return False
+    s1 = user_decls.get("slide1_aiAssessment", {}).get("accepted", False)
+    s2 = user_decls.get("slide2_vibePlatform", {}).get("accepted", False)
+    s3 = user_decls.get("slide3_groundTruthModule", {}).get("accepted", False)
+    s4 = user_decls.get("slide4_documentVerificationDPDP", {}).get("accepted", False)
+    return bool(s1 and s2 and s3 and s4)
+
+
 @router.get("", response_model=CandidateProfileResponse)
 async def get_candidate_profile(email: Optional[str] = Query(None)):
     """
@@ -303,11 +326,39 @@ async def get_candidate_profile(email: Optional[str] = Query(None)):
 
     cand = db.candidates.find_one({"user_id": {"$in": [str(user["_id"]), user["_id"]]}})
     if not cand:
+        cand = db.candidates.find_one({"email": email.lower().strip()})
+
+    has_all_declarations = check_all_declarations_accepted(user, cand)
+    declarations_dict = user.get("declarations") or (cand.get("declarations") if cand else {}) or {}
+
+    # Resolve full name and email across candidate & user records
+    user_name = user.get("name") or user.get("fullName") or user.get("full_name") or ""
+    cand_name = (cand.get("full_name") or cand.get("fullName")) if cand else None
+    resolved_full_name = cand_name or user_name or ""
+
+    resolved_email = (
+        (cand.get("email") if cand else None)
+        or user.get("email")
+        or email
+    )
+
+    if not cand:
         return CandidateProfileResponse(
             id="",
-            email=user["email"],
-            declarationAccepted=user.get("declarationAccepted", False)
+            email=resolved_email,
+            fullName=resolved_full_name,
+            declarationAccepted=has_all_declarations,
+            declarations=declarations_dict
         )
+
+    # Sync full_name / email to candidate document if missing
+    updates_to_cand = {}
+    if resolved_full_name and not cand.get("full_name"):
+        updates_to_cand["full_name"] = resolved_full_name
+    if resolved_email and not cand.get("email"):
+        updates_to_cand["email"] = resolved_email
+    if updates_to_cand:
+        db.candidates.update_one({"_id": cand["_id"]}, {"$set": updates_to_cand})
 
     # Fetch latest resume for this candidate.
     # candidates._id is stored as ObjectId; resumes.candidate_id is stored as
@@ -325,10 +376,23 @@ async def get_candidate_profile(email: Optional[str] = Query(None)):
         resume_id = str(resume["_id"])
         resume_status = resume.get("status")
 
+    # Check if onboarding profile has truly been completed
+    profile_completed_val = cand.get("profile_completed_at")
+    profile_completed_iso = (
+        profile_completed_val.isoformat()
+        if isinstance(profile_completed_val, datetime)
+        else (str(profile_completed_val) if profile_completed_val else None)
+    )
+    is_profile_completed = bool(
+        profile_completed_val
+        or (cand.get("current_phase") and cand.get("current_phase") != "onboarding")
+        or (cand.get("phone") and cand.get("address"))
+    )
+
     return CandidateProfileResponse(
         id=str(cand["_id"]),
-        email=email,
-        fullName=cand.get("full_name"),
+        email=resolved_email,
+        fullName=resolved_full_name,
         phone=cand.get("phone"),
         state=cand.get("state"),
         district=cand.get("district"),
@@ -362,7 +426,10 @@ async def get_candidate_profile(email: Optional[str] = Query(None)):
         consentTimestamp=cand.get("consent_timestamp"),
         consentWithdrawn=cand.get("consent_withdrawn", False),
         consentWithdrawnAt=cand.get("consent_withdrawn_at"),
-        declarationAccepted=user.get("declarationAccepted", False),
+        declarationAccepted=has_all_declarations,
+        declarations=declarations_dict,
+        profileCompleted=is_profile_completed,
+        profileCompletedAt=profile_completed_iso,
     )
 
 
@@ -592,16 +659,68 @@ async def reset_password(body: ResetPasswordRequest):
     return {"success": True, "message": "Password reset successfully."}
 class DeclarationRequest(BaseModel):
     declarationAccepted: bool
+    consents: Optional[dict] = None
+    aiAssessmentConsent: Optional[dict] = None
+    vibeConsent: Optional[dict] = None
+    groundTruthConsent: Optional[dict] = None
+    documentPrivacyConsent: Optional[dict] = None
 
 @router.post('/declaration', response_model=dict)
 async def accept_declaration(request: Request, body: DeclarationRequest):
     email = request.headers.get('x-user-email')
+    db = get_sync_db()
+    if not email:
+        try:
+            cand_id = _get_candidate_id_from_request(request)
+            if cand_id:
+                cand = db.candidates.find_one({"_id": _to_objectid(cand_id)})
+                if cand and cand.get("user_id"):
+                    u = db.users.find_one({"_id": _to_objectid(cand["user_id"])})
+                    if u:
+                        email = u.get("email")
+        except Exception:
+            pass
     if not email:
         raise HTTPException(401, 'Unauthorized')
-    db = get_sync_db()
+
     user = db.users.find_one({'email': email.lower().strip()})
     if not user:
         raise HTTPException(404, 'User not found')
-        
-    db.users.update_one({'_id': user['_id']}, {'$set': {'declarationAccepted': body.declarationAccepted}})
-    return {'success': True}
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    consents_data = body.consents or {}
+    if body.aiAssessmentConsent:
+        consents_data["slide1_aiAssessment"] = body.aiAssessmentConsent
+    if body.vibeConsent:
+        consents_data["slide2_vibePlatform"] = body.vibeConsent
+    if body.groundTruthConsent:
+        consents_data["slide3_groundTruthModule"] = body.groundTruthConsent
+    if body.documentPrivacyConsent:
+        consents_data["slide4_documentVerificationDPDP"] = body.documentPrivacyConsent
+
+    has_all = check_all_declarations_accepted({'declarations': consents_data})
+
+    user_update = {
+        'declarationAccepted': has_all,
+        'allDeclarationsAccepted': has_all,
+        'declarationAcceptedAt': now_iso,
+        'declarations': consents_data,
+    }
+    db.users.update_one({'_id': user['_id']}, {'$set': user_update})
+
+    # Also update candidate document if already created
+    cand = db.candidates.find_one({'user_id': {'$in': [str(user['_id']), user['_id']]}})
+    if not cand:
+        cand = db.candidates.find_one({'email': email.lower().strip()})
+    if cand:
+        cand_update = {
+            'declaration_accepted': has_all,
+            'allDeclarationsAccepted': has_all,
+            'declaration_accepted_at': now_iso,
+            'declarations': consents_data,
+            'consent_accepted': True,
+            'consent_timestamp': now_iso,
+        }
+        db.candidates.update_one({'_id': cand['_id']}, {'$set': cand_update})
+
+    return {'success': True, 'allDeclarationsAccepted': has_all}

@@ -9,6 +9,7 @@ import HowToUseModal from '@/components/HowToUseModal';
 import BrandLogos from '@/components/BrandLogos';
 import ProfileNavButton from '@/components/ProfileNavButton';
 import confetti from 'canvas-confetti';
+import { completionFromCandidate, resolveDashboardPhase, syncCompletionStorage } from '@/lib/candidate-progress';
 
 type Phase = 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -271,23 +272,22 @@ export default function DashboardPage() {
         // 2. Pull latest flag values from DB (authoritative) and localStorage (for in-flight updates)
         const dbSummaryVisited      = !!candidate.passedAndVisitedSummary;
         const lsSummaryVisited      = localStorage.getItem('passedAndVisitedSummary') === 'true';
-        const lsFoundationCompleted = localStorage.getItem('foundationCourseCompleted') === 'true' || localStorage.getItem('foundationCourseCompleted') === 'completed';
 
         const summaryVisited = dbSummaryVisited || lsSummaryVisited;
 
-        // 3. Pull milestone flags from DB and localStorage
-        const docsSubmitted       = !!candidate.documentsSubmitted;
-        const foundationCompleted = lsFoundationCompleted || !!candidate.foundationCourseCompleted;
-        const lsModuleCompleted   = localStorage.getItem('moduleCompleted') === 'true' || localStorage.getItem('moduleCompleted') === 'completed';
-        const moduleCompleted     = lsModuleCompleted || !!candidate.moduleCompleted;
+        // 3. Milestone flags come from the DB only. localStorage is shared by every
+        //    account in this browser and survives logout, so a flag left by another
+        //    account must never mark the course/module complete. (Verified completions
+        //    are persisted by the backend before the stage pages set localStorage.)
+        const docsSubmitted = !!candidate.documentsSubmitted;
+        const completion    = completionFromCandidate(candidate);
         setDocumentsSubmitted(docsSubmitted);
 
-        // 4. Reconstruct actual phase from DB phase + flags
-        let actualPhase: Phase = dbPhaseNum;
-
-        if (foundationCompleted && actualPhase < 5) actualPhase = 5;
-        if (moduleCompleted     && actualPhase < 6) actualPhase = 6;
-        if (docsSubmitted       && actualPhase < 6) actualPhase = 6;
+        // 4. Reconstruct actual phase from DB phase + DB flags
+        const actualPhase = resolveDashboardPhase(dbPhaseNum, {
+          ...completion,
+          documentsSubmitted: docsSubmitted,
+        }) as Phase;
 
         setCurrentPhase(actualPhase);
         setHasCompletedInterview(actualPhase >= 3);
@@ -299,17 +299,9 @@ export default function DashboardPage() {
           localStorage.removeItem('passedAndVisitedSummary');
         }
 
-        if (candidate.foundationCourseCompleted) {
-          localStorage.setItem('foundationCourseCompleted', 'completed');
-        } else if (!lsFoundationCompleted) {
-          localStorage.removeItem('foundationCourseCompleted');
-        }
-
-        if (candidate.moduleCompleted) {
-          localStorage.setItem('moduleCompleted', 'completed');
-        } else if (!lsModuleCompleted) {
-          localStorage.removeItem('moduleCompleted');
-        }
+        // Mirror DB completion into localStorage (set or remove) so the stage pages,
+        // which read these keys, never see a stale value from another account.
+        syncCompletionStorage(completion, localStorage);
 
         // Persist candidate info in sessionStorage for downstream pages (offer letter, etc.)
         if (candidate.fullName) sessionStorage.setItem('candidateName',  candidate.fullName);

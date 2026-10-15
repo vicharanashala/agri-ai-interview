@@ -6,7 +6,8 @@ import styles from './page.module.css';
 import { syncPhaseToDb } from '@/lib/phaseSync';
 import { INDIA_STATES_DISTRICTS, INDIAN_STATES } from '@/data/india-states-districts';
 import SearchableSelect from '@/components/SearchableSelect';
-import { interceptAuthFetch } from '@/lib/auth-fetch';
+import { clearAuthToken, getAuthToken, interceptAuthFetch } from '@/lib/auth-fetch';
+import { endCandidateBackendSession } from '@/lib/candidate-session-client';
 import { signOut, useSession } from 'next-auth/react';
 import BrandLogos from '@/components/BrandLogos';
 
@@ -182,6 +183,12 @@ export default function OnboardingPage() {
 
   const handleLogout = async () => {
     setLoggingOut(true);
+    // End the backend session (best-effort, bounded by a timeout) and drop this
+    // tab's token before signing out, so the next user signing in here cannot
+    // inherit it.
+    const candidateToken = getAuthToken();
+    await endCandidateBackendSession(process.env.NEXT_PUBLIC_API_URL, candidateToken);
+    clearAuthToken();
     try {
       await signOut({ redirect: false });
       sessionStorage.removeItem('currentPhase');
@@ -190,6 +197,7 @@ export default function OnboardingPage() {
       router.push('/login');
     } catch (err) {
       console.error('Error signing out:', err);
+      setError('Logout failed. Please try again.');
     } finally {
       setLoggingOut(false);
     }

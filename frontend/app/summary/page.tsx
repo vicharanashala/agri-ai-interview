@@ -5,6 +5,22 @@ import { useRouter } from 'next/navigation';
 import styles from './page.module.css';
 import { syncPhaseToDb } from '@/lib/phaseSync';
 import { interceptAuthFetch } from '@/lib/auth-fetch';
+import { fetchCompletionFlags, syncCompletionStorage } from '@/lib/candidate-progress';
+
+// Course/module completion for the post-interview phase sync. The candidate
+// record is authoritative — a localStorage flag left by another account must
+// not suppress the sync. localStorage is only used if the record can't load.
+async function completionForPhaseSync(): Promise<{ fcCompleted: boolean; modCompleted: boolean }> {
+  const flags = await fetchCompletionFlags();
+  if (flags) {
+    syncCompletionStorage(flags, localStorage);
+    return { fcCompleted: flags.foundationCourseCompleted, modCompleted: flags.moduleCompleted };
+  }
+  return {
+    fcCompleted: localStorage.getItem('foundationCourseCompleted') === 'completed' || localStorage.getItem('foundationCourseCompleted') === 'true',
+    modCompleted: localStorage.getItem('moduleCompleted') === 'completed' || localStorage.getItem('moduleCompleted') === 'true',
+  };
+}
 
 const POLL_INTERVAL_MS = 3000;
 const POLL_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes max
@@ -210,8 +226,7 @@ export default function SummaryPage() {
                 localStorage.setItem('interviewScore', String(latest.overall_score ?? ''));
                 const targetPhase = latest.result === 'PASS' ? 4 : 3;
                 const alreadyVisited = localStorage.getItem('passedAndVisitedSummary') === 'true';
-                const fcCompleted = localStorage.getItem('foundationCourseCompleted') === 'completed' || localStorage.getItem('foundationCourseCompleted') === 'true';
-                const modCompleted = localStorage.getItem('moduleCompleted') === 'completed' || localStorage.getItem('moduleCompleted') === 'true';
+                const { fcCompleted, modCompleted } = await completionForPhaseSync();
                 if (!alreadyVisited && !fcCompleted && !modCompleted) {
                   await syncPhaseToDb(targetPhase, { passedAndVisitedSummary: true });
                   localStorage.setItem('passedAndVisitedSummary', 'true');
@@ -272,8 +287,7 @@ export default function SummaryPage() {
           const result = localStorage.getItem('interviewResult');
           if (result) {
             const alreadyVisited = localStorage.getItem('passedAndVisitedSummary') === 'true';
-            const fcCompleted = localStorage.getItem('foundationCourseCompleted') === 'completed' || localStorage.getItem('foundationCourseCompleted') === 'true';
-            const modCompleted = localStorage.getItem('moduleCompleted') === 'completed' || localStorage.getItem('moduleCompleted') === 'true';
+            const { fcCompleted, modCompleted } = await completionForPhaseSync();
             if (!alreadyVisited && !fcCompleted && !modCompleted) {
               await syncPhaseToDb(result === 'PASS' ? 4 : 3, { passedAndVisitedSummary: true });
               localStorage.setItem('passedAndVisitedSummary', 'true');

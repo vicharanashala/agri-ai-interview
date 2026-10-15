@@ -1,15 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth-options'
+import {
+  extractCandidateToken,
+  sessionCheckFailure,
+  verifyCandidateSessionForUser,
+} from '@/lib/candidate-session-auth'
 
 const BACKEND_URL = process.env.BACKEND_URL
 
 // Read candidate session token from Authorization header (authFetch / sessionStorage)
 // or candidate_session httpOnly cookie — one will be present.
 function getCandidateToken(request: NextRequest): string | null {
-  const auth = request.headers.get('authorization') ?? ''
-  if (auth.startsWith('Bearer ')) return auth.slice(7)
-  return request.cookies.get('candidate_session')?.value ?? null
+  return extractCandidateToken(
+    request.headers.get('authorization'),
+    request.cookies.get('candidate_session')?.value
+  )
 }
 
 export async function GET(request: NextRequest) {
@@ -61,6 +67,17 @@ export async function POST(request: NextRequest) {
     const token = getCandidateToken(request)
     const email = session?.user?.email
 
+    // A token, when present, must be a live backend session owned by the
+    // signed-in user. Rejecting here (rather than falling back to email) keeps
+    // a stale or foreign token from writing to another candidate's profile.
+    if (token) {
+      const check = await verifyCandidateSessionForUser(BACKEND_URL, token, session.user.id)
+      if (!check.ok) {
+        const failure = sessionCheckFailure(check)
+        return NextResponse.json(failure.body, { status: failure.status })
+      }
+    }
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'Cookie': token ? `candidate_session=${token}` : '',
@@ -91,12 +108,35 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// For routes that act only through the backend session (no email fallback):
+// require a token that is a live backend session owned by the signed-in user.
+async function requireOwnCandidateToken(
+  request: NextRequest
+): Promise<{ token: string; response?: undefined } | { token?: undefined; response: NextResponse }> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.email) {
+    return { response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
+  }
+
+  const token = getCandidateToken(request)
+  if (!token) {
+    return { response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
+  }
+
+  const check = await verifyCandidateSessionForUser(BACKEND_URL, token, session.user.id)
+  if (!check.ok) {
+    const failure = sessionCheckFailure(check)
+    return { response: NextResponse.json(failure.body, { status: failure.status }) }
+  }
+
+  return { token }
+}
+
 export async function PATCH(request: NextRequest) {
   try {
-    const token = getCandidateToken(request)
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const auth = await requireOwnCandidateToken(request)
+    if (auth.response) return auth.response
+    const { token } = auth
 
     const body = await request.json()
     const res = await fetch(`${BACKEND_URL}/api/candidate`, {
@@ -124,10 +164,9 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const token = getCandidateToken(request)
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const auth = await requireOwnCandidateToken(request)
+    if (auth.response) return auth.response
+    const { token } = auth
 
     const res = await fetch(`${BACKEND_URL}/api/candidate`, {
       method: 'DELETE',

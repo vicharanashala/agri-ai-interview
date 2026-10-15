@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth-options'
+import {
+  extractCandidateToken,
+  sessionCheckFailure,
+  verifyCandidateSessionForUser,
+} from '@/lib/candidate-session-auth'
 
 const BACKEND_URL = process.env.BACKEND_URL
 
@@ -11,16 +16,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const token = request.cookies.get('candidate_session')?.value
+    // Same token resolution as /api/candidate POST so the profile save and the
+    // resume upload act on the same backend session.
+    const token = extractCandidateToken(
+      request.headers.get('authorization'),
+      request.cookies.get('candidate_session')?.value
+    )
     if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    // Look up candidate_id via backend (requires candidate_session token)
-    const candRes = await fetch(
-      `${BACKEND_URL}/api/candidate/session/verify`,
-      { headers: { Authorization: `Bearer ${token}`, Cookie: `candidate_session=${token}` } }
-    )
-    if (!candRes.ok) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    const { candidate_id } = await candRes.json()
+    // Resolve candidate_id from the backend session and make sure it belongs to
+    // the signed-in user — the resume is stored under this candidate_id.
+    const check = await verifyCandidateSessionForUser(BACKEND_URL, token, session.user.id)
+    if (!check.ok) {
+      const { body, status } = sessionCheckFailure(check)
+      return NextResponse.json(body, { status })
+    }
+    const candidate_id = check.candidateId
 
     const formData = await request.formData()
     const file = formData.get('file') as File | null
@@ -34,10 +45,9 @@ export async function POST(request: NextRequest) {
     backendFormData.append('file', file)
     backendFormData.append('candidateId', candidate_id)
 
-    const authHeader = request.headers.get('Authorization') ?? ''
     const backendRes = await fetch(`${BACKEND_URL}/api/resume/upload`, {
       method: 'POST',
-      headers: { Authorization: authHeader, Cookie: `candidate_session=${token}` },
+      headers: { Authorization: `Bearer ${token}`, Cookie: `candidate_session=${token}` },
       body: backendFormData,
       credentials: 'include',
     })

@@ -117,7 +117,7 @@ const PHASE_LABELS: Record<string, string> = {
   interview: "Interview",
   summary: "Summary",
   foundation: "Foundation Course",
-    module: "Question Collection",
+    module: "Ground Truth Module",
     documents: "Documents",
 };
 

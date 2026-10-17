@@ -113,7 +113,7 @@ export default function ModulePage() {
       } else {
         setFeedback({
           type: 'error',
-          text: 'Your Module has not been completed yet. Please complete the tasks on Question Collection and check again.',
+          text: 'Your Module has not been completed yet. Please complete the tasks on Ground Truth Module and check again.',
         });
         if (data.requirements) {
           setRequirements(data.requirements);
@@ -178,10 +178,10 @@ export default function ModulePage() {
           <div className={styles.cardContent}>
             {courseStatus === 'pending' ? (
               <>
-                <div className={styles.cardIcon}>QC</div>
+                <div className={styles.cardIcon}>GT</div>
                 <h2 className={styles.cardTitle}>Ready to Begin?</h2>
                 <p className={styles.cardText}>
-                  Launch the Question Collection Application and complete all required tasks. Once done, come back and check your completion status.
+                  Launch the Ground Truth Module Application and complete all required tasks. Once done, come back and check your completion status.
                 </p>
                 <div className={styles.actions}>
                   <button onClick={handleLaunchCourse} className={styles.primaryButton}>
@@ -205,7 +205,7 @@ export default function ModulePage() {
                 <div className={styles.cardIcon}>OK</div>
                 <h2 className={styles.cardTitle}>Module Completed!</h2>
                 <p className={styles.cardText}>
-                  You have completed the Question Collection Module. You can now proceed to upload your documents.
+                  You have completed the Ground Truth Module. You can now proceed to upload your documents.
                 </p>
                 <button onClick={() => router.push('/upload-documents')} className={styles.primaryButton}>
                   Proceed to Upload Documents

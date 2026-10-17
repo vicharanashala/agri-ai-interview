@@ -431,7 +431,7 @@ export default function DashboardPage() {
     {
       id: 5,
       name: 'Ground Truth Module',
-      description: 'Complete the tasks on Question collection to unlock document upload',
+      description: 'Complete the tasks on Ground Truth Module to unlock document upload',
       status: currentPhase > 5 ? 'completed' : currentPhase === 5 ? 'current' : 'locked',
     },
     {

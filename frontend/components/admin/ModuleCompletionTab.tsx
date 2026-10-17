@@ -113,7 +113,7 @@ export default function ModuleCompletionTab({ adminToken, adminApiBase, onRefres
     <div style={{ padding: '24px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
       <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#111827' }}>
-        Question Collection module Completion Status
+        Ground Truth Module Completion Status
       </h2>
       <div style={{ display: 'flex', gap: '10px' }}>
         <input 
@@ -136,7 +136,7 @@ export default function ModuleCompletionTab({ adminToken, adminApiBase, onRefres
         <div>Loading...</div>
       ) : candidates.length === 0 ? (
         <div style={{ padding: '20px', textAlign: 'center', color: '#6b7280', background: '#f9fafb', borderRadius: '8px' }}>
-          No candidates in the Question Collection module phase.
+          No candidates in the Ground Truth Module phase.
         </div>
       ) : (
         <>
@@ -260,12 +260,12 @@ export default function ModuleCompletionTab({ adminToken, adminApiBase, onRefres
                 ⚠️
               </div>
               <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#111827' }}>
-                Bypass Question Collection module
+                Bypass Ground Truth Module
               </h3>
             </div>
             
             <p style={{ margin: '0 0 24px 0', fontSize: '14px', color: '#4b5563', lineHeight: '1.5' }}>
-              Are you sure you want to bypass the Question Collection module requirement for <strong>{confirmModal.candidateName}</strong>? 
+              Are you sure you want to bypass the Ground Truth Module requirement for <strong>{confirmModal.candidateName}</strong>? 
               This will mark the module step as completed and transition the candidate to the document upload phase.
             </p>
 

@@ -388,8 +388,8 @@ export default function UploadDocumentsPage() {
 
   if (!moduleCompleted && foundationCompleted) {
     return renderCenteredState(
-      'Question Collection Required',
-      'You must complete the Question Collection Module before uploading documents.',
+      'Ground Truth Module Required',
+      'You must complete the Ground Truth Module before uploading documents.',
       'Go to Module',
       () => router.push('/module'),
       'Locked'

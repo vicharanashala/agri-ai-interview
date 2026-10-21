@@ -171,10 +171,6 @@ interface CandidateProfile {
   resumes: ResumeRecord[];
   interviews: InterviewSummary[];
   documents: DocumentRecord[];
-  offer: {
-    offerSigned: boolean;
-    signedLetters: { id: string; signatureName?: string | null; signedAt?: string | null; createdAt?: string | null }[];
-  };
 }
 
 // ─── Constants & helpers ────────────────────────────────────────────────────

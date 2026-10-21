@@ -6,14 +6,11 @@ Endpoints (all require require_admin_auth):
   GET /api/admin/candidates/{candidate_id}/interviews/{interview_id}
   GET /api/admin/candidates/{candidate_id}/resumes/{resume_id}/download
   GET /api/admin/candidates/{candidate_id}/document-files/{document_id}/download
-  GET /api/admin/candidates/{candidate_id}/signed-offer-letter/download
 
-Every lookup of a related record (resume, document, interview, offer letter) is scoped to the candidate in the
-URL, so a record belonging to another candidate is reported as not found. Nothing here logs candidate PII,
-signatures, resume contents or transcripts.
+Every lookup of a related record (resume, document, interview) is scoped to the candidate in the URL, so a
+record belonging to another candidate is reported as not found. Nothing here logs candidate PII, signatures,
+resume contents or transcripts.
 """
-import base64
-import binascii
 import json
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
@@ -67,7 +64,7 @@ def _find_candidate(db, candidate_id: str) -> dict:
 
 
 def _str_variants(cand: dict) -> List[str]:
-    """Related collections (resumes, documents, offer letters) store candidate_id as a string."""
+    """Related collections (resumes, documents) store candidate_id as a string."""
     return [str(cand["_id"])]
 
 
@@ -234,23 +231,6 @@ def _documents(db, cand: dict) -> List[dict]:
     ]
 
 
-def _signed_offer_letters(db, cand: dict) -> List[dict]:
-    # pdf_data (base64 PDF) is never returned here; use the download endpoint.
-    cursor = db.signed_offer_letters.find(
-        {"candidate_id": {"$in": _get_id_variants(cand["_id"])}},
-        {"pdf_data": 0},
-    ).sort("created_at", -1)
-    return [
-        {
-            "id": str(o["_id"]),
-            "signatureName": o.get("signature_name"),
-            "signedAt": _format_iso(o.get("signed_at")),
-            "createdAt": _format_iso(o.get("created_at")),
-        }
-        for o in cursor
-    ]
-
-
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/candidates/{candidate_id}/profile")
@@ -324,10 +304,6 @@ async def get_candidate_profile(candidate_id: str, _admin=Depends(require_admin_
         "resumes": _resumes(db, cand),
         "interviews": _interview_summaries(db, cand),
         "documents": _documents(db, cand),
-        "offer": {
-            "offerSigned": bool(cand.get("offer_signed", False)),
-            "signedLetters": _signed_offer_letters(db, cand),
-        },
     }
 
 
@@ -406,28 +382,4 @@ async def download_candidate_document_file(candidate_id: str, document_id: str, 
         content=file_bytes,
         media_type=_DOCUMENT_CONTENT_TYPES.get(doc.get("file_type"), "application/octet-stream"),
         headers={"Content-Disposition": _content_disposition(doc.get("file_name"), "document")},
-    )
-
-
-@router.get("/candidates/{candidate_id}/signed-offer-letter/download")
-async def download_candidate_signed_offer_letter(candidate_id: str, _admin=Depends(require_admin_auth)):
-    db = get_sync_db()
-    cand = _find_candidate(db, candidate_id)
-    record = db.signed_offer_letters.find_one(
-        {"candidate_id": {"$in": _get_id_variants(cand["_id"])}},
-        sort=[("created_at", -1)],
-    )
-    if not record or not record.get("pdf_data"):
-        raise HTTPException(status_code=404, detail="Signed offer letter not found")
-
-    try:
-        pdf_bytes = base64.b64decode(record["pdf_data"].encode("utf-8"), validate=True)
-    except (binascii.Error, ValueError, AttributeError):
-        raise HTTPException(status_code=500, detail="Stored offer letter is unreadable")
-
-    sig_name = (record.get("signature_name") or "candidate").replace(" ", "_")
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={"Content-Disposition": _content_disposition(f"Signed_Offer_Letter_{sig_name}.pdf", "Signed_Offer_Letter.pdf")},
     )

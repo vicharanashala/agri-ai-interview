@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import styles from "./dashboard.module.css";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import LiveTab from "../../../components/admin/LiveTab";
 import EvaluationsTab from "../../../components/admin/EvaluationsTab";
 import OfferLetterTab from "../../../components/admin/OfferLetterTab";
-import DocumentsTab from "../../../components/admin/DocumentsTab";
+import CandidateDocumentActions from "../../../components/admin/CandidateDocumentActions";
 import CourseCompletionTab from "../../../components/admin/CourseCompletionTab";
 import ModuleCompletionTab from "../../../components/admin/ModuleCompletionTab";
 import PageSelector from "../../../components/admin/PageSelector";
@@ -35,42 +35,6 @@ interface Candidate {
   createdAt?: string;
   documentsSubmitted: boolean;
   interviewStatus?: string;
-}
-
-interface ParsedResumeData {
-  name: string | null;
-  email: string | null;
-  phone: string | null;
-  skills: string[];
-  experience: { company: string; title: string; duration: string; highlights: string[] }[];
-  education: { institution: string; degree: string; year: string }[];
-  summary: string | null;
-  confidence_score: number;
-}
-
-interface SkillMatchData {
-  candidateId: string;
-  role: string;
-  roleLabel: string;
-  overallScore: number;
-  requiredMatch: number;
-  preferredMatch: number;
-  requiredMatched: string[];
-  requiredMissing: string[];
-  preferredMatched: string[];
-  preferredMissing: string[];
-  summary: string;
-}
-
-interface ResumeInfo {
-  id: string;
-  candidateId: string;
-  fileName: string;
-  fileType: string;
-  rawText: string | null;
-  parsedData: ParsedResumeData | null;
-  status: string;
-  createdAt: string;
 }
 
 interface PhaseStatus {
@@ -106,8 +70,15 @@ interface Guidelines {
 }
 
 // Tabs
-type Tab = "live" | "candidates" | "analytics" | "evaluations" | "course-completion" | "module-completion" | "anti-cheat" | "settings" | "documents" | "trash";
+type Tab = "live" | "candidates" | "analytics" | "evaluations" | "course-completion" | "module-completion" | "anti-cheat" | "settings" | "trash";
 type SettingsTab = "guidelines" | "criteria" | "interview-config" | "anti-cheat" | "offer-letter";
+
+// Dashboard view state is mirrored in the URL (?tab=&q=&phase=&state=&district=&interview=&page=&limit=)
+// so returning from a candidate profile restores the same tab, filters and page.
+const TABS: Tab[] = ["live", "candidates", "analytics", "evaluations", "course-completion", "module-completion", "anti-cheat", "settings", "trash"];
+const PAGE_LIMITS = [10, 20, 50, 100];
+// Set when a profile is opened from the table, so the profile's back button can use browser history
+const PROFILE_OPENED_FROM_DASHBOARD_KEY = "admin_profile_opened_from_dashboard";
 
 // Chart colors
 const CHART_COLORS = ["#08CB00", "#10b981", "#f59e0b", "#ef4444", "#059669", "#22c55e"];
@@ -128,8 +99,20 @@ const ADMIN_API_BASE =
   process.env.NEXT_PUBLIC_ADMIN_API_URL ||
   (typeof window !== "undefined" ? window.location.origin : "");
 
-export default function AdminDashboard() {
+// useSearchParams() needs a Suspense boundary for this statically rendered page
+export default function AdminDashboardPage() {
+  return (
+    <Suspense fallback={<div className={styles.loading}>Loading...</div>}>
+      <AdminDashboard />
+    </Suspense>
+  );
+}
+
+function AdminDashboard() {
   const router = useRouter();
+  // Read the query through the router: on client-side navigation (e.g. back from a candidate profile)
+  // window.location still holds the previous URL while this component first renders.
+  const searchParams = useSearchParams();
 
   // Get the stored admin token (set by the login page).
    // Send it as X-Admin-Token on every admin API call.
@@ -152,7 +135,12 @@ export default function AdminDashboard() {
     });
   };
 
-  const [activeTab, setActiveTab] = useState<Tab>("live");
+  const [initialQuery] = useState(() => new URLSearchParams(searchParams.toString()));
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    const tab = initialQuery.get("tab");
+    if (tab === "documents") return "candidates"; // former Documents tab: its actions are in All Candidates now
+    return tab && TABS.includes(tab as Tab) ? (tab as Tab) : "live";
+  });
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("guidelines");
   const [adminData, setAdminData] = useState<{ name: string; email: string } | null>(null);
 
@@ -164,11 +152,6 @@ export default function AdminDashboard() {
 
   // UI states
   const [selectedInterview, setSelectedInterview] = useState<string | null>(null);
-  const [resumeModal, setResumeModal] = useState<{ open: boolean; resume: ResumeInfo | null }>({ open: false, resume: null });
-  const [candidateResumes, setCandidateResumes] = useState<Record<string, ResumeInfo>>({}); // candidateId → latest resume
-  const [matchModal, setMatchModal] = useState<{ open: boolean; candidateId: string; candidateName: string; role: string }>({ open: false, candidateId: "", candidateName: "", role: "" });
-  const [matchData, setMatchData] = useState<SkillMatchData | null>(null);
-  const [matchLoading, setMatchLoading] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; candidateId: string } | null>(null);
   const [deletingCandidate, setDeletingCandidate] = useState(false);
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<string | null>(null);
@@ -212,11 +195,11 @@ export default function AdminDashboard() {
   const [stateFunnelFilter, setStateFunnelFilter] = useState<string>("");
 
   // Filters
-  const [searchQuery, setSearchQuery] = useState("");
-  const [phaseFilter, setPhaseFilter] = useState<string>("");
-  const [stateFilter, setStateFilter] = useState<string>("");
-  const [interviewStatusFilter, setInterviewStatusFilter] = useState<string>("");
-  const [districtFilter, setDistrictFilter] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState(() => initialQuery.get("q") || "");
+  const [phaseFilter, setPhaseFilter] = useState<string>(() => initialQuery.get("phase") || "");
+  const [stateFilter, setStateFilter] = useState<string>(() => initialQuery.get("state") || "");
+  const [interviewStatusFilter, setInterviewStatusFilter] = useState<string>(() => initialQuery.get("interview") || "");
+  const [districtFilter, setDistrictFilter] = useState<string>(() => initialQuery.get("district") || "");
   const [districts, setDistricts] = useState<string[]>([]);
 
   // Check auth on mount — verify the admin_session cookie with the backend
@@ -304,10 +287,6 @@ export default function AdminDashboard() {
           loadStats().catch(err => console.error("loadStats error:", err)),
           loadViolations().catch(err => console.error("loadViolations error:", err)),
         );
-      } else if (target === "documents") {
-        calls.push(
-          loadStats().catch(err => console.error("loadStats error:", err)),
-        );
       } else if (target === "settings") {
         calls.push(
           loadGuidelines().catch(err => console.error("loadGuidelines error:", err)),
@@ -347,8 +326,14 @@ export default function AdminDashboard() {
   };
 
   const [candidatesTotal, setCandidatesTotal] = useState(0);
-  const [candidatesPage, setCandidatesPage] = useState(0);
-  const [candidatesLimit, setCandidatesLimit] = useState(10);
+  const [candidatesPage, setCandidatesPage] = useState(() => {
+    const page = parseInt(initialQuery.get("page") || "", 10); // 1-based in the URL
+    return page > 1 ? page - 1 : 0;
+  });
+  const [candidatesLimit, setCandidatesLimit] = useState(() => {
+    const limit = parseInt(initialQuery.get("limit") || "", 10);
+    return PAGE_LIMITS.includes(limit) ? limit : 10;
+  });
 
   const handleDeleteCandidate = async (candidateId: string) => {
     setDeletingCandidate(true);
@@ -432,12 +417,64 @@ export default function AdminDashboard() {
     }
   };
 
-  // Reset page when filters change
+  // Reset page when filters change. Compared against the last seen filters (not "first run") so the
+  // initial mount — and StrictMode's re-run of it — keep a page number restored from the URL.
+  const filterKey = JSON.stringify([phaseFilter, stateFilter, districtFilter, interviewStatusFilter, searchQuery, candidatesLimit]);
+  const lastFilterKeyRef = useRef(filterKey);
   useEffect(() => {
+    if (lastFilterKeyRef.current === filterKey) return;
+    lastFilterKeyRef.current = filterKey;
     if (activeTab === "candidates" || activeTab === "trash") {
       loadCandidates(true);
     }
   }, [phaseFilter, stateFilter, districtFilter, interviewStatusFilter, searchQuery, candidatesLimit]);
+
+  const buildDashboardQuery = () => {
+    const params = new URLSearchParams();
+    if (activeTab !== "live") params.set("tab", activeTab);
+    if (searchQuery) params.set("q", searchQuery);
+    if (phaseFilter) params.set("phase", phaseFilter);
+    if (stateFilter) params.set("state", stateFilter);
+    if (districtFilter) params.set("district", districtFilter);
+    if (interviewStatusFilter) params.set("interview", interviewStatusFilter);
+    if (candidatesPage > 0) params.set("page", String(candidatesPage + 1));
+    if (candidatesLimit !== 10) params.set("limit", String(candidatesLimit));
+    return params.toString();
+  };
+
+  // Mirror tab, filters and page into the URL without adding history entries. Passing `null` (not
+  // Next's own history state) lets the App Router adopt the new URL, so it is not reverted later.
+  useEffect(() => {
+    if (window.location.pathname !== "/admin/dashboard") return;
+    const qs = buildDashboardQuery();
+    const url = `/admin/dashboard${qs ? `?${qs}` : ""}`;
+    if (url !== `${window.location.pathname}${window.location.search}`) {
+      window.history.replaceState(null, "", url);
+    }
+  }, [activeTab, searchQuery, phaseFilter, stateFilter, districtFilter, interviewStatusFilter, candidatesPage, candidatesLimit]);
+
+  // A state filter restored from the URL needs its district options
+  useEffect(() => {
+    if (stateFilter) loadDistrictsForState(stateFilter);
+  }, []);
+
+  const openCandidateProfile = (e: React.MouseEvent | React.KeyboardEvent, candidateId: string) => {
+    if (contextMenu) return; // this click only dismisses the open context menu
+    if (window.getSelection()?.toString()) return; // admin is selecting text in the row
+    const path = `/admin/candidates/${encodeURIComponent(candidateId)}`;
+    // ?from= carries this view so the profile can link back to it (also from a new tab or after reload)
+    const href = `${path}?from=${encodeURIComponent(buildDashboardQuery())}`;
+    if (e.ctrlKey || e.metaKey) {
+      window.open(href, "_blank", "noopener");
+      return;
+    }
+    try {
+      sessionStorage.setItem(PROFILE_OPENED_FROM_DASHBOARD_KEY, path);
+    } catch {
+      // Storage unavailable — the profile's back button navigates via ?from= instead
+    }
+    router.push(href);
+  };
 
   useEffect(() => {
     if (activeTab === "candidates" || activeTab === "trash") {
@@ -450,170 +487,6 @@ export default function AdminDashboard() {
     document.addEventListener("click", handleClick);
     return () => document.removeEventListener("click", handleClick);
   }, []);
-
-  // ── Resume helpers ──────────────────────────────────────────────────────────
-
-  const loadResumeForCandidate = async (candidateId: string) => {
-    try {
-      const res = await withAuth(`/api/admin/resumes?candidateId=${candidateId}`);
-      if (res.ok) {
-        const data: ResumeInfo[] = await res.json();
-        if (data.length > 0) {
-          setCandidateResumes(prev => ({ ...prev, [candidateId]: data[0] }));
-        }
-      }
-    } catch (err) {
-      console.error("Failed to load resume for candidate:", err);
-    }
-  };
-
-  const loadResumesForAllCandidates = async (candidateList: Candidate[]) => {
-    // Load resumes for all candidates in parallel
-    await Promise.allSettled(candidateList.map(c => loadResumeForCandidate(c.id)));
-  };
-
-  const handleDownloadResume = (resume: ResumeInfo) => {
-    window.open(`/api/resume/${resume.id}`, "_blank");
-  };
-
-  const handlePreviewResume = (resume: ResumeInfo) => {
-    setResumeModal({ open: true, resume });
-  };
-
-  // ── Skills Match helpers ───────────────────────────────────────────────────
-
-  const ROLE_OPTIONS = [
-    { value: "frontend_engineer", label: "Frontend Engineer" },
-    { value: "backend_engineer", label: "Backend Engineer" },
-    { value: "fullstack_engineer", label: "Full Stack Engineer" },
-    { value: "devops_engineer", label: "DevOps Engineer" },
-    { value: "ai_ml_engineer", label: "AI/ML Engineer" },
-    { value: "mobile_engineer", label: "Mobile Engineer" },
-  ];
-
-  const fetchSkillMatch = async (candidateId: string, candidateName: string, role: string) => {
-    setMatchModal({ open: true, candidateId, candidateName, role });
-    setMatchData(null);
-    setMatchLoading(true);
-    try {
-      const res = await withAuth(`/api/admin/resume/match?candidateId=${candidateId}&role=${role}`);
-      if (res.ok) {
-        const data: SkillMatchData = await res.json();
-        setMatchData(data);
-      } else {
-        setMatchData(null);
-      }
-    } catch {
-      setMatchData(null);
-    } finally {
-      setMatchLoading(false);
-    }
-  };
-
-  // ── Parsed Resume View Component ──────────────────────────────────────────
-
-  function ParsedResumeView({ data }: { data: ParsedResumeData }) {
-    return (
-      <div style={{ display: "flex", flexDirection: "column", gap: "16px", maxHeight: "65vh", overflow: "auto" }}>
-        {/* Contact + Summary */}
-        <div style={{ background: "#f0f4ff", borderRadius: "6px", padding: "12px 16px" }}>
-          <div style={{ fontWeight: 600, fontSize: "15px", marginBottom: "4px" }}>
-            👤 {data.name || "Name not detected"}
-          </div>
-          <div style={{ fontSize: "13px", color: "#555" }}>
-            {data.email && `📧 ${data.email}`}
-            {data.phone && ` · 📞 ${data.phone}`}
-          </div>
-          {data.summary && (
-            <div style={{ marginTop: "8px", fontSize: "13px", color: "#333", fontStyle: "italic" }}>
-              "{data.summary}"
-            </div>
-          )}
-        </div>
-
-        {/* Skills */}
-        {data.skills.length > 0 && (
-          <div>
-            <div style={{ fontWeight: 600, fontSize: "13px", marginBottom: "6px", color: "#333" }}>
-              🛠 Skills ({data.skills.length})
-            </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
-              {data.skills.map((skill, i) => (
-                <span
-                  key={i}
-                  style={{
-                    background: "#dbeafe",
-                    color: "#1e40af",
-                    borderRadius: "4px",
-                    padding: "2px 8px",
-                    fontSize: "12px",
-                  }}
-                >
-                  {skill}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Experience */}
-        {data.experience.length > 0 && (
-          <div>
-            <div style={{ fontWeight: 600, fontSize: "13px", marginBottom: "6px", color: "#333" }}>
-              💼 Experience
-            </div>
-            {data.experience.map((exp, i) => (
-              <div
-                key={i}
-                style={{ background: "#f9f9f9", borderRadius: "6px", padding: "10px 14px", marginBottom: "8px" }}
-              >
-                <div style={{ fontWeight: 600, fontSize: "13px" }}>{exp.title}</div>
-                <div style={{ fontSize: "12px", color: "#666" }}>
-                  {exp.company}
-                  {exp.duration && ` · ${exp.duration}`}
-                </div>
-                {exp.highlights.length > 0 && (
-                  <ul style={{ margin: "6px 0 0 0", paddingLeft: "18px", fontSize: "12px", color: "#444" }}>
-                    {exp.highlights.map((h, j) => (
-                      <li key={j}>{h}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Education */}
-        {data.education.length > 0 && (
-          <div>
-            <div style={{ fontWeight: 600, fontSize: "13px", marginBottom: "6px", color: "#333" }}>
-              🎓 Education
-            </div>
-            {data.education.map((edu, i) => (
-              <div
-                key={i}
-                style={{ background: "#f9f9f9", borderRadius: "6px", padding: "8px 14px", marginBottom: "6px" }}
-              >
-                <div style={{ fontSize: "13px", fontWeight: 600 }}>{edu.degree}</div>
-                <div style={{ fontSize: "12px", color: "#666" }}>
-                  {edu.institution}
-                  {edu.year && ` · ${edu.year}`}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  // Load resumes when candidates tab is active
-  useEffect(() => {
-    if ((activeTab === "candidates" || activeTab === "trash") && candidates.length > 0) {
-      loadResumesForAllCandidates(candidates);
-    }
-  }, [activeTab, candidates]);
 
   const [violationsTotal, setViolationsTotal] = useState(0);
   const [violationsPage, setViolationsPage] = useState(0);
@@ -948,12 +821,6 @@ export default function AdminDashboard() {
         >
           🛡️ Anti-Cheat
         </button>
-        <button
-          className={`${styles.tab} ${activeTab === "documents" ? styles.activeTab : ""}`}
-          onClick={() => setActiveTab("documents")}
-        >
-          📎 Documents
-        </button>
         <button className={`${styles.tab} ${activeTab === "trash" ? styles.activeTab : ""}`} onClick={() => setActiveTab("trash")}>🗑️ Trash</button>
         <button
           className={`${styles.tab} ${activeTab === "settings" ? styles.activeTab : ""}`}
@@ -1003,6 +870,10 @@ export default function AdminDashboard() {
                 className={styles.phaseSelect}
               >
                 <option value="">All States</option>
+                {/* A state restored from the URL before the state list has loaded */}
+                {stateFilter && !uniqueStates.includes(stateFilter) && (
+                  <option value={stateFilter}>{stateFilter}</option>
+                )}
                 {uniqueStates.map((state) => (
                   <option key={state} value={state}>{state}</option>
                 ))}
@@ -1046,9 +917,8 @@ export default function AdminDashboard() {
                         <th>State</th>
                         <th>Current Phase</th>
                         <th>Phase Progress</th>
-                        <th>Attempts</th>
-                        <th>Resume</th>
                         <th>Created</th>
+                        <th className={styles.actionCol}>Action</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1060,9 +930,8 @@ export default function AdminDashboard() {
                           <td><div className={styles.skeletonBox} style={{ width: 80, height: 16 }} /></td>
                           <td><div className={styles.skeletonBox} style={{ width: 100, height: 24, borderRadius: 12 }} /></td>
                           <td><div className={styles.skeletonBox} style={{ width: 120, height: 12, borderRadius: 6 }} /></td>
-                          <td><div className={styles.skeletonBox} style={{ width: 40, height: 20, borderRadius: 10 }} /></td>
-                          <td><div className={styles.skeletonBox} style={{ width: 60, height: 24, borderRadius: 4 }} /></td>
                           <td><div className={styles.skeletonBox} style={{ width: 100, height: 16 }} /></td>
+                          <td className={styles.actionCol}><div className={styles.skeletonBox} style={{ width: 230, height: 30, borderRadius: 6 }} /></td>
                         </tr>
                       ))}
                     </tbody>
@@ -1084,15 +953,21 @@ export default function AdminDashboard() {
                         <th>State</th>
                         <th>Current Phase</th>
                         <th>Phase Progress</th>
-                        <th>Attempts</th>
-                        <th>Resume</th>
                         <th>Created</th>
+                        <th className={styles.actionCol}>Action</th>
                       </tr>
                     </thead>
                     <tbody>
                       {candidates.map((candidate) => (
-                        <tr 
+                        <tr
                           key={candidate.id}
+                          className={styles.clickableRow}
+                          tabIndex={0}
+                          title="Open candidate profile"
+                          onClick={(e) => openCandidateProfile(e, candidate.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && e.target === e.currentTarget) openCandidateProfile(e, candidate.id);
+                          }}
                           onContextMenu={(e) => {
                             e.preventDefault();
                             setContextMenu({ x: e.clientX, y: e.clientY, candidateId: candidate.id });
@@ -1121,44 +996,18 @@ export default function AdminDashboard() {
                               ))}
                             </div>
                           </td>
-                          <td>
-                            <span className={styles.phaseBadge}>
-                              {candidate.attemptsDone}/{candidate.maxAttempts}
-                            </span>
-                          </td>
-                          <td>
-                            {candidateResumes[candidate.id] ? (
-                              <div style={{ display: "flex", gap: "4px" }}>
-                                <button
-                                  onClick={() => handlePreviewResume(candidateResumes[candidate.id]!)}
-                                  style={{ padding: "2px 8px", fontSize: "12px", cursor: "pointer" }}
-                                  title="Preview resume"
-                                >
-                                  👁 Preview
-                                </button>
-                                <button
-                                  onClick={() => candidateResumes[candidate.id]?.parsedData
-                                    ? setMatchModal({ open: true, candidateId: candidate.id, candidateName: candidate.fullName || candidate.email || "", role: "frontend_engineer" })
-                                    : null
-                                  }
-                                  style={{ padding: "2px 8px", fontSize: "12px", cursor: candidateResumes[candidate.id]?.parsedData ? "pointer" : "not-allowed", opacity: candidateResumes[candidate.id]?.parsedData ? 1 : 0.4 }}
-                                  title={candidateResumes[candidate.id]?.parsedData ? "Match skills to a role" : "Resume not yet parsed"}
-                                >
-                                  🔗 Match
-                                </button>
-                                <button
-                                  onClick={() => handleDownloadResume(candidateResumes[candidate.id]!)}
-                                  style={{ padding: "2px 8px", fontSize: "12px", cursor: "pointer" }}
-                                  title="Download resume"
-                                >
-                                  ⬇ Download
-                                </button>
-                              </div>
-                            ) : (
-                              <span style={{ color: "#999", fontSize: "12px" }}>—</span>
-                            )}
-                          </td>
                           <td>{candidate.createdAt ? new Date(candidate.createdAt).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }) : "-"}</td>
+                          <td className={styles.actionCol}>
+                            <CandidateDocumentActions
+                              centered
+                              candidate={{ ...candidate, isDeleted: activeTab === "trash" }}
+                              adminFetch={withAuth}
+                              onError={(message) => alert(message)}
+                              onUpdated={(patch) =>
+                                setCandidates((prev) => prev.map((c) => (c.id === candidate.id ? { ...c, ...patch } : c)))
+                              }
+                            />
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -1174,216 +1023,6 @@ export default function AdminDashboard() {
                 />
               </>
             )}
-          </div>
-        )}
-
-        {/* ── Resume Preview Modal ── */}
-        {resumeModal.open && resumeModal.resume && (
-          <div
-            style={{
-              position: "fixed",
-              inset: 0,
-              background: "rgba(0,0,0,0.5)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              zIndex: 1000,
-            }}
-            onClick={() => setResumeModal({ open: false, resume: null })}
-          >
-            <div
-              style={{
-                background: "#fff",
-                borderRadius: "8px",
-                padding: "24px",
-                width: "700px",
-                maxWidth: "90vw",
-                maxHeight: "85vh",
-                overflow: "auto",
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-                <h2 style={{ margin: 0, fontSize: "16px" }}>
-                  📄 {resumeModal.resume.fileName}
-                </h2>
-                <button
-                  onClick={() => setResumeModal({ open: false, resume: null })}
-                  style={{ padding: "4px 10px", cursor: "pointer" }}
-                >
-                  ✕
-                </button>
-              </div>
-              {resumeModal.resume.parsedData ? (
-                <ParsedResumeView data={resumeModal.resume.parsedData!} />
-              ) : (
-                <div
-                  style={{
-                    background: "#f5f5f5",
-                    border: "1px solid #ddd",
-                    borderRadius: "4px",
-                    padding: "16px",
-                    fontSize: "13px",
-                    whiteSpace: "pre-wrap",
-                    fontFamily: "monospace",
-                    maxHeight: "60vh",
-                    overflow: "auto",
-                  }}
-                >
-                  {resumeModal.resume.rawText
-                    ? resumeModal.resume.rawText
-                    : "No text extracted (file may be image-based or empty)."}
-                </div>
-              )}
-              <div style={{ marginTop: "12px", display: "flex", gap: "8px", justifyContent: "flex-end" }}>
-                <span style={{ fontSize: "12px", color: "#666", alignSelf: "center" }}>
-                  {resumeModal.resume.status === "parsed"
-                    ? `✅ Parsed (confidence: ${((resumeModal.resume.parsedData?.confidence_score ?? 0) * 100).toFixed(0)}%)`
-                    : resumeModal.resume.status === "parsing"
-                    ? "⏳ Parsing..."
-                    : resumeModal.resume.status === "uploaded"
-                    ? "📋 Uploaded — LLM parsing in progress"
-                    : resumeModal.resume.status
-                  }
-                </span>
-                <button
-                  onClick={() => handleDownloadResume(resumeModal.resume!)}
-                  style={{ padding: "6px 16px", cursor: "pointer" }}
-                >
-                  ⬇ Download Original
-                </button>
-                <button
-                  onClick={() => setResumeModal({ open: false, resume: null })}
-                  style={{ padding: "6px 16px", cursor: "pointer" }}
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── Skills Match Modal ── */}
-        {matchModal.open && (
-          <div
-            style={{
-              position: "fixed",
-              inset: 0,
-              background: "rgba(0,0,0,0.5)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              zIndex: 1100,
-            }}
-            onClick={() => { setMatchModal(m => ({ ...m, open: false })); setMatchData(null); }}
-          >
-            <div
-              style={{
-                background: "#fff",
-                borderRadius: "10px",
-                padding: "24px",
-                width: "680px",
-                maxWidth: "90vw",
-                maxHeight: "85vh",
-                overflow: "auto",
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px" }}>
-                <div>
-                  <h2 style={{ margin: 0, fontSize: "18px" }}>🔗 Skills Match</h2>
-                  <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#666" }}>{matchModal.candidateName}</p>
-                </div>
-                <button
-                  onClick={() => { setMatchModal(m => ({ ...m, open: false })); setMatchData(null); }}
-                  style={{ padding: "4px 10px", cursor: "pointer" }}
-                >
-                  ✕
-                </button>
-              </div>
-
-              {/* Role selector */}
-              <div style={{ marginBottom: "16px" }}>
-                <label style={{ fontSize: "13px", fontWeight: 600, marginBottom: "4px", display: "block" }}>
-                  Target Role
-                </label>
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <select
-                    value={matchModal.role}
-                    onChange={(e) => fetchSkillMatch(matchModal.candidateId, matchModal.candidateName, e.target.value)}
-                    style={{ flex: 1, padding: "6px 10px", fontSize: "13px", borderRadius: "6px", border: "1px solid #ccc" }}
-                  >
-                    {ROLE_OPTIONS.map(r => (
-                      <option key={r.value} value={r.value}>{r.label}</option>
-                    ))}
-                  </select>
-                  <button
-                    onClick={() => fetchSkillMatch(matchModal.candidateId, matchModal.candidateName, matchModal.role)}
-                    style={{ padding: "6px 16px", cursor: "pointer", fontSize: "13px" }}
-                  >
-                    Check
-                  </button>
-                </div>
-              </div>
-
-              {matchLoading && <p style={{ textAlign: "center", color: "#666" }}>⏳ Analysing skills...</p>}
-
-              {matchData && (
-                <div>
-                  {/* Score badges */}
-                  <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
-                    {[
-                      { label: "Overall", value: matchData.overallScore, color: "#1e40af" },
-                      { label: "Required", value: matchData.requiredMatch, color: "#b45309" },
-                      { label: "Preferred", value: matchData.preferredMatch, color: "#065f46" },
-                    ].map(b => (
-                      <div key={b.label} style={{ flex: 1, background: "#f8fafc", borderRadius: "8px", padding: "10px", textAlign: "center", border: `2px solid ${b.color}` }}>
-                        <div style={{ fontSize: "11px", color: "#64748b", marginBottom: "2px" }}>{b.label}</div>
-                        <div style={{ fontSize: "22px", fontWeight: 700, color: b.color }}>
-                          {(b.value * 100).toFixed(0)}%
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <p style={{ fontSize: "13px", color: "#444", fontStyle: "italic", marginBottom: "16px" }}>
-                    "{matchData.summary}"
-                  </p>
-
-                  {/* Required skills */}
-                  <div style={{ marginBottom: "14px" }}>
-                    <div style={{ fontSize: "12px", fontWeight: 700, color: "#92400e", marginBottom: "6px" }}>
-                      ⚠️ Required Skills ({matchData.requiredMatched.length}/{matchData.requiredMatched.length + matchData.requiredMissing.length} matched)
-                    </div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
-                      {matchData.requiredMatched.map(s => (
-                        <span key={s} style={{ background: "#dcfce7", color: "#166534", borderRadius: "4px", padding: "2px 8px", fontSize: "12px" }}>{s}</span>
-                      ))}
-                      {matchData.requiredMissing.map(s => (
-                        <span key={s} style={{ background: "#fee2e2", color: "#991b1b", borderRadius: "4px", padding: "2px 8px", fontSize: "12px" }}>{s}</span>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Preferred skills */}
-                  {matchData.preferredMatched.length > 0 || matchData.preferredMissing.length > 0 ? (
-                    <div>
-                      <div style={{ fontSize: "12px", fontWeight: 700, color: "#065f46", marginBottom: "6px" }}>
-                        👍 Preferred Skills ({matchData.preferredMatched.length}/{matchData.preferredMatched.length + matchData.preferredMissing.length} matched)
-                      </div>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
-                        {matchData.preferredMatched.map(s => (
-                          <span key={s} style={{ background: "#dcfce7", color: "#166534", borderRadius: "4px", padding: "2px 8px", fontSize: "12px" }}>{s}</span>
-                        ))}
-                        {matchData.preferredMissing.map(s => (
-                          <span key={s} style={{ background: "#fef9c3", color: "#854d0e", borderRadius: "4px", padding: "2px 8px", fontSize: "12px" }}>{s}</span>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              )}
-            </div>
           </div>
         )}
 
@@ -1423,11 +1062,6 @@ export default function AdminDashboard() {
             adminApiBase={ADMIN_API_BASE}
             onRefreshCandidates={loadCandidates}
           />
-        )}
-
-        {/* Documents Tab */}
-        {activeTab === "documents" && (
-          <DocumentsTab adminToken={getAdminToken()} />
         )}
 
         {/* Anti-Cheat Tab */}

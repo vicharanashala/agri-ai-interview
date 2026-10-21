@@ -8,6 +8,7 @@ from fastapi import Request
 
 from app.core.config import settings as app_settings
 from app.api.admin import auth, candidates, settings as admin_settings, documents as admin_documents
+from app.api.admin.candidate_profile import router as admin_candidate_profile_router
 from app.api.register import router as register_router
 from app.api.auth.otp import router as otp_router
 from app.api.candidate import auth as candidate_auth
@@ -103,6 +104,7 @@ app.include_router(auth.router)
 app.include_router(candidates.router)
 app.include_router(admin_settings.router)
 app.include_router(admin_documents.router)
+app.include_router(admin_candidate_profile_router)
 app.include_router(register_router)
 app.include_router(otp_router)
 

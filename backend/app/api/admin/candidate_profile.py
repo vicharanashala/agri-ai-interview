@@ -273,6 +273,9 @@ async def get_candidate_profile(candidate_id: str, _admin=Depends(require_admin_
     consent_withdrawn = bool(cand.get("consent_withdrawn", False))
     return {
         **overview,
+        # Genuine completion time only: the list view falls back to updated_at, which is not a completion time.
+        # Ground Truth (module) completion has no stored timestamp at all.
+        "foundationCompletedAt": _format_iso(cand.get("foundation_completed_at")),
         "userName": user.get("name") if user else None,
         "address": cand.get("address"),
         "pincode": cand.get("pincode"),

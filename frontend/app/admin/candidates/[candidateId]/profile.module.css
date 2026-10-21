@@ -1151,20 +1151,6 @@
   }
 }
 
-/* ── Documents card: candidate status actions (from the former Documents tab) ── */
-.docStatusRow {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--border);
-}
-
-.docStatusRow .fieldLabel {
-  margin: 0;
-}
-
 /* ── Documents card: two equal columns, one on small screens ── */
 .docGrid {
   display: grid;
@@ -1205,6 +1191,38 @@
 
 @media (max-width: 900px) {
   .docGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ── Candidate Progress Status: one card per platform, two columns, one on small screens ── */
+.progressGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+
+.progressCard {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.progressItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 900px) {
+  .progressGrid {
     grid-template-columns: minmax(0, 1fr);
   }
 }

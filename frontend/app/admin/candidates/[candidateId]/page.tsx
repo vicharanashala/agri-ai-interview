@@ -5,18 +5,21 @@ import { useParams, useRouter } from "next/navigation";
 import styles from "./profile.module.css";
 import { hasLegacyEducation as anyLegacyEducation, shouldShowLegacyEducation } from "@/lib/legacy-education";
 import {
+  PROGRESS_STATUS_LABELS,
   ROLE_UNAVAILABLE_TOOLTIP,
   documentCategoryLabel,
   isRoleUnavailable,
   phaseLabel,
   phaseStepStatus,
+  groundTruthStatus,
+  progressStatus,
   roleLabel,
   scoreDetails,
+  type ProgressStatus,
 } from "@/lib/candidate-profile-display";
 import { buildTextPdf } from "@/lib/simple-pdf";
 import { CONSENT_PDF_TITLE, UNSUPPORTED_CHARS_NOTE, consentPdfFilename, consentPdfLines } from "@/lib/consent-pdf";
-import { canUseDocumentActions } from "@/lib/admin-candidate-actions";
-import { CandidateStatusToggles, DocumentsZipButton } from "@/components/admin/CandidateDocumentActions";
+import { DocumentsZipButton } from "@/components/admin/CandidateDocumentActions";
 
 // ─── Types (mirror GET /api/admin/candidates/{id}/profile) ──────────────────
 
@@ -117,7 +120,8 @@ interface CandidateProfile {
   attemptsDone: number;
   maxAttempts: number;
   interviewStatus?: string | null;
-  foundationCourseStatus?: string | null;
+  foundationCourseCompleted?: boolean | null;
+  foundationCourseStatus?: string | null;  moduleCompleted?: boolean | null;
   moduleStatus?: string | null;
   documentsSubmitted: boolean;
   isSelected: boolean;
@@ -317,6 +321,37 @@ function Badge({ tone, children, title }: { tone: Tone; children: React.ReactNod
   );
 }
 
+const PROGRESS_TONES: Record<ProgressStatus, Tone> = {
+  completed: "green",
+  in_progress: "amber",
+  not_started: "gray",
+  unavailable: "gray",
+  not_available_then: "blue",
+};
+
+const PROGRESS_TOOLTIPS: Partial<Record<ProgressStatus, string>> = {
+  unavailable: "The candidate moved past this step without a completion record, or the stored status is not recognised.",
+  not_available_then: "The candidate uploaded documents before the Ground Truth module was introduced.",
+};
+
+/** One Vibe course or Annadathaa module in the Candidate Progress Status card. */
+function ProgressItem({ platform, name, kind, status }: { platform: string; name: string; kind: string; status: ProgressStatus }) {
+  return (
+    <div className={styles.progressCard}>
+      <div className={styles.docCardHead}>
+        <span className={styles.docCategory}>{platform}</span>
+        <span className={styles.muted}>{kind}</span>
+      </div>
+      <div className={styles.progressItem}>
+        <strong>{name}</strong>
+        <Badge tone={PROGRESS_TONES[status]} title={PROGRESS_TOOLTIPS[status]}>
+          {PROGRESS_STATUS_LABELS[status]}
+        </Badge>
+      </div>
+    </div>
+  );
+}
+
 function interviewStatusTone(status?: string | null): Tone {
   if (status === "pass") return "green";
   if (status === "fail") return "red";
@@ -394,7 +429,7 @@ function Tooltip({ text, children }: { text: string; children: React.ReactNode }
 
 /** Eligible role text; explains itself on hover/focus when no role is available. */
 function RoleText({ role, prefix = "" }: { role: CandidateProfile["role"]; prefix?: string }) {
-  const text = `${prefix}${roleLabel(role.effective, role.source)}`;
+  const text = `${prefix}${roleLabel(role.effective)}`;
   return isRoleUnavailable(role.effective) ? <Tooltip text={ROLE_UNAVAILABLE_TOOLTIP}>{text}</Tooltip> : <>{text}</>;
 }
 
@@ -628,7 +663,9 @@ export default function AdminCandidateProfilePage() {
   // Hidden when the legacy fields only duplicate an education[] entry (see lib/legacy-education.ts)
   const showLegacyEducation = shouldShowLegacyEducation(legacy, p.education);
   const prof = p.profile;
-  const hasProfileDetails = Object.values(prof).some((v) => !isBlank(v));
+  // The consent acknowledgements are not shown on this card, so they don't count as profile details.
+  const { nonAgriConsent: _nonAgri, isInternshipConsent: _internship, ...shownProf } = prof;
+  const hasProfileDetails = Object.values(shownProf).some((v) => !isBlank(v));
   const presentDeclarations = p.declarations.records.filter((r) => r.present);
   const base = `/api/admin/candidates/${encodeURIComponent(p.id)}`;
 
@@ -821,8 +858,6 @@ export default function AdminCandidateProfilePage() {
               <Field label="Primary expertise" value={prof.primaryExpertise} />
               <Field label="Crops grown" value={prof.cropsGrown} />
               <Field label="Farm size" value={prof.farmSize} />
-              <Field label="Non-agri background acknowledged" value={yesNo(prof.nonAgriConsent)} />
-              <Field label="Internship acknowledged" value={yesNo(prof.isInternshipConsent)} />
               {/* Only when it differs from the eligible role shown above */}
               <Field
                 label="Calculated from education & experience"
@@ -939,6 +974,31 @@ export default function AdminCandidateProfilePage() {
           )}
         </Card>
 
+        {/* ── Candidate progress status (Vibe Foundation Course, Annadathaa Ground Truth module) ── */}
+        <Card title="Candidate Progress Status" icon="📈">
+          <div className={styles.progressGrid}>
+            <ProgressItem
+              platform="Vibe"
+              name="Foundation Course"
+              kind="Course"
+              status={progressStatus("foundation", p.foundationCourseCompleted, p.foundationCourseStatus, p.currentPhase, p.documentsSubmitted)}            />
+            <ProgressItem
+              platform="Annadathaa"
+              name="Ground Truth"
+              kind="Module"
+              status={groundTruthStatus(
+                p.moduleCompleted,
+                p.moduleStatus,
+                p.foundationCourseCompleted,
+                p.foundationCourseStatus,
+                p.documents.map((d) => d.createdAt),
+                p.currentPhase,
+                p.documentsSubmitted
+              )}
+            />
+          </div>
+        </Card>
+
         {/* ── Consent & declarations ── */}
         <Card
           title="Consent & Declarations"
@@ -1018,7 +1078,7 @@ export default function AdminCandidateProfilePage() {
           </div>
         </Card>
 
-        {/* ── Documents (uploaded files only; last card) — includes the former Documents tab's actions ── */}
+        {/* ── Documents (uploaded files only; last card) ── */}
         <Card
           title="Documents"
           icon="📎"
@@ -1033,23 +1093,6 @@ export default function AdminCandidateProfilePage() {
             ) : undefined
           }
         >
-          <div className={styles.docStatusRow}>
-            <span className={styles.fieldLabel}>Candidate status</span>
-            {canUseDocumentActions(p) ? (
-              <CandidateStatusToggles
-                candidate={p}
-                adminFetch={withAuth}
-                onError={setDownloadError}
-                onUpdated={(patch) => setProfile((prev) => (prev ? { ...prev, ...patch } : prev))}
-              />
-            ) : (
-              <span className={styles.muted}>
-                {p.isDeleted
-                  ? "Not available for candidates in the Trash."
-                  : "Available once the candidate has reached the Documents phase and submitted all required documents."}
-              </span>
-            )}
-          </div>
           {p.documents.length === 0 ? (
             <Empty>No documents uploaded.</Empty>
           ) : (

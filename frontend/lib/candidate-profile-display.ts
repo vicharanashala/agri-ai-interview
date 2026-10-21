@@ -41,14 +41,80 @@ export function phaseStepStatus(phase: string, status: string, documentsSubmitte
   return status;
 }
 
-/** Role text without the "stored" qualifier: "Senior", "Senior (calculated)" or "Not available". */
-export function roleLabel(effective: string | null | undefined, source: string | null | undefined): string {
-  if (!effective) return "Not available";
-  return source === "calculated" ? `${effective} (calculated)` : effective;
+/** Role name only, with no source qualifier: "Senior" or "Not available". */
+export function roleLabel(effective: string | null | undefined): string {
+  return effective || "Not available";
 }
 
 export function isRoleUnavailable(effective: string | null | undefined): boolean {
   return !effective;
+}
+
+export type ProgressStatus = "completed" | "in_progress" | "not_started" | "unavailable" | "not_available_then";
+
+export const PROGRESS_STATUS_LABELS: Record<ProgressStatus, string> = {
+  completed: "Completed",
+  in_progress: "In Progress",
+  not_started: "Not Started",
+  unavailable: "Status Unavailable",
+  not_available_then: "Not Available at That Time",
+};
+
+/**
+ * Earliest moment the Ground Truth (Annadathaa) module could have been available anywhere: the commit that first
+ * added it — module page, Annadathaa completion check, "module" phase and module_status
+ * (c893493 "feat:module-phase", 2026-09-26 12:53:21 IST; merged to main 2026-10-07 in PR #71).
+ * Deployments are manual, so the actual go-live is later; using the earliest possible time keeps the rule conservative.
+ */
+export const GROUND_TRUTH_EARLIEST_AVAILABLE = Date.parse("2026-09-26T07:23:21Z");
+
+const PHASE_ORDER = ["onboarding", "interview", "summary", "foundation", "module", "documents"];
+
+/**
+ * Progress of one post-interview step (Foundation Course on Vibe, Ground Truth module on Annadathaa) from the stored
+ * completion flag and status. The API reports a missing status as "not_started", so a candidate already past the step
+ * (or with documents submitted) but with no completion record is "unavailable" rather than a guessed "not started" —
+ * e.g. candidates who reached Documents before the module existed. Unrecognised statuses are also "unavailable".
+ */
+export function progressStatus(
+  step: "foundation" | "module",
+  completed: boolean | null | undefined,
+  status: string | null | undefined,
+  currentPhase: string,
+  documentsSubmitted: boolean
+): ProgressStatus {
+  if (completed === true || status === "completed") return "completed";
+  const stepIdx = PHASE_ORDER.indexOf(step);
+  const phaseIdx = PHASE_ORDER.indexOf(currentPhase);
+  if (documentsSubmitted || (phaseIdx !== -1 && phaseIdx > stepIdx)) return "unavailable";
+  if (status === "in_progress") return "in_progress";
+  if (status === null || status === undefined || status === "not_started") return "not_started";
+  return "unavailable";
+}
+
+/**
+ * Ground Truth status. "Not Available at That Time" only with evidence that the candidate reached Documents before the
+ * module existed: Foundation completed, the module never launched or completed, and a document uploaded before
+ * GROUND_TRUTH_EARLIEST_AVAILABLE (upload times are written once at insert and need Foundation completed). Without
+ * that evidence the usual rules apply, so a candidate past the module with no record stays "Status Unavailable".
+ */
+export function groundTruthStatus(
+  moduleCompleted: boolean | null | undefined,
+  moduleStatus: string | null | undefined,
+  foundationCompleted: boolean | null | undefined,
+  foundationStatus: string | null | undefined,
+  documentUploadTimes: (string | null | undefined)[],
+  currentPhase: string,
+  documentsSubmitted: boolean
+): ProgressStatus {
+  const neverLaunched = moduleCompleted !== true && (moduleStatus == null || moduleStatus === "not_started");
+  const foundationDone = foundationCompleted === true || foundationStatus === "completed";
+  const uploadedBeforeModule = documentUploadTimes.some((t) => {
+    const ms = t ? Date.parse(t) : NaN;
+    return Number.isFinite(ms) && ms < GROUND_TRUTH_EARLIEST_AVAILABLE;
+  });
+  if (neverLaunched && foundationDone && uploadedBeforeModule) return "not_available_then";
+  return progressStatus("module", moduleCompleted, moduleStatus, currentPhase, documentsSubmitted);
 }
 
 export interface ScoreDetails {

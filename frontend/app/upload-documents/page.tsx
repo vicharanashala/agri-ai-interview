@@ -10,7 +10,6 @@ import ProfileNavButton from '@/components/ProfileNavButton';
 
 const ALLOWED_TYPES = [
   'application/pdf',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'image/jpeg',
   'image/png',
 ];
@@ -146,12 +145,11 @@ export default function UploadDocumentsPage() {
     if (
       !ALLOWED_TYPES.includes(file.type) &&
       !file.name.toLowerCase().endsWith('.pdf') &&
-      !file.name.toLowerCase().endsWith('.docx') &&
       !file.name.toLowerCase().endsWith('.jpg') &&
       !file.name.toLowerCase().endsWith('.jpeg') &&
       !file.name.toLowerCase().endsWith('.png')
     ) {
-      return `Invalid format for ${field.label}. Please upload .jpg, .jpeg, .png, .pdf, or .docx only.`;
+      return `Invalid format for ${field.label}. Please upload .jpg, .jpeg, .png, or .pdf only.`;
     }
 
     if (file.size > field.maxSizeMB * 1024 * 1024) {
@@ -445,7 +443,7 @@ export default function UploadDocumentsPage() {
         )}
 
         <div className={styles.notice}>
-          Please upload all documents in .jpg, .jpeg, .png, .pdf, or .docx format (Max 5MB/10MB per file). Only attach one document per field.
+          Please upload all documents in .jpg, .jpeg, .png, or .pdf format (Max 5MB/10MB per file). Only attach one document per field.
         </div>
 
         <div className={styles.sections}>
@@ -477,7 +475,7 @@ export default function UploadDocumentsPage() {
                           )}
                           <input
                             type="file"
-                            accept=".pdf,.docx,.jpg,.jpeg,.png"
+                            accept=".pdf,.jpg,.jpeg,.png"
                             disabled={validatingFields[field.key]}
                             ref={(el) => {
                               fileInputRefs.current[field.key] = el;

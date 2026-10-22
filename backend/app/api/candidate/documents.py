@@ -16,7 +16,6 @@ router = APIRouter(prefix="/api/candidate", tags=["candidate-documents"])
 
 ALLOWED_CONTENT_TYPES = {
     "application/pdf",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "image/jpeg",
     "image/jpg",
     "image/png",
@@ -41,7 +40,6 @@ MAX_SIZES = {
 
 _CONTENT_TYPES = {
     "pdf": "application/pdf",
-    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "jpg": "image/jpeg",
     "jpeg": "image/jpeg",
     "png": "image/png",
@@ -52,14 +50,14 @@ def _guess_file_type(filename: str) -> str:
     ext = filename.lower().split(".")[-1]
     if ext in ["jpg", "jpeg"]: return "jpg"
     if ext == "png": return "png"
-    return "docx" if ext == "docx" else "pdf"
+    return "pdf"
 
 
 def _validate_file(file: UploadFile, field_name: str) -> bytes:
     content_type = file.content_type or ""
-    allowed_exts = (".pdf", ".docx", ".jpg", ".jpeg", ".png")
+    allowed_exts = (".pdf", ".jpg", ".jpeg", ".png")
     if content_type not in ALLOWED_CONTENT_TYPES and not file.filename.lower().endswith(allowed_exts):
-        raise HTTPException(status_code=400, detail=f"Invalid format for {field_name}. Please upload .jpg, .jpeg, .png, .pdf, or .docx only.")
+        raise HTTPException(status_code=400, detail=f"Invalid format for {field_name}. Please upload .jpg, .jpeg, .png, or .pdf only.")
 
     file_bytes = file.file.read()
     max_size = MAX_SIZES.get(field_name, 5 * 1024 * 1024)
@@ -98,9 +96,33 @@ from fastapi import Form
 @router.post("/validate-single")
 async def validate_single_document(file: UploadFile = File(...), field_name: str = Form(...)):
     # Immediately block unsupported extensions like HEIC
-    allowed_exts = (".pdf", ".docx", ".jpg", ".jpeg", ".png")
+    allowed_exts = (".pdf", ".jpg", ".jpeg", ".png")
     if not file.filename.lower().endswith(allowed_exts):
-        return {"success": False, "reason": "Invalid file format. Please upload .jpg, .jpeg, .png, .pdf, or .docx only."}
+        return {"success": False, "reason": "Invalid file format. Please upload .jpg, .jpeg, .png, or .pdf only."}
+
+    # Only mandatory fields (except updated_resume) undergo AI Vision validation
+    AI_VALIDATED_FIELDS = {
+        "aadhaar_front",
+        "aadhaar_back",
+        "pan_front",
+        "pan_back",
+        "bank_details",
+        "marksheet_10",
+        "marksheet_12",
+        "grad_marksheets",
+        "Aadhaar Card (Front side)",
+        "Aadhaar Card (Back side)",
+        "PAN Card (Front side)",
+        "PAN Card (Back side)",
+        "Bank Proof",
+        "10th Class Marksheet",
+        "12th Class Marksheet",
+        "Graduation Marksheet / Degree Certificate",
+    }
+
+    # Accept updated_resume and optional fields directly without AI validation.
+    if field_name == "updated_resume" or field_name not in AI_VALIDATED_FIELDS:
+        return {"success": True}
 
     file_bytes = await file.read()
     mime_type = file.content_type if file.content_type else "image/jpeg"

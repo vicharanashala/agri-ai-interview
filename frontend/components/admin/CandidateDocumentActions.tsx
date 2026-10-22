@@ -184,7 +184,7 @@ export default function CandidateDocumentActions({
   centered = false,
 }: CommonProps & { onUpdated: (patch: { isSelected?: boolean; isNotJoined?: boolean }) => void; centered?: boolean }) {
   if (!canUseDocumentActions(candidate)) {
-    return <span style={{ color: '#9ca3af', fontSize: 13, fontStyle: 'italic' }}>{candidate.isDeleted ? '—' : 'Not Submitted'}</span>;
+    return <span style={{ color: '#9ca3af', fontSize: 13, fontStyle: 'italic' }}>{candidate.isDeleted ? '—' : 'Document Not Submitted'}</span>;
   }
   return <CandidateStatusToggles candidate={candidate} adminFetch={adminFetch} onError={onError} onUpdated={onUpdated} centered={centered} />;
 }

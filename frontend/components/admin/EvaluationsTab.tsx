@@ -97,6 +97,21 @@ function formatDate(iso?: string | null): string {
   }
 }
 
+// Display labels for the role codes in the Level column (codes are unchanged in data and logic)
+const LEVEL_LABELS: Record<string, string> = {
+  YP: "Level 0",
+  Junior: "Level 1",
+  Agri: "Level 2",
+  Senior: "Level 3",
+  Intern: "Intern",
+};
+
+/** Level label for a role code; missing → "Not Available", an unknown value is shown as is (as before). */
+function levelLabel(level?: string | null): string {
+  if (!level) return "Not Available";
+  return LEVEL_LABELS[level] ?? level;
+}
+
 function resultBadge(result?: string): string {
   if (result === "PASS") return "✅ PASS";
   if (result === "FAIL") return "❌ FAIL";
@@ -723,7 +738,7 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken, onCandidat
                             <span className={styles.candidateEmail}>{evaluation.phone || "—"}</span>
                           </td>
                           <td>
-                            <span style={{ fontSize: "12px", background: "#f1f5f9", padding: "4px 8px", borderRadius: "12px", color: "#475569" }}>{evaluation.level || "Not Available"}</span>
+                            <span style={{ fontSize: "12px", background: "#f1f5f9", padding: "4px 8px", borderRadius: "12px", color: "#475569" }}>{levelLabel(evaluation.level)}</span>
                           </td>
                           <td>
                             <span className={styles.candidateEmail}>{evaluation.passThreshold != null ? `${evaluation.passThreshold}/100` : "—"}</span>

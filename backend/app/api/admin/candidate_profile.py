@@ -25,8 +25,10 @@ from app.api.admin.candidates import (
     _calculated_role,
     _candidate_to_response,
     _effective_role,
+    _eligibility_breakdown,
     _format_iso,
     _get_id_variants,
+    _latest_result_session,
     _role_source,
 )
 
@@ -164,6 +166,24 @@ def _re_evaluation(req: Optional[dict]) -> Optional[dict]:
     }
 
 
+def _topic_scores(evaluation: Any) -> Optional[Dict[str, dict]]:
+    """Stored per-topic interview scores ({topic: {score, details}}), or None when the evaluation has none."""
+    topics = evaluation.get("topic_scores") if isinstance(evaluation, dict) else None
+    if not isinstance(topics, dict):
+        return None
+    result = {}
+    for topic, value in topics.items():
+        if not isinstance(value, dict):
+            continue
+        score = value.get("score")
+        details = value.get("details")
+        result[topic] = {
+            "score": score if isinstance(score, (int, float)) and not isinstance(score, bool) else None,
+            "details": details if isinstance(details, str) else None,
+        }
+    return result or None
+
+
 def _interview_summaries(db, cand: dict) -> List[dict]:
     sessions = _interview_sessions(db, cand)
     session_ids = [str(s["_id"]) for s in sessions]
@@ -191,6 +211,7 @@ def _interview_summaries(db, cand: dict) -> List[dict]:
             "endReason": s.get("end_reason"),
             "attempt": attempt if counted else None,
             "hasEvaluation": isinstance(evaluation, dict) and bool(evaluation),
+            "topicScores": _topic_scores(evaluation),
             "reEvaluation": _re_evaluation(re_req_map.get(str(s["_id"]))),
         })
     results.reverse()  # newest first
@@ -251,6 +272,7 @@ async def get_candidate_profile(candidate_id: str, _admin=Depends(require_admin_
         pass_threshold = get_evaluation_settings(level).get("pass_threshold")
 
     consent_withdrawn = bool(cand.get("consent_withdrawn", False))
+    status_session = _latest_result_session(db, cand)
     return {
         **overview,
         # Genuine completion time only: the list view falls back to updated_at, which is not a completion time.
@@ -288,6 +310,8 @@ async def get_candidate_profile(candidate_id: str, _admin=Depends(require_admin_
             "effective": level,
             "source": _role_source(cand),
             "passThreshold": pass_threshold,
+            # Steps of the calculation, only when _calculated_role finds the inputs reliable enough to calculate
+            "breakdown": _eligibility_breakdown(cand) if _calculated_role(cand) else None,
         },
         "consent": {
             "status": overview["consentStatus"],
@@ -303,6 +327,8 @@ async def get_candidate_profile(candidate_id: str, _admin=Depends(require_admin_
         "declarations": _declarations(cand, user),
         "resumes": _resumes(db, cand),
         "interviews": _interview_summaries(db, cand),
+        # The interview the candidate's interview status is based on (same rule as the candidates list)
+        "statusInterviewId": str(status_session["_id"]) if status_session else None,
         "documents": _documents(db, cand),
     }
 

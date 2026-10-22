@@ -13,6 +13,7 @@ import {
   phaseStepStatus,
   groundTruthStatus,
   progressStatus,
+  roleDisplayName,
   roleLabel,
   scoreDetails,
   type ProgressStatus,
@@ -90,7 +91,17 @@ interface InterviewSummary {
   endReason?: string | null;
   attempt?: number | null;
   hasEvaluation: boolean;
+  /** Stored per-topic interview evaluation scores (0–10), or null when the evaluation has none. */
+  topicScores?: Record<string, { score: number | null; details: string | null }> | null;
   reEvaluation?: ReEvaluation | null;
+}
+
+/** Steps of the eligible-role calculation (backend _eligibility_breakdown). */
+interface EligibilityBreakdown {
+  role: string;
+  internReason: "no_education" | "pursuing" | "no_qualifying_degree" | null;
+  educationLimit: string | null;
+  experienceBand: string | null;
 }
 
 interface DocumentRecord {
@@ -153,6 +164,8 @@ interface CandidateProfile {
     effective?: string | null;
     source?: "stored" | "calculated" | null;
     passThreshold?: number | null;
+    /** Only when the inputs are reliable enough to calculate a role. */
+    breakdown?: EligibilityBreakdown | null;
   };
   consent: {
     status?: string | null;
@@ -170,6 +183,8 @@ interface CandidateProfile {
   };
   resumes: ResumeRecord[];
   interviews: InterviewSummary[];
+  /** The interview the candidate's interview status is based on (latest completed PASS/FAIL session). */
+  statusInterviewId?: string | null;
   documents: DocumentRecord[];
 }
 
@@ -345,6 +360,133 @@ function ProgressItem({ platform, name, kind, status }: { platform: string; name
         </Badge>
       </div>
     </div>
+  );
+}
+
+const INTERN_REASONS: Record<NonNullable<EligibilityBreakdown["internReason"]>, string> = {
+  no_education: "No complete education entry is recorded.",
+  pursuing: "A qualification is still being pursued.",
+  no_qualifying_degree: "No completed qualifying agricultural qualification is recorded.",
+};
+
+/** How the eligible role follows from the education and experience rules (backend calculation steps). */
+function RoleEligibilityPanel({ role, yearsOfExperience }: { role: CandidateProfile["role"]; yearsOfExperience?: number | null }) {
+  const b = role.breakdown;
+  return (
+    <section className={styles.skillPanel}>
+      <h3 className={styles.subheading}>Role Eligibility</h3>
+      <dl className={styles.skillRows}>
+        <Info label="Eligible role" value={<RoleText role={role} />} />
+        {b && !b.internReason && (
+          <>
+            <Info label="Education allows up to" value={b.educationLimit ? roleDisplayName(b.educationLimit) : null} />
+            <Info
+              label="Experience band"
+              value={
+                b.experienceBand
+                  ? `${roleDisplayName(b.experienceBand)}${yearsOfExperience != null ? ` (${yearsOfExperience} ${yearsOfExperience === 1 ? "year" : "years"})` : ""}`
+                  : null
+              }
+            />
+            <Info label="Calculated role (lower of the two)" value={roleDisplayName(b.role)} />
+          </>
+        )}
+        {b?.internReason && <Info label="Calculated role" value={`${roleDisplayName(b.role)}: ${INTERN_REASONS[b.internReason]}`} />}
+      </dl>
+      {!b && (
+        <p className={styles.muted}>
+          No breakdown: the education or experience details are incomplete or cannot be read reliably.
+        </p>
+      )}
+      {b && role.source === "stored" && role.stored !== b.role && (
+        <p className={styles.note}>
+          The eligible role is the one stored at onboarding. The current calculation from education and experience gives{" "}
+          {roleDisplayName(b.role)}.
+        </p>
+      )}
+    </section>
+  );
+}
+
+/** Skills from the latest parsed resume plus the candidate's own profile answers; informational only. */
+function ResumeSkillsPanel({ resumes, profile }: { resumes: ResumeRecord[]; profile: CandidateProfile["profile"] }) {
+  // Resumes arrive newest first; the latest parsed one is used (as the resume matcher does)
+  const resume = resumes.find((r) => r.status === "parsed" && r.parsedData);
+  const skills = (resume?.parsedData?.skills || []).filter(
+    (s): s is string => typeof s === "string" && !isBlank(s) && s.trim() !== "Not Available"
+  );
+  return (
+    <section className={styles.skillPanel}>
+      <h3 className={styles.subheading}>Resume &amp; Profile Skills</h3>
+      <p className={styles.muted}>
+        {resume
+          ? `From the latest parsed resume (${resume.fileName || "resume"}${resume.createdAt ? `, uploaded ${formatDate(resume.createdAt)}` : ""}) and the candidate's profile.`
+          : "From the candidate's profile."}
+      </p>
+      {!resume ? (
+        <Empty>No parsed resume.</Empty>
+      ) : skills.length === 0 ? (
+        <Empty>No skills were extracted from the resume.</Empty>
+      ) : (
+        <div className={styles.chips}>
+          {skills.map((s, i) => (
+            <span key={i} className={styles.chip}>{s}</span>
+          ))}
+        </div>
+      )}
+      <dl className={styles.skillRows}>
+        <Info label="Primary expertise" value={profile.primaryExpertise} />
+        <Info label="Crops grown" value={profile.cropsGrown} />
+        <Info label="Farming background" value={profile.farmingBackground} />
+      </dl>
+      <p className={styles.muted}>Informational only: no skill requirements are defined for the agricultural roles, so these are not matched or rated.</p>
+    </section>
+  );
+}
+
+/** Topic scores of the interview the candidate's interview status is based on. */
+function InterviewPerformancePanel({ interview }: { interview?: InterviewSummary }) {
+  const topics = interview?.topicScores ? Object.entries(interview.topicScores) : [];
+  return (
+    <section className={`${styles.skillPanel} ${styles.skillPanelWide}`}>
+      <h3 className={styles.subheading}>Interview Performance</h3>
+      {!interview ? (
+        <Empty>No evaluated interview (pass or fail) yet.</Empty>
+      ) : (
+        <>
+          <p className={styles.muted}>
+            Interview evaluation scores, not a resume skill match. From the interview the candidate&apos;s interview status is
+            based on:{" "}
+            {[
+              interview.attempt ? `Attempt ${interview.attempt}` : "Latest evaluated session",
+              interview.result,
+              interview.score != null ? `${interview.score}/100` : null,
+              interview.startedAt ? formatDate(interview.startedAt) : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+          {topics.length === 0 ? (
+            <Empty>No topic scores are stored for this interview.</Empty>
+          ) : (
+            <div className={styles.topicGrid}>
+              {topics.map(([topic, t]) => (
+                <div key={topic} className={styles.topicItem}>
+                  <div className={styles.topicHead}>
+                    <span>{humanize(topic)}</span>
+                    <strong>{t.score != null ? `${t.score}/10` : "Not scored"}</strong>
+                  </div>
+                  {t.details && <p className={styles.muted}>{t.details}</p>}
+                </div>
+              ))}
+            </div>
+          )}
+          {topics.length > 0 && (
+            <p className={styles.muted}>The evaluator scores a topic that was not covered in the interview as 0; see each topic&apos;s explanation.</p>
+          )}
+        </>
+      )}
+    </section>
   );
 }
 
@@ -857,7 +999,7 @@ export default function AdminCandidateProfilePage() {
               {/* Only when it differs from the eligible role shown above */}
               <Field
                 label="Calculated from education & experience"
-                value={p.role.calculated && p.role.calculated !== p.role.effective ? p.role.calculated : null}
+                value={p.role.calculated && p.role.calculated !== p.role.effective ? roleDisplayName(p.role.calculated) : null}
               />
               <Field label="Recorded role (not a valid role)" value={p.role.storedInvalid} />
             </dl>
@@ -909,6 +1051,15 @@ export default function AdminCandidateProfilePage() {
               </dl>
             </div>
           )}
+        </Card>
+
+        {/* ── Skill match: eligibility, resume/profile skills and interview topic scores, kept separate ── */}
+        <Card title="Skill Match" icon="🧭">
+          <div className={styles.skillGrid}>
+            <RoleEligibilityPanel role={p.role} yearsOfExperience={prof.yearsOfExperience} />
+            <ResumeSkillsPanel resumes={p.resumes} profile={prof} />
+            <InterviewPerformancePanel interview={p.interviews.find((iv) => iv.id === p.statusInterviewId)} />
+          </div>
         </Card>
 
         {/* ── Interview results ── */}

@@ -41,9 +41,23 @@ export function phaseStepStatus(phase: string, status: string, documentsSubmitte
   return status;
 }
 
-/** Role name only, with no source qualifier: "Senior" or "Not available". */
+/** Display names for the internal role codes (display only; codes stay unchanged in data, API and logic). */
+export const ROLE_DISPLAY_NAMES: Record<string, string> = {
+  Intern: "Intern",
+  YP: "Young Agriculture Professional",
+  Junior: "Junior Agriculture Professional",
+  Agri: "Agriculture Professional",
+  Senior: "Senior Agriculture Professional",
+};
+
+/** Display name for a role code; an unknown value is shown as is. */
+export function roleDisplayName(role: string): string {
+  return ROLE_DISPLAY_NAMES[role] ?? role;
+}
+
+/** Role display name only, with no source qualifier: "Senior Agriculture Professional" or "Not available". */
 export function roleLabel(effective: string | null | undefined): string {
-  return effective || "Not available";
+  return effective ? roleDisplayName(effective) : "Not available";
 }
 
 export function isRoleUnavailable(effective: string | null | undefined): boolean {

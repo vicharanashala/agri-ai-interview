@@ -80,6 +80,7 @@ jobs:
             NEXTAUTH_URL=${{ vars.NEXTAUTH_URL_PROD }}
             AUTH_TRUST_HOST=true
             BACKEND_URL=${{ vars.NEXT_PUBLIC_API_URL_PROD }}
+            NEXT_PUBLIC_QC_URL=${{ vars.NEXT_PUBLIC_QC_URL }}
 
   deploy_backend:
     name: Deploy Backend to Cloud Run

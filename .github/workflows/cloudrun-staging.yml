@@ -1,4 +1,4 @@
-﻿name: Build, Push & Deploy to Cloud Run (Staging)
+name: Build, Push & Deploy to Cloud Run (Staging)
 
 on:
   workflow_dispatch:
@@ -79,6 +79,7 @@ jobs:
             NEXT_PUBLIC_ADMIN_API_URL=${{ vars.NEXT_PUBLIC_API_URL_STAGING }}
             NEXTAUTH_URL=${{ vars.NEXTAUTH_URL_STAGING }}
             BACKEND_URL=${{ vars.NEXT_PUBLIC_API_URL_STAGING }}
+            NEXT_PUBLIC_QC_URL=${{ vars.NEXT_PUBLIC_QC_URL_STAGING || vars.NEXT_PUBLIC_QC_URL }}
 
   deploy_backend:
     name: Deploy Backend to Cloud Run
@@ -112,8 +113,8 @@ jobs:
             GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
             NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL_STAGING }}
             NEXT_PUBLIC_ADMIN_API_URL=${{ vars.NEXT_PUBLIC_API_URL_STAGING }}
-            QC_API_URL=${{ vars.QC_API_URL }}
-            ANVESHAN_ANNADATHA_AUTH_KEY=${{ secrets.ANVESHAN_ANNADATHA_AUTH_KEY }}
+            QC_API_URL=${{ vars.QC_API_URL_STAGING || vars.QC_API_URL }}
+            ANVESHAN_ANNADATHA_AUTH_KEY=${{ secrets.ANVESHAN_ANNADATHA_AUTH_KEY_STAGING || secrets.ANVESHAN_ANNADATHA_AUTH_KEY }}
             INTERNAL_SERVICE_TOKEN=${{ secrets.INTERNAL_SERVICE_TOKEN_STAGING }}
             GCS_BUCKET_NAME=${{ vars.GCS_BUCKET_NAME }}
             STORAGE_BACKEND=${{ vars.STORAGE_BACKEND }}
@@ -147,4 +148,4 @@ jobs:
             INTERNAL_SERVICE_TOKEN=${{ secrets.INTERNAL_SERVICE_TOKEN_STAGING }}
             BACKEND_URL=${{ vars.NEXT_PUBLIC_API_URL_STAGING }}
             NEXT_PUBLIC_ADMIN_API_URL=${{ vars.NEXT_PUBLIC_API_URL_STAGING }}
-            NEXT_PUBLIC_QC_URL=${{ vars.NEXT_PUBLIC_QC_URL }}
+            NEXT_PUBLIC_QC_URL=${{ vars.NEXT_PUBLIC_QC_URL_STAGING || vars.NEXT_PUBLIC_QC_URL }}

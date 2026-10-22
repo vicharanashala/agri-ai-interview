@@ -37,6 +37,7 @@ jobs:
           file: ./backend/Dockerfile
           push: true
           platforms: linux/amd64
+          provenance: false
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.BACKEND_IMAGE }}:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }}
@@ -48,6 +49,7 @@ jobs:
           file: ./frontend/Dockerfile
           push: true
           platforms: linux/amd64
+          provenance: false
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.FRONTEND_IMAGE }}:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}

@@ -45,6 +45,7 @@ services:
       NEXT_PUBLIC_API_URL: http://agri-interview-backend:8000
       NEXT_PUBLIC_ADMIN_API_URL: ${NEXT_PUBLIC_ADMIN_API_URL}
       BACKEND_URL: http://agri-interview-backend:8000
+      NEXT_PUBLIC_QC_URL: ${NEXT_PUBLIC_QC_URL}
     depends_on:
       agri-interview-backend:
         condition: service_started

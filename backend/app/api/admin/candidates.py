@@ -179,6 +179,18 @@ def _build_phases(current_phase: str) -> List[PhaseStatus]:
     ]
 
 
+def _latest_result_session(db, cand: dict) -> Optional[dict]:
+    """The interview the candidate's interview status is based on: latest completed session with PASS/FAIL."""
+    return db.interview_sessions.find_one(
+        {
+            "candidate_id": {"$in": _get_id_variants(cand["_id"])},
+            "status": "completed",
+            "result": {"$in": ["PASS", "FAIL"]}
+        },
+        sort=[("started_at", -1)]
+    )
+
+
 def _candidate_to_response(cand: dict, user_email: Optional[str]) -> CandidateResponse:
     raw_full_name = cand.get("full_name") or user_email or "Unknown"
     current_phase = cand.get("current_phase", "onboarding")
@@ -190,14 +202,7 @@ def _candidate_to_response(cand: dict, user_email: Optional[str]) -> CandidateRe
         "result": {"$in": ["PASS", "FAIL", "WITHDRAWN"]},
     })
 
-    latest_session = db.interview_sessions.find_one(
-        {
-            "candidate_id": {"$in": _get_id_variants(cand["_id"])},
-            "status": "completed",
-            "result": {"$in": ["PASS", "FAIL"]}
-        },
-        sort=[("started_at", -1)]
-    )
+    latest_session = _latest_result_session(db, cand)
 
     interview_status = "not_attended"
     if latest_session:
@@ -1236,16 +1241,28 @@ async def backfill_completed_at(_admin=Depends(require_admin_auth)):
 # ── Get all evaluations (admin view) ──────────────────────────────────────────
 
 def compute_eligible_role(candidate: dict) -> str:
+    return _eligibility_breakdown(candidate)["role"]
+
+
+def _eligibility_breakdown(candidate: dict) -> dict:
+    """
+    The eligible-role rules with their intermediate steps, for the admin profile's explanation:
+    role (what compute_eligible_role returns), educationLimit (highest role the education allows),
+    experienceBand (role by years of experience) and internReason when Intern is decided before those steps.
+    """
+    def intern(reason: str) -> dict:
+        return {"role": "Intern", "internReason": reason, "educationLimit": None, "experienceBand": None}
+
     education = candidate.get("education", [])
     if not isinstance(education, list):
         education = []
     
     # If no valid education items
     if not any(e.get("level") and e.get("discipline") and e.get("status") for e in education):
-        return "Intern"
+        return intern("no_education")
 
     if any(e.get("status") == "Pursuing" for e in education):
-        return "Intern"
+        return intern("pursuing")
 
     standalone_msc_disciplines = [
         'Agriculture', 'Agronomy', 'Soil Science', 'Entomology', 'Plant Pathology',
@@ -1262,7 +1279,7 @@ def compute_eligible_role(candidate: dict) -> str:
     has_completed_qualifying = has_diploma_agri or has_bsc_agri or (has_msc_hort and has_bsc_diploma_bg) or has_msc_agri
 
     if not has_completed_qualifying:
-        return "Intern"
+        return intern("no_qualifying_degree")
 
     max_role = "YP"
     has_advanced_agri = any(e.get("level") in ["M.Sc.", "Ph.D.", "Postdoctoral"] and e.get("discipline") in standalone_msc_disciplines and e.get("status") == "Completed" for e in education) or (has_msc_hort and has_bsc_diploma_bg)
@@ -1290,9 +1307,8 @@ def compute_eligible_role(candidate: dict) -> str:
 
     role_levels = {'Intern': 0, 'YP': 1, 'Junior': 2, 'Agri': 3, 'Senior': 4}
     
-    if role_levels.get(raw_role, 0) > role_levels.get(max_role, 0):
-        return max_role
-    return raw_role
+    role = max_role if role_levels.get(raw_role, 0) > role_levels.get(max_role, 0) else raw_role
+    return {"role": role, "internReason": None, "educationLimit": max_role, "experienceBand": raw_role}
 
 @router.get("/evaluations")
 async def get_all_evaluations(

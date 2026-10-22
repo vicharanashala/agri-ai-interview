@@ -132,10 +132,31 @@ async def validate_single_document(file: UploadFile = File(...), field_name: str
         try:
             import io
             from pdf2image import convert_from_bytes
+            from PIL import Image, ImageChops
             images = convert_from_bytes(file_bytes, first_page=1, last_page=1)
             if images:
+                img = images[0]
+                # Auto-crop excessive white/blank scanner margins (e.g. small ID card on full A4 page)
+                try:
+                    if img.mode != 'RGB':
+                        img = img.convert('RGB')
+                    bg = Image.new('RGB', img.size, (255, 255, 255))
+                    diff = ImageChops.difference(img, bg)
+                    diff = ImageChops.add(diff, diff, 2.0, -10)
+                    bbox = diff.getbbox()
+                    if bbox:
+                        w, h = img.size
+                        x0 = max(0, bbox[0] - 30)
+                        y0 = max(0, bbox[1] - 30)
+                        x1 = min(w, bbox[2] + 30)
+                        y1 = min(h, bbox[3] + 30)
+                        if (x1 - x0) < w * 0.90 or (y1 - y0) < h * 0.90:
+                            img = img.crop((x0, y0, x1, y1))
+                except Exception as crop_err:
+                    print(f"Auto-crop skipped: {crop_err}")
+
                 img_byte_arr = io.BytesIO()
-                images[0].save(img_byte_arr, format='JPEG')
+                img.save(img_byte_arr, format='JPEG', quality=95)
                 file_bytes = img_byte_arr.getvalue()
                 mime_type = "image/jpeg"
         except Exception as e:
@@ -171,7 +192,7 @@ async def validate_single_document(file: UploadFile = File(...), field_name: str
             "Rule 1: MUST clearly contain the exact word 'Aadhaar' or the Government of India emblem.\n"
             "Rule 2: MUST contain a clearly visible PORTRAIT PHOTO of a face.\n"
             "Rule 3: MUST NOT have a large address block. If there is a full address block, it is the BACK side -> REJECT.\n"
-            "Rule 4: CRITICAL: If it is a blank template with no real photo or contains '0000 0000 0000', REJECT."
+            "Rule 4: CRITICAL: Reject blank forms or sample templates with no real person's photo. If a real person's photo, name, and legitimate Aadhaar digits are present, it is VALID."
         ),
 
         "Aadhaar Card (Back side)": (
@@ -259,6 +280,7 @@ SPECIFIC RULES:
 GENERAL RULES:
 
 1. EMPTY OR ILLEGIBLE
+- If a document card (e.g. Aadhaar or PAN) is scanned on a white paper page, focus inspection ONLY on the card itself, ignoring any blank surrounding paper.
 - If the image is completely blank, solid color, or so blurry that the required
   document cannot be verified, mark it invalid.
 - Do NOT reject merely because the image is slightly blurry or low quality.
@@ -278,10 +300,9 @@ GENERAL RULES:
   words are present.
 
 4. TEMPLATE / FAKE / PLACEHOLDER
-- Reject obvious blank templates or placeholder documents.
-- Reject documents containing placeholder values such as "0000 0000 0000"
-  where applicable.
-- A real document should contain actual identifying/document information.
+- Reject obvious blank templates with no real photo, or dummy documents.
+- If an actual person's photo and legitimate name/details are present, it is NOT a placeholder. Do NOT hallucinate placeholder values unless actual placeholder digits like '0000 0000 0000' are explicitly printed.
+- A real document contains actual identifying/document information.
 
 5. TEXT VERIFICATION
 - Look carefully for the required words, numbers, labels, and document features.

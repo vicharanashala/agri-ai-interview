@@ -100,7 +100,7 @@ jobs:
         with:
           service: ${{ env.BACKEND_SERVICE }}
           region: ${{ env.GCP_REGION }}
-          image: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+          image: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }}
           project_id: ${{ env.GCP_PROJECT_ID }}
           env_vars: |
             TAILSCALE_AUTHKEY=${{ secrets.TAILSCALE_AUTHKEY }}
@@ -148,7 +148,7 @@ jobs:
         with:
           service: ${{ env.FRONTEND_SERVICE }}
           region: ${{ env.GCP_REGION }}
-          image: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+          image: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
           project_id: ${{ env.GCP_PROJECT_ID }}
           env_vars: |
             NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL_PROD }}

@@ -65,7 +65,19 @@ def setup_indexes():
     db.users.create_index("email", unique=True)
 
     db.candidates.create_index("user_id")
-    db.candidates.create_index("phone")
+    try:
+        existing_indexes = db.candidates.index_information()
+        if "phone_1" in existing_indexes:
+            idx_info = existing_indexes["phone_1"]
+            if idx_info.get("unique") or idx_info.get("sparse"):
+                try:
+                    db.candidates.drop_index("phone_1")
+                    logging.info("Dropped legacy unique phone_1 index.")
+                except Exception as e:
+                    logging.warning(f"Could not drop legacy phone_1 index: {e}")
+        db.candidates.create_index("phone")
+    except Exception as e:
+        logging.warning(f"Could not setup candidates.phone index: {e}")
     db.candidates.create_index("current_phase")
     db.candidates.create_index([("state", ASCENDING), ("district", ASCENDING)])
 

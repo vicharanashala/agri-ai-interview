@@ -75,7 +75,7 @@
   align-items: center;
   position: sticky;
   top: 0;
-  z-index: 100;
+  z-index: 1100;
   box-shadow: 0 1px 4px 0 rgba(0, 0, 0, 0.03);
   flex-shrink: 0;
 }
@@ -1818,5 +1818,240 @@
   .speechBubble::before,
   .speechBubble::after {
     display: none !important;
+  }
+}
+
+
+/* ─── All Steps Completed Central Banner Modal ───────────── */
+.completionOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+  box-sizing: border-box;
+  animation: completionOverlayFadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes completionOverlayFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.completionDialog {
+  background: #ffffff;
+  border: 1.5px solid #a7f3d0;
+  border-radius: 28px;
+  width: min(500px, 86vh, 92vw);
+  aspect-ratio: 1 / 1;
+  box-shadow: 0 25px 50px -12px rgba(16, 185, 129, 0.25), 0 0 0 1px rgba(16, 185, 129, 0.12);
+  animation: completionModalPop 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+@keyframes completionModalPop {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.completionHeader {
+  background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%);
+  border-bottom: 1px solid #dcfce7;
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.completionBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #dcfce7;
+  color: #15803d;
+  font-size: 13.5px;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  border: 1px solid #86efac;
+}
+
+.completionBadgeDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.25);
+  display: inline-block;
+}
+
+.completionProgressText {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #047857;
+}
+
+.completionBannerContent {
+  background: #f3faf6;
+  padding: 22px 26px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  flex: 1;
+  gap: 16px;
+  box-sizing: border-box;
+}
+
+.completionBannerContent .mascotSection {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+  width: 100%;
+  flex: 0 0 auto;
+}
+
+.completionBannerContent .sproutMascotWrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.completionBannerContent .sproutMascotSvg {
+  width: 80px;
+  height: 88px;
+}
+
+.completionBannerContent .speechBubble {
+  background: #ffffff;
+  border: 1px solid #d1fae5;
+  border-radius: 18px;
+  padding: 12px 20px;
+  font-size: 14.5px;
+  color: #1e293b;
+  line-height: 1.45;
+  position: relative;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.06);
+  max-width: 95%;
+  text-align: center;
+}
+
+/* Speech bubble arrow pointing up towards Sprout mascot */
+.completionBannerContent .speechBubble::before {
+  top: -7px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-top: none;
+  border-bottom: 8px solid #ffffff;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+}
+
+.completionBannerContent .speechBubble::after {
+  top: -9px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-top: none;
+  border-bottom: 9px solid #d1fae5;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+}
+
+.completionBannerContent .bannerDivider {
+  width: 100%;
+  height: 1px;
+  background-color: #cbd5e1;
+  opacity: 0.6;
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.completionBannerContent .tipSection {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  background: #ffffff;
+  border: 1px solid #d1fae5;
+  border-radius: 18px;
+  padding: 14px 18px;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.04);
+  box-sizing: border-box;
+  flex: 0 0 auto;
+}
+
+.completionBannerContent .tipIcon {
+  font-size: 22px;
+  flex-shrink: 0;
+  line-height: 1;
+  margin-top: 2px;
+}
+
+.completionBannerContent .tipContent {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+}
+
+.completionBannerContent .tipLabel {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #047857;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.completionBannerContent .tipText {
+  font-size: 13.5px;
+  color: #475569;
+  line-height: 1.45;
+  margin: 0;
+}
+
+@media (max-width: 480px) {
+  .completionDialog {
+    border-radius: 20px;
+    width: 94vw;
+    aspect-ratio: auto;
+    min-height: auto;
+  }
+  .completionHeader {
+    padding: 12px 16px;
+  }
+  .completionBannerContent {
+    padding: 18px 16px;
+    gap: 14px;
+  }
+  .completionBannerContent .speechBubble {
+    font-size: 13.5px;
+    padding: 10px 14px;
+  }
+  .completionBannerContent .tipText {
+    font-size: 13px;
   }
 }

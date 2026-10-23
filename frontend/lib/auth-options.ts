@@ -38,7 +38,11 @@ export const authOptions = {
           body: JSON.stringify({ email: credentials.email, password: credentials.password }),
         })
 
-        if (!res.ok) return null
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}))
+          const errorMsg = errData.detail || errData.error || 'Invalid email or password'
+          throw new Error(errorMsg)
+        }
         const user = await res.json()
         return { id: user.id, email: user.email, name: user.name }
       },

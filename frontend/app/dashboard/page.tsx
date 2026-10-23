@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -541,6 +541,11 @@ export default function DashboardPage() {
   }, [isLoading, currentPhase, documentsSubmitted, hasPassed, attempts.length]);
 
   const handlePhaseClick = async (phase: PhaseInfo) => {
+    // Once documents and all journey steps are completed, candidate does not need to click any phases
+    if (documentsSubmitted) {
+      return;
+    }
+
     // Allow clicking on current or completed phases
     if (phase.status === 'current' || phase.status === 'completed') {
       // If Phase 2 (Start Interview) is completed, show popup
@@ -1135,6 +1140,42 @@ export default function DashboardPage() {
                 {/* Big Happy Smile */}
                 <path d="M75 70 Q80 77 85 70" stroke="#1b4332" strokeWidth="2.5" strokeLinecap="round" fill="none" />
               </svg>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Centered Completion Banner Modal (shown when documents submitted & congrats banner has finished) */}
+      {documentsSubmitted && !celebrationPhase && (
+        <div className={styles.completionOverlay} aria-modal="true" role="dialog">
+          <div className={styles.completionDialog} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.completionHeader}>
+              <div className={styles.completionBadge}>
+                <span className={styles.completionBadgeDot} />
+                <span>Journey Complete</span>
+              </div>
+              <span className={styles.completionProgressText}>6 / 6 Steps Completed ✨</span>
+            </div>
+
+            <div className={styles.completionBannerContent}>
+              <div className={styles.mascotSection}>
+                <div className={styles.sproutMascotWrapper}>
+                  <SproutMascot />
+                </div>
+                <div className={styles.speechBubble}>
+                  {getMascotMessage()}
+                </div>
+              </div>
+
+              <div className={styles.bannerDivider} />
+
+              <div className={styles.tipSection}>
+                <span className={styles.tipIcon}>💡</span>
+                <div className={styles.tipContent}>
+                  <span className={styles.tipLabel}>Next Steps</span>
+                  <p className={styles.tipText}>{getTipMessage()}</p>
+                </div>
+              </div>
             </div>
           </div>
         </div>

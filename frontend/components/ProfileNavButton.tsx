@@ -23,6 +23,7 @@ export default function ProfileNavButton({
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [currentPhase, setCurrentPhase] = useState('onboarding');
+  const [documentsSubmitted, setDocumentsSubmitted] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => {
@@ -38,6 +39,7 @@ export default function ProfileNavButton({
             setFullName(data.fullName);
             setEmail(data.email || '');
             setCurrentPhase(data.currentPhase || 'onboarding');
+            setDocumentsSubmitted(Boolean(data.documentsSubmitted));
             if (data.currentPhase !== 'onboarding') {
               setIsOnboardingDone(true);
               localStorage.setItem('onboardingCompleted', 'true');
@@ -167,7 +169,9 @@ export default function ProfileNavButton({
             <div className={styles.dropdownHeader}>
               <p className={styles.dropdownUserName}>{fullName || 'Candidate'}</p>
               {email && <p className={styles.dropdownUserEmail}>{email}</p>}
-              <span className={styles.phaseBadge}>Phase: {currentPhase}</span>
+              {!documentsSubmitted && (
+                <span className={styles.phaseBadge}>Phase: {currentPhase}</span>
+              )}
             </div>
 
             <div className={styles.menuList}>

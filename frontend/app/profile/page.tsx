@@ -44,6 +44,7 @@ export default function ProfilePage() {
   const [farmSize, setFarmSize] = useState('');
   const [primaryExpertise, setPrimaryExpertise] = useState('');
   const [currentPhase, setCurrentPhase] = useState('onboarding');
+  const [documentsSubmitted, setDocumentsSubmitted] = useState(false);
   const [educationList, setEducationList] = useState<EducationItem[]>([]);
   
   // Resume state
@@ -83,6 +84,7 @@ export default function ProfilePage() {
           setFarmSize(data.farmSize || '');
           setPrimaryExpertise(data.primaryExpertise || '');
           setCurrentPhase(data.currentPhase || 'onboarding');
+          setDocumentsSubmitted(Boolean(data.documentsSubmitted));
 
           // Consent info
           setConsentAccepted(Boolean(data.consentAccepted || data.documentsSubmitted));
@@ -309,7 +311,9 @@ export default function ProfilePage() {
             </div>
           </div>
           <div className={styles.heroBadges}>
-            <span className={styles.phaseBadge}>Phase: {currentPhase}</span>
+            {!documentsSubmitted && (
+              <span className={styles.phaseBadge}>Phase: {currentPhase}</span>
+            )}
           </div>
         </div>
 

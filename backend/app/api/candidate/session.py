@@ -67,12 +67,20 @@ async def create_session(request: Request, response: Response):
     if not user:
         raise HTTPException(status_code=401, detail="Invalid session establishment")
 
+    if user.get("isdeleted") or user.get("is_deleted"):
+        raise HTTPException(status_code=403, detail="Account is deactivated")
+
     # user_id is stored as string in candidates, so convert consistently
     user_id_str = str(user["_id"])
     candidate = db.candidates.find_one({
         "user_id": {"$in": [user_id_str, user["_id"]]},
+        "$or": [{"isdeleted": {"$ne": True}}, {"is_deleted": {"$ne": True}}]
     })
     if not candidate:
+        candidate = db.candidates.find_one({
+            "user_id": {"$in": [user_id_str, user["_id"]]},
+        })
+    if not candidate or candidate.get("isdeleted") or candidate.get("is_deleted"):
         raise HTTPException(status_code=401, detail="Invalid session establishment")
 
     user_id = str(user["_id"])

@@ -54,6 +54,7 @@ interface UploadedFile {
   type: string;
   data: string;
   file: File;
+  validationToken: string;
 }
 
 type FileMap = Record<string, UploadedFile[]>;
@@ -234,6 +235,14 @@ export default function UploadDocumentsPage() {
         return;
       }
 
+      if (!data.validation_token) {
+        setErrors((prev) => ({
+          ...prev,
+          [fieldKey]: 'Validation did not return a receipt. Please choose the file again.',
+        }));
+        return;
+      }
+
       // 4. AI Approved! Convert to Base64 and add to UI state
       const [base64, sizeStr] = await Promise.all([
         fileToBase64(file),
@@ -246,6 +255,7 @@ export default function UploadDocumentsPage() {
         type: file.type || 'application/octet-stream',
         data: base64,
         file,
+        validationToken: data.validation_token,
       };
 
       setFiles((prev) =>
@@ -281,6 +291,7 @@ export default function UploadDocumentsPage() {
       for (const field of ALL_FIELDS) {
         for (const uploaded of files[field.key]) {
           formData.append(field.key, uploaded.file);
+          formData.append(`${field.key}_validation_token`, uploaded.validationToken);
         }
       }
 

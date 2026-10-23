@@ -43,6 +43,7 @@ jobs:
           push: true
           platforms: linux/amd64
           provenance: false
+          outputs: type=image,oci-mediatypes=false
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.BACKEND_IMAGE }}:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }}
@@ -73,6 +74,7 @@ jobs:
           push: true
           platforms: linux/amd64
           provenance: false
+          outputs: type=image,oci-mediatypes=false
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.FRONTEND_IMAGE }}:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}

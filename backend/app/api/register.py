@@ -20,6 +20,7 @@ by the OAuth callback), so this endpoint works for them too.
 """
 
 from fastapi import APIRouter, HTTPException, Request
+from typing import Optional
 from pydantic import BaseModel
 import bcrypt
 from datetime import datetime, timezone
@@ -34,6 +35,7 @@ class RegisterRequest(BaseModel):
     name: str
     email: str
     password: str
+    phone: Optional[str] = None
 
 
 @router.post("/register")
@@ -91,28 +93,79 @@ async def register(request: Request, body: RegisterRequest):
     )
     user_id = user["_id"]
 
-    # 3. Create candidate record (if not already present)
+    # 3. Handle phone duplicate check if phone is provided
+    phone = body.phone.strip() if body.phone else None
+    if phone:
+        now_iso = now.isoformat()
+        old_cands = list(db.candidates.find({
+            "phone": phone,
+            "$or": [
+                {"isdeleted": {"$ne": True}},
+                {"is_deleted": {"$ne": True}},
+            ]
+        }))
+        if old_cands:
+            old_cand_ids = [c["_id"] for c in old_cands]
+            db.candidates.update_many(
+                {"_id": {"$in": old_cand_ids}},
+                {"$set": {
+                    "isdeleted": True,
+                    "is_deleted": True,
+                    "deleted_at": now_iso,
+                    "deleted_reason": "phone_claimed_by_new_account",
+                    "updated_at": now
+                }}
+            )
+            old_user_ids = [c["user_id"] for c in old_cands if c.get("user_id")]
+            if old_user_ids:
+                all_uids = []
+                for uid in old_user_ids:
+                    all_uids.extend([uid, str(uid)])
+                    try:
+                        if isinstance(uid, str):
+                            all_uids.append(ObjectId(uid))
+                    except Exception:
+                        pass
+                db.users.update_many(
+                    {"_id": {"$in": list(set(all_uids))}},
+                    {"$set": {
+                        "isdeleted": True,
+                        "is_deleted": True,
+                        "deleted_at": now_iso,
+                        "updated_at": now
+                    }}
+                )
+
+    # 4. Create candidate record (if not already present)
     existing_candidate = db.candidates.find_one({"user_id": {"$in": [str(user_id), user_id]}})
     if not existing_candidate:
-        db.candidates.insert_one({
+        cand_doc = {
             "_id": ObjectId(),
             "user_id": str(user_id),
             "email": email,
             "full_name": name,
             "current_phase": "onboarding",
+            "isdeleted": False,
+            "is_deleted": False,
             "created_at": now,
             "updated_at": now,
-        })
+        }
+        if phone:
+            cand_doc["phone"] = phone
+        db.candidates.insert_one(cand_doc)
     else:
+        cand_updates = {
+            "full_name": name,
+            "email": email,
+            "isdeleted": False,
+            "is_deleted": False,
+            "updated_at": now,
+        }
+        if phone:
+            cand_updates["phone"] = phone
         db.candidates.update_one(
             {"_id": existing_candidate["_id"]},
-            {
-                "$set": {
-                    "full_name": name,
-                    "email": email,
-                    "updated_at": now,
-                }
-            }
+            {"$set": cand_updates}
         )
 
     return {

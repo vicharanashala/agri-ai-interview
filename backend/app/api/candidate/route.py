@@ -21,6 +21,18 @@ def _to_objectid(id_value) -> ObjectId:
     if isinstance(id_value, ObjectId):
         return id_value
     return ObjectId(id_value)
+
+
+def _get_id_variants(val) -> list:
+    if not val:
+        return []
+    variants = [val, str(val)]
+    try:
+        if isinstance(val, str):
+            variants.append(ObjectId(val))
+    except Exception:
+        pass
+    return list(set(variants))
 import bcrypt
 import uuid
 
@@ -70,13 +82,20 @@ def _get_candidate_id_with_email_fallback(request: Request) -> str:
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
     user_id_str = str(user["_id"])
-    candidate = db.candidates.find_one({"user_id": {"$in": [user_id_str, user["_id"]]}})
+    candidate = db.candidates.find_one({
+        "user_id": {"$in": [user_id_str, user["_id"]]},
+        "$or": [{"isdeleted": {"$ne": True}}, {"is_deleted": {"$ne": True}}]
+    })
+    if not candidate:
+        candidate = db.candidates.find_one({"user_id": {"$in": [user_id_str, user["_id"]]}})
     if not candidate:
         # New user — create candidate record first
         from bson import ObjectId
         result = db.candidates.insert_one({
             "user_id": user_id_str,
             "current_phase": "onboarding",
+            "isdeleted": False,
+            "is_deleted": False,
             "created_at": datetime.now(timezone.utc),
             "updated_at": datetime.now(timezone.utc),
         })
@@ -186,6 +205,8 @@ class CandidateProfileResponse(BaseModel):
     declarations: Optional[dict] = None
     profileCompleted: Optional[bool] = False
     profileCompletedAt: Optional[str] = None
+    isdeleted: Optional[bool] = False
+    is_deleted: Optional[bool] = False
 
 
 class CandidatePatchRequest(BaseModel):
@@ -240,6 +261,12 @@ async def verify_password(request: Request, body: dict):
                    "Check your inbox for the verification code, or request a new one.",
         )
 
+    if user.get("isdeleted") or user.get("is_deleted"):
+        raise HTTPException(
+            status_code=403,
+            detail="This account has been deactivated because its phone number was registered to another account."
+        )
+
     if not bcrypt.checkpw(password.encode("utf-8"), user["password"].encode("utf-8")):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
@@ -286,6 +313,65 @@ async def upsert_candidate(request: Request, body: OnboardingRequest):
 
     if not cand.get("profile_completed_at"):
         updates["profile_completed_at"] = datetime.now(timezone.utc)
+
+    # Phone duplicate check: If another account already has this phone number,
+    # mark that account as isdeleted: True and allow this new account to use the phone.
+    phone = updates.get("phone")
+    if phone:
+        phone = str(phone).strip()
+        updates["phone"] = phone
+        now_dt = datetime.now(timezone.utc)
+        now_iso = now_dt.isoformat()
+
+        old_cands = list(db.candidates.find(
+            {
+                "phone": phone,
+                "_id": {"$nin": id_variants},
+                "$or": [
+                    {"isdeleted": {"$ne": True}},
+                    {"is_deleted": {"$ne": True}},
+                ]
+            },
+            {"_id": 1, "user_id": 1}
+        ))
+
+        if old_cands:
+            old_cand_ids = [c["_id"] for c in old_cands]
+            db.candidates.update_many(
+                {"_id": {"$in": old_cand_ids}},
+                {"$set": {
+                    "isdeleted": True,
+                    "is_deleted": True,
+                    "deleted_at": now_iso,
+                    "deleted_reason": "phone_claimed_by_new_account",
+                    "updated_at": now_dt
+                }}
+            )
+
+            old_user_ids = [c["user_id"] for c in old_cands if c.get("user_id")]
+            if old_user_ids:
+                all_uids = []
+                for uid in old_user_ids:
+                    all_uids.extend(_get_id_variants(uid))
+                db.users.update_many(
+                    {"_id": {"$in": list(set(all_uids))}},
+                    {"$set": {
+                        "isdeleted": True,
+                        "is_deleted": True,
+                        "deleted_at": now_iso,
+                        "updated_at": now_dt
+                    }}
+                )
+
+            # Invalidate active sessions for deleted candidate(s)
+            try:
+                cand_id_strs = [str(cid) for cid in old_cand_ids]
+                db.sessions.delete_many({"candidate_id": {"$in": cand_id_strs}})
+            except Exception:
+                pass
+
+        updates["isdeleted"] = False
+        updates["is_deleted"] = False
 
     try:
         from pymongo.errors import DuplicateKeyError
@@ -336,7 +422,17 @@ async def get_candidate_profile(email: Optional[str] = Query(None)):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    cand = db.candidates.find_one({"user_id": {"$in": [str(user["_id"]), user["_id"]]}})
+    cand = db.candidates.find_one({
+        "user_id": {"$in": [str(user["_id"]), user["_id"]]},
+        "$or": [{"isdeleted": {"$ne": True}}, {"is_deleted": {"$ne": True}}]
+    })
+    if not cand:
+        cand = db.candidates.find_one({
+            "email": email.lower().strip(),
+            "$or": [{"isdeleted": {"$ne": True}}, {"is_deleted": {"$ne": True}}]
+        })
+    if not cand:
+        cand = db.candidates.find_one({"user_id": {"$in": [str(user["_id"]), user["_id"]]}})
     if not cand:
         cand = db.candidates.find_one({"email": email.lower().strip()})
 

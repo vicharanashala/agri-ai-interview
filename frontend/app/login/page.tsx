@@ -175,7 +175,11 @@ function LoginPageInner() {
       });
 
       if (result?.error) {
-        setSignInError('Invalid email or password');
+        const errorMsg =
+          result.error === 'CredentialsSignin'
+            ? 'Invalid email or password'
+            : result.error;
+        setSignInError(errorMsg);
         setSignInLoading(false);
         return;
       }

@@ -39,6 +39,14 @@ class Settings(BaseSettings):
     LLM_BASE_URL: str = "https://api.minimax.io/v1/"
     LLM_API_KEY: str = ""
 
+    # Document vision validation
+    DOCUMENT_VISION_URL: str = "http://100.100.108.44:8013/v1/chat/completions"
+    DOCUMENT_VISION_MODEL: str = "google/gemma-4-26B-A4B-it"
+    DOCUMENT_VISION_TIMEOUT_SECONDS: float = 45.0
+    DOCUMENT_PDF_MAX_PAGES: int = 8
+    DOCUMENT_VALIDATION_TOKEN_TTL_SECONDS: int = 7200
+    DOCUMENT_VALIDATION_SECRET: str = ""
+
     # Storage
     STORAGE_BACKEND: str = "local"  # local | gcs
     STORAGE_LOCAL_PATH: str = "./uploads"

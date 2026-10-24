@@ -604,6 +604,15 @@ async def validate_single_document(
     file_bytes = await file.read()
     try:
         _validate_file_bytes(file.filename or "", file.content_type or "", field_name, file_bytes)
+
+        # Bypass AI Vision validation for updated_resume to prevent memory spikes (pdf2image rasterization)
+        # and Cloud Run 503 Service Unavailable errors. Issue validation receipt token directly.
+        if field_name == "updated_resume":
+            return {
+                "success": True,
+                "validation_token": _issue_validation_token(candidate_id, field_name, file_bytes),
+            }
+
         is_valid, reason = await _run_ai_validation(file_bytes, file.filename or "", field_name)
     except HTTPException as exc:
         return {"success": False, "reason": exc.detail}

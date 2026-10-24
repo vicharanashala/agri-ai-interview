@@ -197,6 +197,7 @@ class CandidateProfileResponse(BaseModel):
     moduleCompleted: Optional[bool] = False
     passedAndVisitedSummary: Optional[bool] = False
     documentsSubmitted: Optional[bool] = False
+    documentsSubmittedAt: Optional[str] = None
     consentAccepted: Optional[bool] = False
     consentTimestamp: Optional[str] = None
     consentWithdrawn: Optional[bool] = False
@@ -217,10 +218,6 @@ class CandidatePatchRequest(BaseModel):
     documentsSubmitted: Optional[bool] = None
     foundationCourseCompleted: Optional[bool] = None
     moduleCompleted: Optional[bool] = None
-    consentAccepted: Optional[bool] = None
-    consentTimestamp: Optional[str] = None
-    consentWithdrawn: Optional[bool] = None
-    consentWithdrawnAt: Optional[str] = None
     declarationAccepted: Optional[bool] = None
     declarations: Optional[dict] = None
 
@@ -459,12 +456,17 @@ async def get_candidate_profile(email: Optional[str] = Query(None)):
             declarations=declarations_dict
         )
 
-    # Sync full_name / email to candidate document if missing
+    # Sync full_name / email / declaration data to candidate document if missing
     updates_to_cand = {}
     if resolved_full_name and not cand.get("full_name"):
         updates_to_cand["full_name"] = resolved_full_name
     if resolved_email and not cand.get("email"):
         updates_to_cand["email"] = resolved_email
+    if has_all_declarations and not cand.get("declaration_accepted"):
+        decl_time = user.get("declarationAcceptedAt") or datetime.now(timezone.utc).isoformat()
+        updates_to_cand["declaration_accepted"] = True
+        updates_to_cand["declaration_accepted_at"] = decl_time
+        updates_to_cand["declarations"] = declarations_dict
     if updates_to_cand:
         db.candidates.update_one({"_id": cand["_id"]}, {"$set": updates_to_cand})
 
@@ -530,8 +532,19 @@ async def get_candidate_profile(email: Optional[str] = Query(None)):
         moduleCompleted=cand.get("module_completed", False),
         passedAndVisitedSummary=cand.get("passed_and_visited_summary", False),
         documentsSubmitted=cand.get("documents_submitted", False),
-        consentAccepted=cand.get("consent_accepted", False),
-        consentTimestamp=cand.get("consent_timestamp"),
+        documentsSubmittedAt=cand.get("documents_submitted_at"),
+        consentAccepted=(
+            False if cand.get("consent_withdrawn", False)
+            else bool(
+                cand.get("consent_accepted", False)
+                or (declarations_dict.get("slide4_documentVerificationDPDP", {}).get("accepted", False) if isinstance(declarations_dict, dict) else False)
+            )
+        ),
+        consentTimestamp=(
+            cand.get("consent_timestamp")
+            or (declarations_dict.get("slide4_documentVerificationDPDP", {}).get("acceptedAt") if isinstance(declarations_dict, dict) else None)
+            or cand.get("declaration_accepted_at")
+        ),
         consentWithdrawn=cand.get("consent_withdrawn", False),
         consentWithdrawnAt=cand.get("consent_withdrawn_at"),
         declarationAccepted=has_all_declarations,
@@ -624,24 +637,13 @@ async def patch_candidate(request: Request, body: CandidatePatchRequest):
         updates["joining_details_visited"] = body.joiningDetailsVisited
     if body.documentsSubmitted is not None:
         updates["documents_submitted"] = body.documentsSubmitted
+        if body.documentsSubmitted:
+            updates["documents_submitted_at"] = datetime.now(timezone.utc).isoformat()
     if body.foundationCourseCompleted is not None:
         updates["foundation_course_completed"] = body.foundationCourseCompleted
     if body.moduleCompleted is not None:
         updates["module_completed"] = body.moduleCompleted
-    if body.consentAccepted is not None:
-        updates["consent_accepted"] = body.consentAccepted
-        if body.consentAccepted:
-            updates["consent_withdrawn"] = False
-            updates["consent_status"] = "granted"
-    if body.consentTimestamp is not None:
-        updates["consent_timestamp"] = body.consentTimestamp
-    if body.consentWithdrawn is not None:
-        updates["consent_withdrawn"] = body.consentWithdrawn
-        if body.consentWithdrawn:
-            updates["consent_accepted"] = False
-            updates["consent_status"] = "withdrawn"
-    if body.consentWithdrawnAt is not None:
-        updates["consent_withdrawn_at"] = body.consentWithdrawnAt
+
     if body.declarationAccepted is not None:
         updates["declarationAccepted"] = body.declarationAccepted
 
@@ -810,25 +812,53 @@ async def accept_declaration(request: Request, body: DeclarationRequest):
 
     user_update = {
         'declarationAccepted': has_all,
-        'allDeclarationsAccepted': has_all,
         'declarationAcceptedAt': now_iso,
         'declarations': consents_data,
     }
-    db.users.update_one({'_id': user['_id']}, {'$set': user_update})
+    db.users.update_one(
+        {'_id': user['_id']},
+        {
+            '$set': user_update,
+            '$unset': {'allDeclarationsAccepted': ''}
+        }
+    )
 
-    # Also update candidate document if already created
+    # Also update candidate document if already created, or create it if not present
     cand = db.candidates.find_one({'user_id': {'$in': [str(user['_id']), user['_id']]}})
     if not cand:
         cand = db.candidates.find_one({'email': email.lower().strip()})
     if cand:
         cand_update = {
             'declaration_accepted': has_all,
-            'allDeclarationsAccepted': has_all,
             'declaration_accepted_at': now_iso,
             'declarations': consents_data,
-            'consent_accepted': True,
-            'consent_timestamp': now_iso,
         }
-        db.candidates.update_one({'_id': cand['_id']}, {'$set': cand_update})
+        db.candidates.update_one(
+            {'_id': cand['_id']},
+            {
+                '$set': cand_update,
+                '$unset': {
+                    'allDeclarationsAccepted': '',
+                    'consent_accepted': '',
+                    'consent_timestamp': '',
+                }
+            }
+        )
+    else:
+        cand_doc = {
+            '_id': ObjectId(),
+            'user_id': str(user['_id']),
+            'email': email.lower().strip(),
+            'full_name': user.get('name') or user.get('fullName') or user.get('full_name') or '',
+            'current_phase': 'onboarding',
+            'declaration_accepted': has_all,
+            'declaration_accepted_at': now_iso,
+            'declarations': consents_data,
+            'isdeleted': False,
+            'is_deleted': False,
+            'created_at': datetime.now(timezone.utc),
+            'updated_at': datetime.now(timezone.utc),
+        }
+        db.candidates.insert_one(cand_doc)
 
-    return {'success': True, 'allDeclarationsAccepted': has_all}
+    return {'success': True, 'declarationAccepted': has_all}

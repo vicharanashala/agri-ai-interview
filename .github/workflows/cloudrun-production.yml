@@ -97,6 +97,24 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_GH_SA_KEY }}
 
+      - name: Wait for image on mirror.gcr.io
+        run: |
+          python3 -c '
+          import urllib.request, json, time, sys
+          repo, tag = sys.argv[1], sys.argv[2]
+          print(f"Waiting for {repo}:{tag} on mirror.gcr.io...")
+          for i in range(1, 19):
+              try:
+                  t = json.loads(urllib.request.urlopen(f"https://mirror.gcr.io/v2/token?service=mirror.gcr.io&scope=repository:{repo}:pull", timeout=10).read().decode())["token"]
+                  req = urllib.request.Request(f"https://mirror.gcr.io/v2/{repo}/manifests/{tag}", headers={"Authorization": f"Bearer {t}", "Accept": "application/vnd.docker.distribution.manifest.v2+json"})
+                  if urllib.request.urlopen(req, timeout=10).status == 200:
+                      print(f"Image is ready on mirror.gcr.io! (attempt {i})")
+                      sys.exit(0)
+              except Exception as e:
+                  print(f"Attempt {i}/18: {e}. Retrying in 10s...")
+                  time.sleep(10)
+          ' "${{ secrets.DOCKERHUB_USERNAME }}/${{ env.BACKEND_IMAGE }}" "${{ github.sha }}"
+
       - name: Deploy to Cloud Run
         uses: google-github-actions/deploy-cloudrun@v1
         with:
@@ -144,6 +162,24 @@ jobs:
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_GH_SA_KEY }}
+
+      - name: Wait for image on mirror.gcr.io
+        run: |
+          python3 -c '
+          import urllib.request, json, time, sys
+          repo, tag = sys.argv[1], sys.argv[2]
+          print(f"Waiting for {repo}:{tag} on mirror.gcr.io...")
+          for i in range(1, 19):
+              try:
+                  t = json.loads(urllib.request.urlopen(f"https://mirror.gcr.io/v2/token?service=mirror.gcr.io&scope=repository:{repo}:pull", timeout=10).read().decode())["token"]
+                  req = urllib.request.Request(f"https://mirror.gcr.io/v2/{repo}/manifests/{tag}", headers={"Authorization": f"Bearer {t}", "Accept": "application/vnd.docker.distribution.manifest.v2+json"})
+                  if urllib.request.urlopen(req, timeout=10).status == 200:
+                      print(f"Image is ready on mirror.gcr.io! (attempt {i})")
+                      sys.exit(0)
+              except Exception as e:
+                  print(f"Attempt {i}/18: {e}. Retrying in 10s...")
+                  time.sleep(10)
+          ' "${{ secrets.DOCKERHUB_USERNAME }}/${{ env.FRONTEND_IMAGE }}" "${{ github.sha }}"
 
       - name: Deploy to Cloud Run
         uses: google-github-actions/deploy-cloudrun@v1

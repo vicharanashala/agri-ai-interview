@@ -317,8 +317,6 @@ export default function UploadDocumentsPage() {
 
       await syncPhaseToDb(6, {
         documentsSubmitted: true,
-        consentAccepted: true,
-        consentTimestamp: new Date().toISOString(),
       });
       setSubmitSuccess(true);
     } catch (err: unknown) {

@@ -87,7 +87,7 @@ export default function ProfilePage() {
           setDocumentsSubmitted(Boolean(data.documentsSubmitted));
 
           // Consent info
-          setConsentAccepted(Boolean(data.consentAccepted || data.documentsSubmitted));
+          setConsentAccepted(Boolean(data.consentAccepted));
           setConsentTimestamp(data.consentTimestamp || null);
           setConsentWithdrawn(Boolean(data.consentWithdrawn));
           setConsentWithdrawnAt(data.consentWithdrawnAt || null);
@@ -404,7 +404,7 @@ export default function ProfilePage() {
               </>
             ) : (
               <p className={styles.consentDescription}>
-                You have not submitted documents yet. You will be prompted to review and grant consent during Phase 5 (Document Upload).
+                Consent has not been granted yet. Please complete the declaration form after login.
               </p>
             )}
           </div>

@@ -26,6 +26,7 @@ export async function syncPhaseToDb(
     consentTimestamp?: string
     consentWithdrawn?: boolean
     consentWithdrawnAt?: string
+    celebratedPhases?: number[]
   }
 ): Promise<void> {
   try {

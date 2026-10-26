@@ -87,17 +87,23 @@ async def get_attempts(request: Request, email: str = Query(default=None)):
             deadline = datetime.fromtimestamp(deadline_ms / 1000, tz=timezone.utc)
             cooldown_until = deadline.isoformat() + "Z"
 
-    attempts = [
-        {
+    attempts = []
+    for s in sessions:
+        res = s.get("result")
+        score_val = s.get("overall_score")
+        if score_val is None:
+            score_val = s.get("score")
+        if res == "FAIL" and score_val is None:
+            score_val = 0
+
+        attempts.append({
             "id": str(s["_id"]),
             "status": s.get("status"),
-            "overall_score": s.get("overall_score"),
-            "result": s.get("result"),
+            "overall_score": score_val,
+            "result": res,
             "completedAt": s.get("completed_at").isoformat() + "Z" if s.get("completed_at") else None,
             "startedAt": s.get("started_at").isoformat() + "Z" if s.get("started_at") else None,
-        }
-        for s in sessions
-    ]
+        })
 
     return {"attempts": attempts, "cooldownUntil": cooldown_until, "cooldownDays": cooldown_days}
 
@@ -149,12 +155,15 @@ async def get_latest_session_summary(request: Request):
         if deadline_ms > now_ms:
             cooldown_rem = max(0, int((deadline_ms - now_ms) / 1000))
 
+    res = session.get("result")
     score_val = session.get("overall_score")
     if score_val is None:
         score_val = session.get("score")
+    if res == "FAIL" and score_val is None:
+        score_val = 0
 
     return {
-        "result": session.get("result"),
+        "result": res,
         "score": score_val,
         "end_reason": session.get("end_reason"),
         "cooldown_remaining_seconds": cooldown_rem,

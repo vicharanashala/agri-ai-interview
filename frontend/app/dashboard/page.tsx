@@ -9,6 +9,7 @@ import HowToUseModal from '@/components/HowToUseModal';
 import BrandLogos from '@/components/BrandLogos';
 import ProfileNavButton from '@/components/ProfileNavButton';
 import confetti from 'canvas-confetti';
+import { syncPhaseToDb } from '@/lib/phaseSync';
 
 type Phase = 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -219,6 +220,10 @@ function triggerCelebrationConfetti() {
 export default function DashboardPage() {
   const [currentPhase, setCurrentPhase] = useState<Phase>(1);
   const [documentsSubmitted, setDocumentsSubmitted] = useState(false);
+  const [foundationCompleted, setFoundationCompleted] = useState(false);
+  const [moduleCompleted, setModuleCompleted] = useState(false);
+  const [hasCompletedDocsCelebration, setHasCompletedDocsCelebration] = useState(false);
+  const dbCelebratedPhasesRef = React.useRef<number[]>([]);
   const [celebrationPhase, setCelebrationPhase] = useState<string | null>(null);
   const [isExitingCelebration, setIsExitingCelebration] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -277,17 +282,45 @@ export default function DashboardPage() {
 
         // 3. Pull milestone flags from DB and localStorage
         const docsSubmitted       = !!candidate.documentsSubmitted;
-        const foundationCompleted = lsFoundationCompleted || !!candidate.foundationCourseCompleted;
+        const fcDone              = lsFoundationCompleted || !!candidate.foundationCourseCompleted;
         const lsModuleCompleted   = localStorage.getItem('moduleCompleted') === 'true' || localStorage.getItem('moduleCompleted') === 'completed';
-        const moduleCompleted     = lsModuleCompleted || !!candidate.moduleCompleted;
+        const modDone             = lsModuleCompleted || !!candidate.moduleCompleted;
         setDocumentsSubmitted(docsSubmitted);
+        setFoundationCompleted(fcDone);
+        setModuleCompleted(modDone);
+
+        const dbCelebrated: number[] = candidate.celebratedPhases ?? [];
+        dbCelebratedPhasesRef.current = dbCelebrated;
+
+        const candidateKey =
+          sessionStorage.getItem('candidateId') ||
+          sessionStorage.getItem('candidateEmail') ||
+          localStorage.getItem('candidateEmail') ||
+          localStorage.getItem('candidateName') ||
+          candidate.email ||
+          candidate.id ||
+          'default_candidate';
+        const storageKey = `celebrated_completed_phases_${candidateKey}`;
+        let celebratedInLs = false;
+        try {
+          const stored = localStorage.getItem(storageKey);
+          if (stored && JSON.parse(stored).includes(6)) {
+            celebratedInLs = true;
+          }
+        } catch {}
+
+        if (docsSubmitted && (dbCelebrated.includes(6) || celebratedInLs)) {
+          setHasCompletedDocsCelebration(true);
+        } else {
+          setHasCompletedDocsCelebration(false);
+        }
 
         // 4. Reconstruct actual phase from DB phase + flags
         let actualPhase: Phase = dbPhaseNum;
 
-        if (foundationCompleted && actualPhase < 5) actualPhase = 5;
-        if (moduleCompleted     && actualPhase < 6) actualPhase = 6;
-        if (docsSubmitted       && actualPhase < 6) actualPhase = 6;
+        if (fcDone  && actualPhase < 5) actualPhase = 5;
+        if (modDone && actualPhase < 6) actualPhase = 6;
+        if (docsSubmitted && actualPhase < 6) actualPhase = 6;
 
         setCurrentPhase(actualPhase);
         setHasCompletedInterview(actualPhase >= 3);
@@ -358,8 +391,14 @@ export default function DashboardPage() {
       }
     };
 
-    checkProfile();
-    loadAttempts();
+    const init = async () => {
+      try {
+        await Promise.all([checkProfile(), loadAttempts()]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    init();
   }, [router]);
 
   // ── Cooldown countdown timer ──────────────────────────────────────────────
@@ -426,13 +465,13 @@ export default function DashboardPage() {
       id: 4,
       name: 'Foundation Course',
       description: 'Complete the foundation course to unlock Ground Truth Module',
-      status: currentPhase > 4 ? 'completed' : currentPhase === 4 ? 'current' : 'locked',
+      status: (foundationCompleted || currentPhase > 4) ? 'completed' : currentPhase === 4 ? 'current' : 'locked',
     },
     {
       id: 5,
       name: 'Ground Truth Module',
       description: 'Complete the tasks on Ground Truth Module to unlock document upload',
-      status: currentPhase > 5 ? 'completed' : currentPhase === 5 ? 'current' : 'locked',
+      status: (moduleCompleted || currentPhase > 5) ? 'completed' : currentPhase === 5 ? 'current' : 'locked',
     },
     {
       id: 6,
@@ -457,6 +496,9 @@ export default function DashboardPage() {
 
     // After exit animation completes (5.4s total), clear celebration state
     const closeTimer = setTimeout(() => {
+      if (celebrationPhase === 'Upload Documents') {
+        setHasCompletedDocsCelebration(true);
+      }
       setCelebrationPhase(null);
       setIsExitingCelebration(false);
     }, 5400);
@@ -470,6 +512,9 @@ export default function DashboardPage() {
   const handleCloseCelebration = () => {
     setIsExitingCelebration(true);
     setTimeout(() => {
+      if (celebrationPhase === 'Upload Documents') {
+        setHasCompletedDocsCelebration(true);
+      }
       setCelebrationPhase(null);
       setIsExitingCelebration(false);
     }, 350);
@@ -497,48 +542,64 @@ export default function DashboardPage() {
       celebratedIds = [];
     }
 
-    // Rules:
-    // 1. Phase 3 (Interview Summary) is NEVER celebrated
-    // 2. Phase 2 (Start Interview) is ONLY celebrated if candidate PASSED (hasPassed === true)
-    //    If all 3 attempts failed, phase is completed but NO congrats/confetti
-    const eligibleCompletedPhases = phases.filter((p) => {
-      if (p.status !== 'completed') return false;
-      if (p.id === 3) return false; // Interview Summary is never celebrated
-      if (p.id === 2 && !hasPassed) return false; // 3 failed attempts: no celebration
-      return true;
-    });
+    // Merge with DB celebrated phases (source of truth surviving logout/login)
+    const dbCelebrated = dbCelebratedPhasesRef.current || [];
+    celebratedIds = Array.from(new Set([...celebratedIds, ...dbCelebrated]));
 
-    // Mute any completed phases that should not celebrate from re-evaluating
-    const allCompletedPhases = phases.filter((p) => p.status === 'completed');
-    if (allCompletedPhases.length > 0) {
-      const excludedIds = allCompletedPhases
-        .filter((p) => p.id === 3 || (p.id === 2 && !hasPassed))
-        .map((p) => p.id);
-      if (excludedIds.some((id) => !celebratedIds.includes(id))) {
-        const updated = Array.from(new Set([...celebratedIds, ...excludedIds]));
-        localStorage.setItem(storageKey, JSON.stringify(updated));
-        celebratedIds = updated;
+    // Determine highest completed milestone eligible for celebration:
+    // Phase 3 summary never celebrates. Phase 1, 2, 4, 5, 6 celebrate once upon completion.
+    let highestCompletedMilestone: { id: number; name: string } | null = null;
+
+    if (documentsSubmitted) {
+      highestCompletedMilestone = { id: 6, name: 'Upload Documents' };
+    } else if (moduleCompleted || currentPhase > 5) {
+      highestCompletedMilestone = { id: 5, name: 'Ground Truth Module' };
+    } else if (foundationCompleted || currentPhase > 4) {
+      highestCompletedMilestone = { id: 4, name: 'Foundation Course' };
+    } else if (hasPassed && currentPhase <= 4 && !foundationCompleted && !moduleCompleted && !documentsSubmitted) {
+      highestCompletedMilestone = { id: 2, name: 'Start Interview' };
+    } else if (currentPhase >= 2 && !hasPassed && attempts.length === 0) {
+      highestCompletedMilestone = { id: 1, name: 'Onboarding' };
+    }
+
+    if (!highestCompletedMilestone) {
+      return;
+    }
+
+    // If this milestone has already been celebrated, do NOT trigger again!
+    if (celebratedIds.includes(highestCompletedMilestone.id)) {
+      if (highestCompletedMilestone.id === 6) {
+        setHasCompletedDocsCelebration(true);
       }
+      return;
     }
 
-    // Find eligible completed phases that have not yet been celebrated
-    const uncelebrated = eligibleCompletedPhases.filter((p) => !celebratedIds.includes(p.id));
+    // Milestone is newly completed and uncelebrated! Celebrate it now!
+    const milestoneId = highestCompletedMilestone.id;
+    // Auto-mark this milestone and all earlier milestones as celebrated
+    const priorIds = [1, 2, 4, 5, 6].filter((id) => id <= milestoneId);
+    const updatedCelebrated = Array.from(new Set([...celebratedIds, ...priorIds]));
 
-    if (uncelebrated.length > 0) {
-      // Pick latest newly completed phase to celebrate
-      const latestCompleted = uncelebrated[uncelebrated.length - 1];
+    // Persist immediately in localStorage
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(updatedCelebrated));
+    } catch {}
 
-      // Mark all completed phases up to this point as celebrated (strictly once!)
-      const updated = Array.from(new Set([...celebratedIds, ...allCompletedPhases.map((p) => p.id)]));
-      localStorage.setItem(storageKey, JSON.stringify(updated));
+    // Update in-memory ref
+    dbCelebratedPhasesRef.current = updatedCelebrated;
 
-      // Trigger celebratory confetti and Sprout-held celebration banner
-      setTimeout(() => {
-        triggerCelebrationConfetti();
-        setCelebrationPhase(latestCompleted.name);
-      }, 500);
+    // Persist to database so it survives across sessions, refreshes, and devices
+    syncPhaseToDb(currentPhase, { celebratedPhases: updatedCelebrated });
+
+    if (milestoneId === 6) {
+      // Hold center modal hidden until celebration banner finishes
+      setHasCompletedDocsCelebration(false);
     }
-  }, [isLoading, currentPhase, documentsSubmitted, hasPassed, attempts.length]);
+
+    // Trigger celebratory banner + confetti immediately
+    triggerCelebrationConfetti();
+    setCelebrationPhase(highestCompletedMilestone.name);
+  }, [isLoading, currentPhase, documentsSubmitted, foundationCompleted, moduleCompleted, hasPassed, attempts.length]);
 
   const handlePhaseClick = async (phase: PhaseInfo) => {
     // Once documents and all journey steps are completed, candidate does not need to click any phases
@@ -598,19 +659,13 @@ export default function DashboardPage() {
   // 100% Original completion percentage calculation logic preserved
   const getCompletionPercentage = () => {
     if (documentsSubmitted) return 100;
-
-    if (currentPhase === 6) return 80;
-
-    if (currentPhase === 5) return 60;
-
+    if (moduleCompleted || currentPhase === 6) return 80;
+    if (foundationCompleted || currentPhase === 5) return 60;
     if (currentPhase === 4) return 40;
-
     if (currentPhase === 3) {
       return hasPassed ? 40 : 20;
     }
-
     if (currentPhase === 2) return 20;
-
     return 0;
   };
 
@@ -1021,17 +1076,35 @@ export default function DashboardPage() {
 
               <div className={styles.bannerContent}>
                 <span className={styles.celebrationTag}>
-                  {celebrationPhase === 'Start Interview'
+                  {celebrationPhase === 'Onboarding'
+                    ? '🎉 Onboarding Completed!'
+                    : celebrationPhase === 'Start Interview'
                     ? '🎉 Interview Passed!'
+                    : celebrationPhase === 'Foundation Course'
+                    ? '🎉 Foundation Course Completed!'
+                    : celebrationPhase === 'Ground Truth Module'
+                    ? '🎉 Ground Truth Module Completed!'
                     : celebrationPhase === 'Upload Documents'
                     ? '🎉 Document Submission Completed!'
                     : '🎉 Phase Completed!'}
                 </span>
                 <h2 className={styles.bannerTitle}>Congratulations!</h2>
                 <p className={styles.bannerMessage}>
-                  {celebrationPhase === 'Start Interview' ? (
+                  {celebrationPhase === 'Onboarding' ? (
+                    <>
+                      You completed your <strong>Onboarding</strong>! 🎉
+                    </>
+                  ) : celebrationPhase === 'Start Interview' ? (
                     <>
                       You passed your <strong>Interview</strong>! 🎉
+                    </>
+                  ) : celebrationPhase === 'Foundation Course' ? (
+                    <>
+                      You completed the <strong>Foundation Course</strong>! 🎉
+                    </>
+                  ) : celebrationPhase === 'Ground Truth Module' ? (
+                    <>
+                      You completed the <strong>Ground Truth Module</strong>! 🎉
                     </>
                   ) : celebrationPhase === 'Upload Documents' ? (
                     <>
@@ -1044,8 +1117,14 @@ export default function DashboardPage() {
                   )}
                 </p>
                 <p className={styles.bannerSub}>
-                  {celebrationPhase === 'Start Interview'
+                  {celebrationPhase === 'Onboarding'
+                    ? "Great job! Your profile is all set. You can now proceed to your AI Interview! ✨"
+                    : celebrationPhase === 'Start Interview'
                     ? "Great job! You've successfully passed the interview. Complete each step to move forward! ✨"
+                    : celebrationPhase === 'Foundation Course'
+                    ? "Awesome progress! Proceed to the Ground Truth Module to continue. ✨"
+                    : celebrationPhase === 'Ground Truth Module'
+                    ? "Fantastic! You've unlocked Document Upload. You're almost there! ✨"
                     : celebrationPhase === 'Upload Documents'
                     ? "Our hiring team will connect with you soon! 🌟"
                     : "Complete each step to move forward. You're doing great! ✨"}
@@ -1146,7 +1225,7 @@ export default function DashboardPage() {
       )}
 
       {/* Centered Completion Banner Modal (shown when documents submitted & congrats banner has finished) */}
-      {documentsSubmitted && !celebrationPhase && (
+      {documentsSubmitted && !celebrationPhase && !isExitingCelebration && hasCompletedDocsCelebration && (
         <div className={styles.completionOverlay} aria-modal="true" role="dialog">
           <div className={styles.completionDialog} onClick={(e) => e.stopPropagation()}>
             <div className={styles.completionHeader}>
@@ -1265,15 +1344,21 @@ export default function DashboardPage() {
                       minute: '2-digit',
                     }) ?? '—';
 
+                    const isEvaluating = !attempt.result || attempt.result === 'PROCESSING';
+                    const isFail = attempt.result === 'FAIL';
+                    const isPass = attempt.result === 'PASS';
+
                     const badgeClass =
-                      attempt.result === 'PASS'
+                      isPass
                         ? styles.badgePass
-                        : attempt.result === 'FAIL'
+                        : isFail
                         ? styles.badgeFail
                         : attempt.result === 'WITHDRAWN'
                         ? styles.badgeWithdrawn
                         : attempt.result === 'ANTI_CHEAT'
                         ? styles.badgeAntiCheat
+                        : isEvaluating
+                        ? styles.badgeProcessing
                         : styles.badgeCompleted;
 
                     return (
@@ -1281,18 +1366,16 @@ export default function DashboardPage() {
                         <div className={styles.modalAttemptTop}>
                           <div className={styles.attemptBadgeGroup}>
                             <span className={styles.modalAttemptNum}>Attempt #{index + 1}</span>
-                            <span className={badgeClass}>{attempt.result ?? 'COMPLETED'}</span>
+                            <span className={badgeClass}>{isEvaluating ? '⏳ PROCESSING' : attempt.result ?? 'COMPLETED'}</span>
                           </div>
-                          {attempt.overall_score != null && (
-                            <span className={styles.modalAttemptScore}>
-                              Score: <strong>{attempt.overall_score}/100</strong>
-                            </span>
-                          )}
+                          <span className={styles.modalAttemptScore}>
+                            Score: <strong>{isEvaluating ? 'Processing...' : (attempt.overall_score != null ? `${attempt.overall_score}/100` : (isFail ? '0/100' : '—'))}</strong>
+                          </span>
                         </div>
                         <div className={styles.modalAttemptBottom}>
                           <span className={styles.modalAttemptDate}>📅 {date}</span>
                           {attempt.status && (
-                            <span className={styles.modalAttemptStatus}>Status: {attempt.status}</span>
+                            <span className={styles.modalAttemptStatus}>Status: {isEvaluating ? 'evaluating' : attempt.status}</span>
                           )}
                         </div>
                       </div>

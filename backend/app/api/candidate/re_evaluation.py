@@ -186,12 +186,16 @@ async def get_candidate_attempts_history(request: Request):
         if score_val is None and s.get("evaluation"):
             score_val = s.get("evaluation", {}).get("overall_score")
 
+        res = s.get("result")
+        if res == "FAIL" and score_val is None:
+            score_val = 0
+
         history.append({
             "interviewId": session_id_str,
             "attempt": idx,
             "startedAt": _format_iso(s.get("started_at")),
             "completedAt": _format_iso(s.get("completed_at") or s.get("started_at")),
-            "result": s.get("result"),
+            "result": res,
             "score": score_val,
             "endReason": s.get("end_reason"),
             "reEvaluation": re_eval_data,

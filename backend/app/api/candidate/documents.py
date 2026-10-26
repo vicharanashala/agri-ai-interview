@@ -217,7 +217,7 @@ FIELD_RULES = {
     "aadhaar_front": "Require an Aadhaar FRONT: portrait, identity details, and Aadhaar/Government of India evidence. Reject a back side or any image containing another document.",
     "aadhaar_back": "Require an Aadhaar BACK: address plus Aadhaar or QR evidence. Reject a front side or any image containing another document.",
     "pan_front": "Require a PAN FRONT: Income Tax Department evidence, portrait, and a PAN matching five letters, four digits, one letter. Reject Aadhaar or mixed documents.",
-    "pan_back": "Require a PAN BACK with positive PAN-card back-side evidence. Reject Aadhaar front/back, unrelated card backs, and images containing more than one document.",
+    "pan_back": "Require a PAN BACK. Accept both current and legacy NSDL/UTIITSL designs. Valid back-side evidence includes a card-back layout plus 'Income Tax PAN Services Unit', UTIITSL/NSDL/PAN-service details, lost/found return instructions, Aaykar Sampark Kendra or Income Tax contact details, and a government emblem/hologram. A portrait, PAN number, or front-side identity details are not required on the back. Reject PAN fronts, Aadhaar, unrelated card backs, and mixed-document images.",
     "bank_details": "Require genuine bank proof containing a bank name plus account details (account number and/or IFSC). Passbooks and cancelled cheques are valid.",
     "updated_resume": "Require a resume/CV containing a person's education, skills, or work history.",
     "marksheet_10": "Require a Class 10/X/SSLC/Matriculation marksheet with student details and marks/grades. Reject Class 12/XII/HSC documents.",
@@ -233,11 +233,11 @@ FIELD_RULES = {
 }
 
 
-def _normalise_image(image: Any, crop_card: bool = False, max_dimension: int = 2200) -> bytes:
+def _normalise_image(image: Any, crop_content: bool = False, max_dimension: int = 2200) -> bytes:
     from PIL import Image, ImageChops, ImageOps
 
     image = ImageOps.exif_transpose(image).convert("RGB")
-    if crop_card:
+    if crop_content:
         background = Image.new("RGB", image.size, (255, 255, 255))
         diff = ImageChops.difference(image, background)
         diff = ImageChops.add(diff, diff, 2.0, -10)
@@ -257,7 +257,14 @@ def _normalise_image(image: Any, crop_card: bool = False, max_dimension: int = 2
 def _prepare_vision_images(file_bytes: bytes, filename: str, field_name: str) -> List[str]:
     from PIL import Image
 
-    crop_card = field_name in {"aadhaar_front", "aadhaar_back", "pan_front", "pan_back"}
+    crop_content = field_name in {
+        "aadhaar_front",
+        "aadhaar_back",
+        "pan_front",
+        "pan_back",
+        "marksheet_10",
+        "marksheet_12",
+    }
     school_marksheet = field_name in {"marksheet_10", "marksheet_12"}
     render_dpi = 200 if school_marksheet else 150
     max_dimension = 2600 if school_marksheet else 2200
@@ -275,14 +282,14 @@ def _prepare_vision_images(file_bytes: bytes, filename: str, field_name: str) ->
         if not pages:
             raise DocumentValidationUnavailable("The PDF has no renderable pages.")
         images = [
-            _normalise_image(page, crop_card=crop_card, max_dimension=max_dimension)
+            _normalise_image(page, crop_content=crop_content, max_dimension=max_dimension)
             for page in pages
         ]
     else:
         try:
             with Image.open(io.BytesIO(file_bytes)) as image:
                 images = [
-                    _normalise_image(image, crop_card=crop_card, max_dimension=max_dimension)
+                    _normalise_image(image, crop_content=crop_content, max_dimension=max_dimension)
                 ]
         except Exception as exc:
             raise DocumentValidationUnavailable(f"Image decoding failed: {exc}") from exc
@@ -301,6 +308,7 @@ Document-specific rule:
 {FIELD_RULES[field_name]}
 
 Reject when the upload is blank, illegible, the wrong document/side, or contains multiple different documents in one image. Inspect every supplied page. For multi-page marksheets, classify the document from the pages collectively. Do not call a genuine document a template merely because it is pale, watermarked, scanned, or has blank margins. Set blank_or_template=true only when explicit dummy/sample/placeholder content is visible or identifying content is absent.
+For a PAN back, populate card_back_layout_present, pan_services_unit_present, return_if_lost_text_present, income_tax_contact_present, and government_emblem_present independently from visible evidence even when the overall document type is uncertain.
 
 Return ONLY one JSON object with this shape:
 {{
@@ -318,6 +326,11 @@ Return ONLY one JSON object with this shape:
     "qr_code_present": false,
     "pan_format_present": false,
     "pan_back_evidence": false,
+    "card_back_layout_present": false,
+    "pan_services_unit_present": false,
+    "return_if_lost_text_present": false,
+    "income_tax_contact_present": false,
+    "government_emblem_present": false,
     "bank_name_present": false,
     "account_details_present": false,
     "student_details_present": false,
@@ -348,7 +361,7 @@ Number of supplied pages/images: {page_count}
 This is an independent classification. You are not told which upload field the user selected.
 
 Classification rules:
-- class_10: explicit evidence such as Class 10, 10th, Class X, Standard X, SSC, SSLC, Matriculation, Secondary School Examination, or an equivalent board examination clearly denoting grade 10.
+- class_10: explicit evidence such as Class 10, 10th, Class X, Standard X, SSC, SSLC, Matriculation, Secondary School Examination, Secondary School Leaving Certificate, or an equivalent board examination clearly denoting grade 10.
 - class_12: explicit evidence such as Class 12, 12th, Class XII, Standard XII, HSC, Higher Secondary, Senior Secondary, Senior School Certificate Examination, Intermediate, PUC/PU II, or an equivalent board examination clearly denoting grade 12.
 - other: visibly a different education level or not a school marksheet.
 - unknown: a marksheet may be visible, but its level cannot be established from readable evidence.
@@ -412,6 +425,7 @@ def _infer_school_level_from_evidence(evidence: Any) -> str:
         r"\bsslc\b",
         r"\bssc\b",
         r"\bmatric(?:ulation)?\b",
+        r"(?<!higher )(?<!senior )\bsecondary\s+school\s+leaving\s+certificate\b",
         r"(?<!senior )\bsecondary\s+school\s+(?:examination|certificate)\b",
         r"\ball\s+india\s+secondary\s+school\s+examination\b",
     )
@@ -464,7 +478,21 @@ def _evaluate_ai_result(field_name: str, result: dict) -> tuple[bool, str]:
     checks = result.get("checks", {})
     reason = str(result.get("reason") or "The document did not satisfy the required checks.")
 
-    if result.get("is_valid") is not True:
+    strong_pan_back_evidence = (
+        field_name == "pan_back"
+        and checks.get("card_back_layout_present") is True
+        and checks.get("pan_services_unit_present") is True
+        and any(
+            checks.get(check_name) is True
+            for check_name in (
+                "return_if_lost_text_present",
+                "income_tax_contact_present",
+                "government_emblem_present",
+            )
+        )
+    )
+
+    if result.get("is_valid") is not True and not strong_pan_back_evidence:
         return False, reason
     if checks.get("document_present") is not True or checks.get("image_verifiable") is not True:
         return False, "The document is empty, unreadable, or cannot be verified."
@@ -494,14 +522,13 @@ def _evaluate_ai_result(field_name: str, result: dict) -> tuple[bool, str]:
     }
     if field_name == "other_docs" and detected in {None, "unknown", "mixed_documents"}:
         return False, "The supporting document type could not be verified."
-    if field_name != "other_docs" and detected not in expected_types[field_name]:
+    if field_name != "other_docs" and detected not in expected_types[field_name] and not strong_pan_back_evidence:
         return False, f"Detected {detected or 'an unknown document'}, not {FIELD_NAMES_MAP[field_name]}."
 
     required_checks = {
         "aadhaar_front": ("required_text_present", "portrait_photo_present"),
         "aadhaar_back": ("address_block_present",),
         "pan_front": ("required_text_present", "portrait_photo_present", "pan_format_present"),
-        "pan_back": ("pan_back_evidence",),
         "bank_details": ("bank_name_present", "account_details_present"),
         "updated_resume": ("resume_evidence",),
         "marksheet_10": ("student_details_present", "marks_or_grades_present", "class_10_evidence"),
@@ -515,6 +542,11 @@ def _evaluate_ai_result(field_name: str, result: dict) -> tuple[bool, str]:
     for check_name in required_checks.get(field_name, ()):
         if checks.get(check_name) is not True:
             return False, f"Required evidence is missing: {check_name.replace('_', ' ')}."
+
+    if field_name == "pan_back" and not (
+        checks.get("pan_back_evidence") is True or strong_pan_back_evidence
+    ):
+        return False, "The upload lacks recognizable PAN-card back-side evidence."
 
     if field_name == "marksheet_10" and checks.get("class_12_evidence") is True:
         return False, "This appears to be a Class 12 marksheet, not Class 10."

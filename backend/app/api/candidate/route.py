@@ -206,6 +206,7 @@ class CandidateProfileResponse(BaseModel):
     declarations: Optional[dict] = None
     profileCompleted: Optional[bool] = False
     profileCompletedAt: Optional[str] = None
+    celebratedPhases: Optional[list[int]] = []
     isdeleted: Optional[bool] = False
     is_deleted: Optional[bool] = False
 
@@ -218,6 +219,7 @@ class CandidatePatchRequest(BaseModel):
     documentsSubmitted: Optional[bool] = None
     foundationCourseCompleted: Optional[bool] = None
     moduleCompleted: Optional[bool] = None
+    celebratedPhases: Optional[list[int]] = None
     declarationAccepted: Optional[bool] = None
     declarations: Optional[dict] = None
 
@@ -551,6 +553,7 @@ async def get_candidate_profile(email: Optional[str] = Query(None)):
         declarations=declarations_dict,
         profileCompleted=is_profile_completed,
         profileCompletedAt=profile_completed_iso,
+        celebratedPhases=cand.get("celebrated_phases", []),
     )
 
 
@@ -647,14 +650,24 @@ async def patch_candidate(request: Request, body: CandidatePatchRequest):
     if body.declarationAccepted is not None:
         updates["declarationAccepted"] = body.declarationAccepted
 
-    if not updates:
-        raise HTTPException(status_code=400, detail="No fields to update")
-
-    updates["updated_at"] = datetime.now(timezone.utc)
+    mongo_ops = {}
+    if updates:
+        updates["updated_at"] = datetime.now(timezone.utc)
+        mongo_ops["$set"] = updates
 
     from app.db.mongodb import get_sync_db
     db = get_sync_db()
-    result = db.candidates.update_one({"_id": _to_objectid(candidate_id)}, {"$set": updates})
+
+    if body.celebratedPhases is not None:
+        db.candidates.update_one(
+            {"_id": _to_objectid(candidate_id), "celebrated_phases": None},
+            {"$set": {"celebrated_phases": []}}
+        )
+        mongo_ops["$addToSet"] = {"celebrated_phases": {"$each": body.celebratedPhases}}
+
+    if not mongo_ops:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    result = db.candidates.update_one({"_id": _to_objectid(candidate_id)}, mongo_ops)
 
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Candidate not found")

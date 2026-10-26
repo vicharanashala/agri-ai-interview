@@ -137,20 +137,26 @@ export default function SummaryPage() {
         if (data.status === 'ready') {
           clearPolling();
           setResult(data.result);
-          setScore(data.overall_score ?? null);
+          const scoreVal = data.overall_score ?? (data.result === 'FAIL' ? 0 : null);
+          setScore(scoreVal);
           setEndReason(data.end_reason ?? null);
           localStorage.setItem('interviewResult', data.result ?? '');
-          localStorage.setItem('interviewScore', String(data.overall_score ?? ''));
+          localStorage.setItem('interviewScore', String(scoreVal ?? ''));
           if (data.evaluation) {
             localStorage.setItem('interviewEvaluation', JSON.stringify(data.evaluation));
           }
           await syncPhaseToDb(data.result === 'PASS' ? 4 : 3, { passedAndVisitedSummary: true });
+          fetchAttemptsHistory();
           setEvaluating(false);
           setLoading(false);
         } else if (data.status === 'error') {
           clearPolling();
           setResult('FAIL');
           setScore(0);
+          localStorage.setItem('interviewResult', 'FAIL');
+          localStorage.setItem('interviewScore', '0');
+          await syncPhaseToDb(3, { passedAndVisitedSummary: true });
+          fetchAttemptsHistory();
           setEvaluating(false);
           setLoading(false);
         }
@@ -167,123 +173,128 @@ export default function SummaryPage() {
     }
   };
 
-  // ── Main load effect ────────────────────────────────────────────────
+  useEffect(() => {
+    const hasPendingAttempt = attemptsHistory.some(
+      (a) => !a.result
+    );
+    if (!hasPendingAttempt) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch('/api/candidate/attempts-history', {
+          credentials: 'include',
+          headers: {
+            Authorization: `Bearer ${sessionStorage.getItem('candidate_session_token') || ''}`,
+          },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const items: AttemptItem[] = data.attempts || [];
+          setAttemptsHistory(items);
+          const stillPending = items.some((a) => !a.result);
+          if (!stillPending) {
+            clearInterval(interval);
+          }
+        }
+      } catch { /* non-fatal */ }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [attemptsHistory]);
+
+    // ── Main load effect ────────────────────────────────────────────────
   useEffect(() => {
     const restore = interceptAuthFetch();
-    fetchAttemptsHistory();
 
-    const justCompleted =
-      sessionStorage.getItem('interviewJustCompleted') === 'true' ||
-      localStorage.getItem('interviewJustCompleted') === 'true';
+    const closingId =
+      localStorage.getItem('closingInterviewId') ||
+      sessionStorage.getItem('closingInterviewId') ||
+      '';
 
-    if (justCompleted) {
-      const closingId =
-        localStorage.getItem('closingInterviewId') ||
-        sessionStorage.getItem('closingInterviewId') ||
-        '';
+    sessionStorage.removeItem('interviewJustCompleted');
+    localStorage.removeItem('interviewJustCompleted');
+    sessionStorage.removeItem('closingInterviewId');
+    localStorage.removeItem('closingInterviewId');
+    localStorage.setItem('summaryVisited', 'true');
 
-      sessionStorage.removeItem('interviewJustCompleted');
-      localStorage.removeItem('interviewJustCompleted');
-      sessionStorage.removeItem('closingInterviewId');
-      localStorage.removeItem('closingInterviewId');
-      localStorage.setItem('summaryVisited', 'true');
+    const checkAndLoadResults = async () => {
+      setLoading(true);
+      try {
+        const res = await fetch('/api/candidate/attempts', {
+          credentials: 'include',
+          cache: 'no-store',
+          headers: {
+            Authorization: `Bearer ${sessionStorage.getItem('candidate_session_token') || ''}`,
+          },
+        });
 
-      if (closingId) {
-        startPolling(closingId);
-      } else {
-        (async () => {
-          try {
-            const res = await fetch('/api/candidate/attempts', {
-              credentials: 'include',
-              cache: 'no-store',
-              headers: {
-                Authorization: `Bearer ${sessionStorage.getItem('candidate_session_token') || ''}`,
-              },
-            });
-            if (res.ok) {
-              const data = await res.json();
-              const latest = data.attempts?.[0];
-              if (latest?.result) {
-                setResult(latest.result);
-                setScore(latest.overall_score ?? null);
-                localStorage.setItem('interviewResult', latest.result ?? '');
-                localStorage.setItem('interviewScore', String(latest.overall_score ?? ''));
-                const targetPhase = latest.result === 'PASS' ? 4 : 3;
-                const alreadyVisited = localStorage.getItem('passedAndVisitedSummary') === 'true';
-                const fcCompleted = localStorage.getItem('foundationCourseCompleted') === 'completed' || localStorage.getItem('foundationCourseCompleted') === 'true';
-                const modCompleted = localStorage.getItem('moduleCompleted') === 'completed' || localStorage.getItem('moduleCompleted') === 'true';
-                if (!alreadyVisited && !fcCompleted && !modCompleted) {
-                  await syncPhaseToDb(targetPhase, { passedAndVisitedSummary: true });
-                  localStorage.setItem('passedAndVisitedSummary', 'true');
-                }
-                setEvaluating(false);
-                setLoading(false);
-                return;
-              }
+        if (res.ok) {
+          const data = await res.json();
+          if (data.cooldownDays) setCooldownDays(data.cooldownDays);
+          const latest = data.attempts?.[0];
+
+          if (latest) {
+            const isLatestEvaluating = !latest.result;
+
+            if (isLatestEvaluating) {
+              // The latest interview is STILL being evaluated by LLM.
+              // Keep page in evaluating/loading state and poll until ready!
+              setEvaluating(true);
+              setLoading(true);
+              const targetId = closingId || latest.id;
+              startPolling(targetId);
+              return;
             }
-          } catch { /* non-fatal */ }
-          setEvaluating(false);
-          setLoading(false);
-        })();
-      }
 
-      (async () => {
-        try {
-          const res = await fetch('/api/candidate/attempts', {
-            credentials: 'include',
-            cache: 'no-store',
-            headers: {
-              Authorization: `Bearer ${sessionStorage.getItem('candidate_session_token') || ''}`,
-            },
-          });
-          if (res.ok) {
-            const data = await res.json();
-            if (data.cooldownDays) setCooldownDays(data.cooldownDays);
-          }
-        } catch { /* non-fatal */ }
-      })();
-    } else {
-      (async () => {
-        try {
-          const res = await fetch('/api/candidate/attempts', {
-            credentials: 'include',
-            cache: 'no-store',
-            headers: {
-              Authorization: `Bearer ${sessionStorage.getItem('candidate_session_token') || ''}`,
-            },
-          });
-          if (res.ok) {
-            const data = await res.json();
-            const latest = data.attempts?.[0];
-            if (latest) {
-              setResult(latest.result);
-              setScore(latest.overall_score ?? null);
-              localStorage.setItem('interviewResult', latest.result ?? '');
-              localStorage.setItem('interviewScore', String(latest.overall_score ?? ''));
-            }
-            if (data.cooldownDays) setCooldownDays(data.cooldownDays);
-          }
-        } catch {
-          const storedResult = localStorage.getItem('interviewResult');
-          const storedScore = localStorage.getItem('interviewScore');
-          if (storedResult) setResult(storedResult);
-          if (storedScore) setScore(Number(storedScore));
-        } finally {
-          const result = localStorage.getItem('interviewResult');
-          if (result) {
+            // Evaluation is complete!
+            setResult(latest.result);
+            const resolvedScore = latest.overall_score ?? (latest.result === 'FAIL' ? 0 : null);
+            setScore(resolvedScore);
+            localStorage.setItem('interviewResult', latest.result ?? '');
+            localStorage.setItem('interviewScore', String(resolvedScore ?? ''));
+
+            const targetPhase = latest.result === 'PASS' ? 4 : 3;
             const alreadyVisited = localStorage.getItem('passedAndVisitedSummary') === 'true';
             const fcCompleted = localStorage.getItem('foundationCourseCompleted') === 'completed' || localStorage.getItem('foundationCourseCompleted') === 'true';
             const modCompleted = localStorage.getItem('moduleCompleted') === 'completed' || localStorage.getItem('moduleCompleted') === 'true';
             if (!alreadyVisited && !fcCompleted && !modCompleted) {
-              await syncPhaseToDb(result === 'PASS' ? 4 : 3, { passedAndVisitedSummary: true });
+              await syncPhaseToDb(targetPhase, { passedAndVisitedSummary: true });
               localStorage.setItem('passedAndVisitedSummary', 'true');
             }
+
+            fetchAttemptsHistory();
+            setPhaseSynced(true);
+            setEvaluating(false);
+            setLoading(false);
+            return;
           }
-          setPhaseSynced(true);
-          setLoading(false);
         }
-      })();
-    }
+      } catch (err) {
+        console.error('Error fetching attempts on summary page:', err);
+      }
+
+      // If we had a closingId and no completed attempts yet, start polling
+      if (closingId) {
+        setEvaluating(true);
+        setLoading(true);
+        startPolling(closingId);
+        return;
+      }
+
+      // Fallback from localStorage if available
+      const storedResult = localStorage.getItem('interviewResult');
+      const storedScore = localStorage.getItem('interviewScore');
+      if (storedResult) {
+        setResult(storedResult);
+        if (storedScore) setScore(Number(storedScore));
+      }
+      fetchAttemptsHistory();
+      setPhaseSynced(true);
+      setEvaluating(false);
+      setLoading(false);
+    };
+
+    checkAndLoadResults();
 
     return () => { clearPolling(); restore(); };
   }, []);
@@ -383,13 +394,19 @@ export default function SummaryPage() {
                   {isPass ? '✓ PASSED' : '✗ FAILED'}
                 </div>
               ) : (
-                <div className={styles.resultBadge} style={{ backgroundColor: '#6b7280', color: 'white' }}>
+                <div className={styles.resultBadge} style={{ backgroundColor: '#0284c7', color: 'white' }}>
                   Results are being generated...
                 </div>
               )}
 
-              {score !== null && hasResult && (
-                <p className={styles.scoreText}>Score: {score}/100</p>
+              {hasResult ? (
+                <p className={styles.scoreText}>
+                  Score: {score !== null ? `${score}/100` : (result === 'FAIL' ? '0/100' : '—')}
+                </p>
+              ) : (
+                <p className={styles.scoreText} style={{ color: '#0284c7', fontStyle: 'italic' }}>
+                  Score: Processing...
+                </p>
               )}
             </div>
 
@@ -457,27 +474,67 @@ export default function SummaryPage() {
 
                   <div className={styles.historyCardBody}>
                     <div>
-                      <span
-                        style={{
-                          padding: '4px 12px',
-                          borderRadius: '12px',
-                          fontSize: '12px',
-                          fontWeight: 700,
-                          background: item.result === 'PASS' ? '#dcfce7' : '#fee2e2',
-                          color: item.result === 'PASS' ? '#15803d' : '#b91c1c',
-                        }}
-                      >
-                        {item.result === 'PASS' ? '✓ PASS' : '✗ FAIL'}
-                      </span>
+                      {item.result === 'PASS' ? (
+                        <span
+                          style={{
+                            padding: '4px 12px',
+                            borderRadius: '12px',
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            background: '#dcfce7',
+                            color: '#15803d',
+                          }}
+                        >
+                          ✓ PASS
+                        </span>
+                      ) : item.result === 'FAIL' ? (
+                        <span
+                          style={{
+                            padding: '4px 12px',
+                            borderRadius: '12px',
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            background: '#fee2e2',
+                            color: '#b91c1c',
+                          }}
+                        >
+                          ✗ FAIL
+                        </span>
+                      ) : (
+                        <span
+                          style={{
+                            padding: '4px 12px',
+                            borderRadius: '12px',
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            background: '#e0f2fe',
+                            color: '#0369a1',
+                          }}
+                        >
+                          ⏳ PROCESSING
+                        </span>
+                      )}
                     </div>
                     <div style={{ fontWeight: 600, color: '#334155', fontSize: '14px' }}>
-                      Score: {item.score != null ? `${item.score}/100` : '—'}
+                      {item.result === 'PASS' || item.result === 'FAIL' ? (
+                        `Score: ${item.score != null ? `${item.score}/100` : (item.result === 'FAIL' ? '0/100' : '—')}`
+                      ) : (
+                        <span style={{ color: '#0284c7', fontStyle: 'italic', fontSize: '13px' }}>
+                          Score: Processing...
+                        </span>
+                      )}
                     </div>
                   </div>
 
                   {/* Re-evaluation Status / Action for this attempt */}
                   <div style={{ marginTop: '8px' }}>
-                    {item.reEvaluation?.requested ? (
+                    {!item.result ? (
+                      <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '8px', padding: '10px 14px', textAlign: 'center' }}>
+                        <span style={{ color: '#0369a1', fontSize: '12px', fontWeight: 600 }}>
+                          ⏳ Evaluation in progress. Results will update automatically.
+                        </span>
+                      </div>
+                    ) : item.reEvaluation?.requested ? (
                       item.reEvaluation.status === 'completed' ? (
                         <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '10px 14px' }}>
                           <span style={{ fontWeight: 700, color: '#166534', fontSize: '12.5px' }}>

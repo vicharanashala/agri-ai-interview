@@ -148,7 +148,7 @@ function LoginPageInner() {
         return;
       }
 
-      router.push('/post-login');
+      router.push('/post-login?newCandidate=1');
     } catch {
       setRegError('An error occurred. Please try again.');
       setRegLoading(false);

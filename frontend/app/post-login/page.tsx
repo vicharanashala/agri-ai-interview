@@ -1,15 +1,38 @@
 'use client';
 
-import { Suspense, useEffect } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import FullPageSkeleton from '@/components/FullPageSkeleton';
+import DashboardSkeleton from '@/app/dashboard/DashboardSkeleton';
+import DeclarationSkeleton from '@/app/declaration/DeclarationSkeleton';
+import OnboardingSkeleton from '@/app/onboarding/OnboardingSkeleton';
+import InterviewGuidelinesSkeleton from '@/app/interview/InterviewGuidelinesSkeleton';
 import { useRouter, useSearchParams } from 'next/navigation';
+
+// Skeleton that resembles the page this hand-off is about to open
+function skeletonFor(destination: string) {
+  const path = destination.split('?')[0];
+  if (path === '/dashboard') return <DashboardSkeleton />;
+  if (path === '/declaration') return <DeclarationSkeleton />;
+  if (path === '/onboarding') return <OnboardingSkeleton />;
+  if (path === '/interview') return <InterviewGuidelinesSkeleton />;
+  return <FullPageSkeleton />;
+}
 
 function PostLoginContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get('callbackUrl');
+  // Set by the registration form: a brand-new candidate always starts at /declaration
+  const isNewCandidate = searchParams.get('newCandidate') === '1';
+  // Where the logic below decided to send the candidate (null until /api/candidate answers)
+  const [destination, setDestination] = useState<string | null>(null);
+
+  const goTo = (path: string) => {
+    setDestination(path);
+    router.replace(path);
+  };
 
   // ── Helper: create a fresh backend session ───────────────────────────────────
   async function _createBackendSession(candidateId: string, email: string) {
@@ -96,28 +119,29 @@ function PostLoginContent() {
 
         if (!candidate.declarationAccepted) {
           console.log('[post-login] Candidate must accept declaration first');
-          router.replace('/declaration');
+          goTo('/declaration');
         } else if (phase === 'onboarding' || !phase || !candidate.id) {
           console.log('[post-login] Force navigating new candidate to /onboarding');
-          router.replace('/onboarding');
+          goTo('/onboarding');
         } else if (callbackUrl) {
           console.log('[post-login] Navigating to callbackUrl:', callbackUrl);
-          router.replace(callbackUrl);
+          goTo(callbackUrl);
         } else {
           console.log('[post-login] Navigating to /dashboard');
-          router.replace('/dashboard');
+          goTo('/dashboard');
         }
       })
       .catch((err) => {
         console.log('[post-login] /api/candidate failed, redirecting to /onboarding', err);
         // No candidate record yet — send to onboarding (no session needed yet)
-        router.replace('/onboarding');
+        goTo('/onboarding');
       });
   }, [session, status, callbackUrl, router]);
 
-  return (
-    <FullPageSkeleton />
-  );
+  // Show the destination's skeleton instead of a generic one. Until the candidate
+  // record arrives, use the most likely destination: the callback, /declaration
+  // right after registration, otherwise /dashboard for a returning candidate.
+  return skeletonFor(destination ?? callbackUrl ?? (isNewCandidate ? '/declaration' : '/dashboard'));
 }
 
 export default function PostLoginPage() {

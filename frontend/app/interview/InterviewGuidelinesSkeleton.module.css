@@ -1,0 +1,27 @@
+/* Tints for the Interview Guidelines skeleton; layout comes from page.module.css.
+   Element-qualified selectors outrank the page's single-class rules regardless
+   of stylesheet order. */
+
+/* Rule rows: red-tinted bones to echo the real red rule rows */
+.rule > span {
+  background-color: #fde2e2;
+}
+
+/* The page colours `.antiCheatList li strong`; keep the label invisible here */
+li.rule > span > strong {
+  color: transparent;
+}
+
+/* Notice box: green-tinted bones */
+.note > span {
+  background-color: #d1fae5;
+}
+
+/* Begin Interview button footprint, as a pale inert placeholder */
+button.beginButton {
+  background: #dcfce7;
+  box-shadow: none;
+  color: transparent;
+  pointer-events: none;
+  user-select: none;
+}

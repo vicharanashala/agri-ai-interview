@@ -1,0 +1,121 @@
+/* ─── Skeleton bone (same shimmer convention as the admin skeletons) ───
+   Base styles use :where() (zero specificity) so page-level skeleton classes
+   can override size, radius and colour regardless of stylesheet order. */
+:where(.bone) {
+  display: block;
+  background: #e2e8f0;
+  border-radius: 6px;
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.bone::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0,
+    rgba(255, 255, 255, 0.4) 20%,
+    rgba(255, 255, 255, 0.7) 60%,
+    rgba(255, 255, 255, 0)
+  );
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Text-shaped bone: the text is transparent, each wrapped line gets its own
+   rounded shimmer background */
+.textBone {
+  color: transparent;
+  background-color: #e2e8f0;
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0,
+    rgba(255, 255, 255, 0.7) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-size: 160px 100%;
+  background-repeat: no-repeat;
+  border-radius: 4px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  user-select: none;
+  animation: textShimmer 1.5s infinite linear;
+}
+
+/* Colour emoji ignore `color`, so hide the glyph but keep its width */
+.textBone :where(.glyph) {
+  opacity: 0;
+}
+
+@keyframes textShimmer {
+  from {
+    background-position: -160px 0;
+  }
+  to {
+    background-position: calc(100% + 160px) 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bone::after,
+  .textBone {
+    animation: none;
+  }
+}
+
+/* Placeholder copies of real header buttons: keep the box, drop interaction */
+button.inertButton {
+  pointer-events: none;
+  user-select: none;
+}
+
+/* ─── Navbar right side (mirrors ProfileNavButton sizes) ─── */
+.faqPill {
+  width: 112px;
+  height: 31px;
+  border-radius: 9999px;
+  background: #ecfdf5;
+}
+
+.avatarPill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 10px 3px 4px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9999px;
+  background: #ffffff;
+}
+
+.avatarCircle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+}
+
+.avatarName {
+  width: 64px;
+  height: 12px;
+}
+
+/* Match ProfileNavButton's responsive behaviour */
+@media (max-width: 640px) {
+  .avatarName {
+    display: none;
+  }
+}
+
+@media (max-width: 380px) {
+  .faqPill {
+    width: 40px;
+  }
+}

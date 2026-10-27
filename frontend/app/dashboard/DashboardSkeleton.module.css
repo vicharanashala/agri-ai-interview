@@ -1,0 +1,115 @@
+/* ─── Text lines ─── */
+.title {
+  width: 380px;
+  max-width: 80vw;
+  height: 38px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+}
+
+.subtitle {
+  width: 420px;
+  max-width: 86vw;
+  height: 18px;
+}
+
+.textSm {
+  height: 12px;
+}
+
+.textMd {
+  height: 14px;
+}
+
+/* ─── Action row ─── */
+.pill {
+  height: 30px;
+  border-radius: 9999px;
+  max-width: 100%;
+}
+
+.pillWide {
+  width: 178px;
+}
+
+.pillMid {
+  width: 168px;
+}
+
+.pillShort {
+  width: 138px;
+}
+
+/* ─── Stepper ─── */
+.staticNode {
+  cursor: default;
+}
+
+.stepCircle {
+  width: 66px;
+  height: 66px;
+  border-radius: 50%;
+}
+
+.connector {
+  background: #e2e8f0;
+  border-radius: 9999px;
+}
+
+/* ─── Mascot banner ─── */
+.mascot {
+  width: 76px;
+  height: 84px;
+  border-radius: 38px 38px 24px 24px;
+}
+
+.bubbleLines,
+.tipLines {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tipIcon {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+}
+
+/* Mirror the dashboard breakpoints */
+@media (max-width: 900px) {
+  .title {
+    height: 31px;
+  }
+}
+
+@media (max-width: 640px) {
+  .title {
+    height: 26px;
+  }
+  .subtitle {
+    height: 16px;
+  }
+  .pill {
+    height: 28px;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 380px) {
+  .title {
+    height: 24px;
+  }
+  .pill {
+    width: 100%;
+  }
+  .stepCircle {
+    width: 48px;
+    height: 48px;
+  }
+  .bubbleLines {
+    width: 100%;
+  }
+}

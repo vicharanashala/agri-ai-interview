@@ -1,0 +1,45 @@
+/* Bone sizes for the Declarations skeleton; layout comes from page.module.css */
+.stepperIcon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+}
+
+.stepCircle {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+}
+
+.docSectionNumber {
+  width: 22px;
+  height: 22px;
+}
+
+.checkbox {
+  width: 20px;
+  height: 20px;
+  margin-top: 3px;
+  border-radius: 4px;
+}
+
+/* The real pane scrolls a long document; the placeholder never needs to */
+div.documentPane {
+  overflow: hidden;
+}
+
+/* Same footprint as the button's 16px arrow icon */
+.arrow {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+}
+
+/* Pale, inert placeholder in the Next button's footprint */
+button.nextBtn {
+  background: #dcfce7;
+  box-shadow: none;
+  color: transparent;
+  pointer-events: none;
+  user-select: none;
+}

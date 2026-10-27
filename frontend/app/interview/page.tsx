@@ -8,6 +8,7 @@ import { syncPhaseToDb } from '@/lib/phaseSync';
 import { useAntiCheat, type ViolationType } from '@/hooks/useAntiCheat';
 import { interceptAuthFetch, authFetch } from '@/lib/auth-fetch';
 import AntiCheatOverlay from '@/components/AntiCheatOverlay';
+import CandidateNavbar from '@/components/CandidateNavbar';
 
 interface Message {
   role: 'ai' | 'user';
@@ -74,7 +75,7 @@ export default function InterviewPage() {
   const [startTimeMs, setStartTimeMs] = useState<number | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const isSubmittingRef = useRef(false);
 
   // Anti-cheat: warning callback
@@ -713,6 +714,8 @@ export default function InterviewPage() {
     <>
       {showInstructions ? (
         <div className={styles.instructionScreen}>
+          <CandidateNavbar />
+          <div className={styles.instructionBody}>
           <div className={styles.instructionCard}>
             <h1 className={styles.instructionTitle}>Interview Guidelines</h1>
             <p className={styles.instructionSubtitle}>Please read the following guidelines carefully before starting your interview</p>
@@ -750,6 +753,7 @@ export default function InterviewPage() {
             </button>
 
             {error && <p className={styles.errorMessage}>{error}</p>}
+          </div>
           </div>
         </div>
       ) : (
@@ -948,17 +952,24 @@ export default function InterviewPage() {
 
           {!isComplete && (
             <form onSubmit={handleSubmit} className={styles.inputForm}>
-              <input
+              <textarea
                 ref={inputRef}
-                type="text"
+                rows={2}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    if (input.trim() && !isLoading && interviewId) {
-                      handleSubmit(e as unknown as React.FormEvent);
-                    }
+                  if (e.key !== 'Enter') return;
+                  e.preventDefault();
+                  // Shift+Enter / Ctrl+Enter insert a new line at the caret instead of sending
+                  if (e.shiftKey || e.ctrlKey) {
+                    const el = e.currentTarget;
+                    const { selectionStart, selectionEnd } = el;
+                    setInput(input.slice(0, selectionStart) + '\n' + input.slice(selectionEnd));
+                    requestAnimationFrame(() => el.setSelectionRange(selectionStart + 1, selectionStart + 1));
+                    return;
+                  }
+                  if (input.trim() && !isLoading && interviewId) {
+                    handleSubmit(e as unknown as React.FormEvent);
                   }
                 }}
                 placeholder="Type your answer here..."

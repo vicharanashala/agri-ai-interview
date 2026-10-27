@@ -4,10 +4,9 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import styles from './page.module.css';
-import FullPageSkeleton from '@/components/FullPageSkeleton';
+import DashboardSkeleton from './DashboardSkeleton';
 import HowToUseModal from '@/components/HowToUseModal';
-import BrandLogos from '@/components/BrandLogos';
-import ProfileNavButton from '@/components/ProfileNavButton';
+import CandidateNavbar from '@/components/CandidateNavbar';
 import confetti from 'canvas-confetti';
 import { syncPhaseToDb } from '@/lib/phaseSync';
 
@@ -791,7 +790,7 @@ export default function DashboardPage() {
   };
 
   if (isLoading) {
-    return <FullPageSkeleton />;
+    return <DashboardSkeleton />;
   }
 
   return (
@@ -803,17 +802,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Top Navbar */}
-      <nav className={styles.topNavbar}>
-        <div className={styles.navbarContent}>
-          {/* 3 Brand Logos (as before) */}
-          <BrandLogos variant="header" />
-
-          {/* Right Header: FAQ & Help + Profile Menu */}
-          <div className={styles.navbarRight}>
-            <ProfileNavButton showFaqHeaderButton={true} />
-          </div>
-        </div>
-      </nav>
+      <CandidateNavbar />
 
       {/* Main Content */}
       <div className={styles.contentContainer}>

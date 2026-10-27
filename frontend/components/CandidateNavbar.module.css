@@ -1,0 +1,43 @@
+/* ─── Top Navbar ────────────────────────────────────────────── */
+.topNavbar {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+  height: 70px;
+  display: flex;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 1100;
+  box-shadow: 0 1px 4px 0 rgba(0, 0, 0, 0.03);
+  flex-shrink: 0;
+}
+
+.navbarContent {
+  width: 100%;
+  max-width: 1140px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
+  z-index: 1;
+}
+
+.navbarRight {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+/* Standard Mobile Devices (<= 640px) */
+@media (max-width: 640px) {
+  .topNavbar {
+    height: 58px;
+  }
+  .navbarContent {
+    padding: 0 14px;
+  }
+}

@@ -1,0 +1,12 @@
+/* Field-sized bones; sizes match .input / .textarea (rows=3) and SearchableSelect */
+.input {
+  width: 100%;
+  height: 46px;
+  border-radius: 10px;
+}
+
+.textarea {
+  width: 100%;
+  height: 90px;
+  border-radius: 10px;
+}

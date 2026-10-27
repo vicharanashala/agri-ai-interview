@@ -13,9 +13,11 @@ import {
   phaseStepStatus,
   groundTruthStatus,
   progressStatus,
+  matchWhy,
   roleDisplayName,
   roleLabel,
   scoreDetails,
+  yearSpan,
   type ProgressStatus,
 } from "@/lib/candidate-profile-display";
 import { buildTextPdf } from "@/lib/simple-pdf";
@@ -102,6 +104,38 @@ interface EligibilityBreakdown {
   internReason: "no_education" | "pursuing" | "no_qualifying_degree" | null;
   educationLimit: string | null;
   experienceBand: string | null;
+}
+
+/** GET /api/admin/candidates/{id}/match-role (Match feature only; never stored). */
+interface MatchEducation {
+  degree: string;
+  from: string;
+  level: string;
+  discipline: string;
+  /** e.g. "Fruit Science" in "M.Sc. (Horticulture) - Fruit Science"; not a separate discipline. */
+  specialisation?: string;
+  /** Fellowships, awards and similar notes (e.g. "ICAR Fellow"); not a discipline. */
+  details?: string;
+  status: string;
+  /** false when left out of the calculation because its completion status is not stated. */
+  counted?: boolean;
+  /** "stated", "inferred from end year", "not determined" or "profile". */
+  statusBasis: string;
+  statusEvidence: string;
+  startYear: number | string;
+  endYear: number | string;
+}
+
+interface MatchRoleResult {
+  outcome: "eligible_role" | "suggested" | "cannot_be_checked";
+  role: string | null;
+  roleSource: "stored" | "calculated" | "resume" | null;
+  yearsOfExperience: number | null;
+  education: MatchEducation[];
+  breakdown: EligibilityBreakdown | null;
+  issues: string[];
+  notes: string[];
+  resumeId: string | null;
 }
 
 interface DocumentRecord {
@@ -363,130 +397,158 @@ function ProgressItem({ platform, name, kind, status }: { platform: string; name
   );
 }
 
-const INTERN_REASONS: Record<NonNullable<EligibilityBreakdown["internReason"]>, string> = {
-  no_education: "No complete education entry is recorded.",
-  pursuing: "A qualification is still being pursued.",
-  no_qualifying_degree: "No completed qualifying agricultural qualification is recorded.",
+const MATCH_BASIS_LABELS: Record<MatchRoleResult["outcome"], string> = {
+  eligible_role: "Candidate profile details",
+  suggested: "Candidate education details from the parsed resume",
+  cannot_be_checked: "Candidate education details from the parsed resume",
 };
 
-/** How the eligible role follows from the education and experience rules (backend calculation steps). */
-function RoleEligibilityPanel({ role, yearsOfExperience }: { role: CandidateProfile["role"]; yearsOfExperience?: number | null }) {
-  const b = role.breakdown;
-  return (
-    <section className={styles.skillPanel}>
-      <h3 className={styles.subheading}>Role Eligibility</h3>
-      <dl className={styles.skillRows}>
-        <Info label="Eligible role" value={<RoleText role={role} />} />
-        {b && !b.internReason && (
-          <>
-            <Info label="Education allows up to" value={b.educationLimit ? roleDisplayName(b.educationLimit) : null} />
-            <Info
-              label="Experience band"
-              value={
-                b.experienceBand
-                  ? `${roleDisplayName(b.experienceBand)}${yearsOfExperience != null ? ` (${yearsOfExperience} ${yearsOfExperience === 1 ? "year" : "years"})` : ""}`
-                  : null
-              }
-            />
-            <Info label="Calculated role (lower of the two)" value={roleDisplayName(b.role)} />
-          </>
-        )}
-        {b?.internReason && <Info label="Calculated role" value={`${roleDisplayName(b.role)}: ${INTERN_REASONS[b.internReason]}`} />}
-      </dl>
-      {!b && (
-        <p className={styles.muted}>
-          No breakdown: the education or experience details are incomplete or cannot be read reliably.
-        </p>
-      )}
-      {b && role.source === "stored" && role.stored !== b.role && (
-        <p className={styles.note}>
-          The eligible role is the one stored at onboarding. The current calculation from education and experience gives{" "}
-          {roleDisplayName(b.role)}.
-        </p>
-      )}
-    </section>
-  );
-}
+const MATCH_STATUS_BASIS_LABELS: Record<string, string> = {
+  stated: "Stated in resume",
+  "inferred from end year": "Inferred from year",
+};
 
-/** Skills from the latest parsed resume plus the candidate's own profile answers; informational only. */
-function ResumeSkillsPanel({ resumes, profile }: { resumes: ResumeRecord[]; profile: CandidateProfile["profile"] }) {
-  // Resumes arrive newest first; the latest parsed one is used (as the resume matcher does)
-  const resume = resumes.find((r) => r.status === "parsed" && r.parsedData);
-  const skills = (resume?.parsedData?.skills || []).filter(
-    (s): s is string => typeof s === "string" && !isBlank(s) && s.trim() !== "Not Available"
-  );
+const MATCH_EDUCATION_SOURCE_LABELS: Record<string, string> = {
+  profile: "Profile",
+  "resume (parsed fields)": "Resume",
+  "resume (degree text)": "Resume (degree text)",
+};
+
+/**
+ * Match result: the candidate's eligible role explained, or (when it is Not Available) a role suggested from the
+ * latest parsed resume, or the reasons it cannot be checked. Read-only; nothing here changes the eligible role.
+ */
+function RoleMatchModal({
+  candidateName,
+  load,
+  onClose,
+}: {
+  candidateName: string;
+  load: () => Promise<Response>;
+  onClose: () => void;
+}) {
+  const titleId = useId();
+  const [state, setState] = useState<{ status: "loading" | "ready" | "error"; data?: MatchRoleResult; error?: string }>({
+    status: "loading",
+  });
+
+  useEffect(() => {
+    let active = true;
+    load()
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = (await res.json()) as MatchRoleResult;
+        if (active) setState({ status: "ready", data });
+      })
+      .catch((err) => active && setState({ status: "error", error: err instanceof Error ? err.message : "Request failed" }));
+    return () => {
+      active = false;
+    };
+  }, [load]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const m = state.data;
+  const why = m ? matchWhy(m) : [];
+  const years =
+    m?.yearsOfExperience != null ? `${m.yearsOfExperience} ${m.yearsOfExperience === 1 ? "year" : "years"}` : null;
+
   return (
-    <section className={styles.skillPanel}>
-      <h3 className={styles.subheading}>Resume &amp; Profile Skills</h3>
-      <p className={styles.muted}>
-        {resume
-          ? `From the latest parsed resume (${resume.fileName || "resume"}${resume.createdAt ? `, uploaded ${formatDate(resume.createdAt)}` : ""}) and the candidate's profile.`
-          : "From the candidate's profile."}
-      </p>
-      {!resume ? (
-        <Empty>No parsed resume.</Empty>
-      ) : skills.length === 0 ? (
-        <Empty>No skills were extracted from the resume.</Empty>
-      ) : (
-        <div className={styles.chips}>
-          {skills.map((s, i) => (
-            <span key={i} className={styles.chip}>{s}</span>
-          ))}
+    <div className={styles.modalOverlay} onClick={onClose}>
+      <div className={styles.modal} role="dialog" aria-modal="true" aria-labelledby={titleId} onClick={(e) => e.stopPropagation()}>
+        <div className={styles.modalHeader}>
+          <div>
+            <h2 id={titleId} className={styles.modalTitle}>🧭 Role Match</h2>
+            <p className={styles.muted}>{candidateName}</p>
+          </div>
+          <button type="button" className={styles.secondaryBtn} onClick={onClose} aria-label="Close">
+            ✕
+          </button>
         </div>
-      )}
-      <dl className={styles.skillRows}>
-        <Info label="Primary expertise" value={profile.primaryExpertise} />
-        <Info label="Crops grown" value={profile.cropsGrown} />
-        <Info label="Farming background" value={profile.farmingBackground} />
-      </dl>
-      <p className={styles.muted}>Informational only: no skill requirements are defined for the agricultural roles, so these are not matched or rated.</p>
-    </section>
-  );
-}
+        <p className={styles.muted}>
+          Role eligibility based on qualification and years of experience, using the platform&apos;s eligibility rules.
+        </p>
 
-/** Topic scores of the interview the candidate's interview status is based on. */
-function InterviewPerformancePanel({ interview }: { interview?: InterviewSummary }) {
-  const topics = interview?.topicScores ? Object.entries(interview.topicScores) : [];
-  return (
-    <section className={`${styles.skillPanel} ${styles.skillPanelWide}`}>
-      <h3 className={styles.subheading}>Interview Performance</h3>
-      {!interview ? (
-        <Empty>No evaluated interview (pass or fail) yet.</Empty>
-      ) : (
-        <>
-          <p className={styles.muted}>
-            Interview evaluation scores, not a resume skill match. From the interview the candidate&apos;s interview status is
-            based on:{" "}
-            {[
-              interview.attempt ? `Attempt ${interview.attempt}` : "Latest evaluated session",
-              interview.result,
-              interview.score != null ? `${interview.score}/100` : null,
-              interview.startedAt ? formatDate(interview.startedAt) : null,
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-          </p>
-          {topics.length === 0 ? (
-            <Empty>No topic scores are stored for this interview.</Empty>
-          ) : (
-            <div className={styles.topicGrid}>
-              {topics.map(([topic, t]) => (
-                <div key={topic} className={styles.topicItem}>
-                  <div className={styles.topicHead}>
-                    <span>{humanize(topic)}</span>
-                    <strong>{t.score != null ? `${t.score}/10` : "Not scored"}</strong>
-                  </div>
-                  {t.details && <p className={styles.muted}>{t.details}</p>}
-                </div>
-              ))}
+        {state.status === "loading" && <p className={styles.muted}>Checking…</p>}
+        {state.status === "error" && <p className={styles.errorText}>Could not load the match result ({state.error}).</p>}
+
+        {m && (
+          <div className={styles.matchResult} aria-live="polite">
+            <div className={`${styles.matchRoleBox} ${m.role ? "" : styles.matchRoleBoxEmpty}`}>
+              <span className={styles.fieldLabel}>{m.outcome === "suggested" ? "Suggested role" : "Role"}</span>
+              <span className={styles.matchRoleName}>{m.role ? roleDisplayName(m.role) : "Cannot be checked"}</span>
             </div>
-          )}
-          {topics.length > 0 && (
-            <p className={styles.muted}>The evaluator scores a topic that was not covered in the interview as 0; see each topic&apos;s explanation.</p>
-          )}
-        </>
-      )}
-    </section>
+            <dl className={styles.matchRows}>
+              <Info label="Based on" value={m.outcome !== "cannot_be_checked" || m.education.length ? MATCH_BASIS_LABELS[m.outcome] : null} />
+              <Info label="Years of experience (profile)" value={years} />
+            </dl>
+
+            {m.education.length > 0 && (
+              <div className={styles.tableWrap}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>Qualification</th>
+                      <th>Level</th>
+                      <th>Discipline</th>
+                      <th>Status</th>
+                      <th>Years</th>
+                      <th>Source</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {m.education.map((e, i) => (
+                      <tr key={i}>
+                        <td>{e.degree !== "Not Available" ? e.degree : "—"}</td>
+                        <td>{e.level}</td>
+                        <td>
+                          {e.discipline}
+                          {e.specialisation && e.specialisation !== "Not Available" && (
+                            <span className={styles.matchEvidence}>Specialisation: {e.specialisation}</span>
+                          )}
+                          {e.details && e.details !== "Not Available" && (
+                            <span className={styles.matchEvidence}>Additional: {e.details}</span>
+                          )}
+                        </td>
+                        <td>
+                          {e.status}
+                          {e.counted === false && <span className={styles.matchEvidence}>Not counted</span>}
+                          {MATCH_STATUS_BASIS_LABELS[e.statusBasis] && (
+                            <span className={styles.matchEvidence}>{MATCH_STATUS_BASIS_LABELS[e.statusBasis]}</span>
+                          )}
+                          {e.statusBasis === "stated" && e.statusEvidence && e.statusEvidence !== "Not Available" && (
+                            <span className={styles.matchEvidence}>“{e.statusEvidence}”</span>
+                          )}
+                        </td>
+                        <td>{yearSpan(e.startYear, e.endYear)}</td>
+                        <td>{MATCH_EDUCATION_SOURCE_LABELS[e.from] ?? e.from}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {why.length > 0 && (
+              <div className={styles.matchWhy}>
+                <h3 className={styles.subheading}>{m.role ? "Why this role?" : "Why it cannot be checked"}</h3>
+                <ul className={styles.matchList}>
+                  {why.map((reason, i) => (
+                    <li key={i}>{reason}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -585,6 +647,8 @@ export default function AdminCandidateProfilePage() {
   const [downloading, setDownloading] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState("");
   const [openResumes, setOpenResumes] = useState<Record<string, boolean>>({});
+  const [matchOpen, setMatchOpen] = useState(false);
+  const closeMatch = useCallback(() => setMatchOpen(false), []);
   const [copied, setCopied] = useState(false);
   const [fromParam, setFromParam] = useState<string | null>(null);
 
@@ -602,6 +666,10 @@ export default function AdminCandidateProfilePage() {
   }, []);
 
   const goToLogin = useCallback(() => router.push("/admin/login"), [router]);
+  const loadMatch = useCallback(
+    () => withAuth(`/api/admin/candidates/${encodeURIComponent(candidateId)}/match-role`),
+    [withAuth, candidateId]
+  );
 
   // Verify the admin session before requesting any candidate data
   useEffect(() => {
@@ -912,6 +980,14 @@ export default function AdminCandidateProfilePage() {
                             </button>
                           )}
                           <button
+                            type="button"
+                            className={styles.secondaryBtn}
+                            onClick={() => setMatchOpen(true)}
+                            title="Role eligibility based on qualification and years of experience"
+                          >
+                            Match
+                          </button>
+                          <button
                             className={styles.primaryBtn}
                             disabled={downloading === key}
                             onClick={() =>
@@ -1053,14 +1129,7 @@ export default function AdminCandidateProfilePage() {
           )}
         </Card>
 
-        {/* ── Skill match: eligibility, resume/profile skills and interview topic scores, kept separate ── */}
-        <Card title="Skill Match" icon="🧭">
-          <div className={styles.skillGrid}>
-            <RoleEligibilityPanel role={p.role} yearsOfExperience={prof.yearsOfExperience} />
-            <ResumeSkillsPanel resumes={p.resumes} profile={prof} />
-            <InterviewPerformancePanel interview={p.interviews.find((iv) => iv.id === p.statusInterviewId)} />
-          </div>
-        </Card>
+        {matchOpen && <RoleMatchModal candidateName={displayName} load={loadMatch} onClose={closeMatch} />}
 
         {/* ── Interview results ── */}
         <Card

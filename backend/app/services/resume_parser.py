@@ -22,10 +22,25 @@ def extract_text_from_pdf(file_bytes: bytes) -> str:
 
 
 def extract_text_from_docx(file_bytes: bytes) -> str:
-    """Extract all text from a DOCX using python-docx."""
+    """Extract all text from a DOCX using python-docx: paragraphs and tables, in document order."""
+    from docx.table import Table
+    from docx.text.paragraph import Paragraph
+
     doc = Document(io.BytesIO(file_bytes))
-    paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
-    return "\n\n".join(paragraphs)
+    parts = []
+    for block in doc.element.body.iterchildren():
+        tag = block.tag.rsplit("}", 1)[-1]
+        if tag == "p":
+            text = Paragraph(block, doc).text.strip()
+            if text:
+                parts.append(text)
+        elif tag == "tbl":  # e.g. an education table: one line per row, cells joined with " | "
+            for row in Table(block, doc).rows:
+                cells = [c.text.strip() for c in row.cells]
+                cells = [c for i, c in enumerate(cells) if c and c not in cells[:i]]  # merged cells repeat
+                if cells:
+                    parts.append(" | ".join(cells))
+    return "\n\n".join(parts)
 
 
 def extract_raw_text(content: bytes, file_type: str) -> str:

@@ -4,6 +4,7 @@ Admin Candidate Profile — read-only, admin-authenticated view of one candidate
 Endpoints (all require require_admin_auth):
   GET /api/admin/candidates/{candidate_id}/profile
   GET /api/admin/candidates/{candidate_id}/interviews/{interview_id}
+  GET /api/admin/candidates/{candidate_id}/match-role
   GET /api/admin/candidates/{candidate_id}/resumes/{resume_id}/download
   GET /api/admin/candidates/{candidate_id}/document-files/{document_id}/download
 
@@ -20,6 +21,7 @@ from fastapi.responses import Response
 
 from app.db.mongodb import get_sync_db
 from app.api.admin.middleware import require_admin_auth
+from app.services.role_match import match_role
 from app.api.admin.candidates import (
     VALID_ROLES,
     _calculated_role,
@@ -331,6 +333,24 @@ async def get_candidate_profile(candidate_id: str, _admin=Depends(require_admin_
         "statusInterviewId": str(status_session["_id"]) if status_session else None,
         "documents": _documents(db, cand),
     }
+
+
+@router.get("/candidates/{candidate_id}/match-role")
+async def get_candidate_match_role(candidate_id: str, _admin=Depends(require_admin_auth)):
+    """
+    Role for the Match feature: the candidate's eligible role (explained) when there is one; otherwise a role
+    suggested from the latest parsed resume's education plus the profile's years of experience, or the reasons it
+    cannot be checked. Read-only, never stored, and separate from the candidate's eligible role.
+    """
+    db = get_sync_db()
+    cand = _find_candidate(db, candidate_id)
+    resume = db.resumes.find_one(
+        {"candidate_id": {"$in": _str_variants(cand)}, "status": "parsed"},
+        {"parsed_data": 1, "created_at": 1},
+        sort=[("created_at", -1)],
+    )
+    result = match_role(cand, resume)
+    return {**result, "resumeId": str(resume["_id"]) if resume and result["outcome"] != "eligible_role" else None}
 
 
 @router.get("/candidates/{candidate_id}/interviews/{interview_id}")

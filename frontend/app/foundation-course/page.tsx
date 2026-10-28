@@ -24,8 +24,28 @@ export default function FoundationCoursePage() {
     const stored = localStorage.getItem('foundationCourseCompleted');
     if (stored === 'completed') {
       setCourseStatus('completed');
+      return;
     }
-  }, []);
+
+    const videoDone = localStorage.getItem('foundation_video_completed') === 'true';
+    if (!videoDone) {
+      fetch('/api/candidate', { cache: 'no-store' })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((cand) => {
+          if (cand?.foundationCourseCompleted) {
+            setCourseStatus('completed');
+            localStorage.setItem('foundationCourseCompleted', 'completed');
+          } else if (cand?.foundationVideoCompleted) {
+            localStorage.setItem('foundation_video_completed', 'true');
+          } else {
+            router.replace('/foundation-course/video');
+          }
+        })
+        .catch(() => {
+          router.replace('/foundation-course/video');
+        });
+    }
+  }, [router]);
 
   const handleLaunchCourse = async () => {
     window.open(VIBE_COURSE_URL, '_blank', 'noopener,noreferrer');
@@ -163,6 +183,14 @@ export default function FoundationCoursePage() {
                 <button onClick={handleCheckCompletion} disabled={isChecking} className={styles.secondaryButton}>
                   {isChecking && <span className={styles.spinner} />}
                   {isChecking ? 'Checking...' : 'Check Completion'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push('/foundation-course/video')}
+                  className={styles.rewatchButton}
+                  title="Rewatch Foundation Course Orientation Video"
+                >
+                  Watch Orientation Video
                 </button>
               </div>
               <div className={styles.note}>

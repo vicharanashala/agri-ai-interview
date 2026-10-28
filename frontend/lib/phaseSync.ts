@@ -20,6 +20,7 @@ export async function syncPhaseToDb(
   flags?: {
     passedAndVisitedSummary?: boolean
     foundationCourseCompleted?: boolean
+    foundationVideoCompleted?: boolean
     moduleCompleted?: boolean
     documentsSubmitted?: boolean
     consentAccepted?: boolean
@@ -36,9 +37,15 @@ export async function syncPhaseToDb(
       Object.assign(body, flags)
     }
 
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    const token = typeof window !== 'undefined' ? sessionStorage.getItem('candidate_session_token') : null
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+
     await fetch('/api/candidate', {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       credentials: 'include',
       body: JSON.stringify(body),
     })

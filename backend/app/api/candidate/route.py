@@ -194,6 +194,7 @@ class CandidateProfileResponse(BaseModel):
     resumeId: Optional[str] = None
     resumeStatus: Optional[str] = None
     foundationCourseCompleted: Optional[bool] = False
+    foundationVideoCompleted: Optional[bool] = False
     moduleCompleted: Optional[bool] = False
     passedAndVisitedSummary: Optional[bool] = False
     documentsSubmitted: Optional[bool] = False
@@ -219,6 +220,7 @@ class CandidatePatchRequest(BaseModel):
     joiningDetailsVisited: Optional[bool] = None
     documentsSubmitted: Optional[bool] = None
     foundationCourseCompleted: Optional[bool] = None
+    foundationVideoCompleted: Optional[bool] = None
     moduleCompleted: Optional[bool] = None
     celebratedPhases: Optional[list[int]] = None
     declarationAccepted: Optional[bool] = None
@@ -690,6 +692,7 @@ async def get_candidate_profile(email: Optional[str] = Query(None)):
         resumeId=resume_id,
         resumeStatus=resume_status,
         foundationCourseCompleted=cand.get("foundation_course_completed", False),
+        foundationVideoCompleted=cand.get("foundation_video_completed", False),
         moduleCompleted=cand.get("module_completed", False),
         passedAndVisitedSummary=cand.get("passed_and_visited_summary", False),
         documentsSubmitted=cand.get("documents_submitted", False),
@@ -873,7 +876,7 @@ async def patch_candidate(request: Request, body: CandidatePatchRequest):
     Update the candidate's currentPhase and/or milestone flags.
     phase values: 1=onboarding, 2=interview, 3=summary, 4=documents
     """
-    candidate_id = _get_candidate_id_from_request(request)
+    candidate_id = _get_candidate_id_with_email_fallback(request)
 
     updates = {}
     if body.phase is not None:
@@ -894,6 +897,8 @@ async def patch_candidate(request: Request, body: CandidatePatchRequest):
             updates["documents_submitted_at"] = datetime.now(timezone.utc).isoformat()
     if body.foundationCourseCompleted is not None:
         updates["foundation_course_completed"] = body.foundationCourseCompleted
+    if body.foundationVideoCompleted is not None:
+        updates["foundation_video_completed"] = body.foundationVideoCompleted
     if body.moduleCompleted is not None:
         updates["module_completed"] = body.moduleCompleted
 

@@ -337,6 +337,10 @@ export default function DashboardPage() {
           localStorage.removeItem('foundationCourseCompleted');
         }
 
+        if (candidate.foundationVideoCompleted) {
+          localStorage.setItem('foundation_video_completed', 'true');
+        }
+
         if (candidate.moduleCompleted) {
           localStorage.setItem('moduleCompleted', 'completed');
         } else if (!lsModuleCompleted) {
@@ -643,7 +647,13 @@ export default function DashboardPage() {
           router.push('/summary');
           break;
         case 4:
-          router.push('/foundation-course');
+          if (foundationCompleted) {
+            router.push('/foundation-course');
+          } else if (typeof window !== 'undefined' && localStorage.getItem('foundation_video_completed') === 'true') {
+            router.push('/foundation-course');
+          } else {
+            router.push('/foundation-course/video');
+          }
           break;
         case 5:
           router.push('/module');

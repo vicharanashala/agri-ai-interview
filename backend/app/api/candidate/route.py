@@ -202,6 +202,7 @@ class CandidateProfileResponse(BaseModel):
     consentTimestamp: Optional[str] = None
     consentWithdrawn: Optional[bool] = False
     consentWithdrawnAt: Optional[str] = None
+    consentHistory: Optional[list[dict]] = None
     declarationAccepted: Optional[bool] = False
     declarations: Optional[dict] = None
     profileCompleted: Optional[bool] = False
@@ -387,6 +388,119 @@ async def upsert_candidate(request: Request, body: OnboardingRequest):
     return {"success": True, "message": "Candidate data saved", "id": str(cand["_id"])}
 
 
+def mark_declarations_withdrawn(decls: dict, withdrawn_at: Optional[str]) -> dict:
+    """Marks all slide declarations as accepted=False and adds withdrawnAt timestamp."""
+    res = {}
+    if isinstance(decls, dict):
+        for k, v in decls.items():
+            if isinstance(v, dict):
+                s = dict(v)
+                s["accepted"] = False
+                if withdrawn_at and not s.get("withdrawnAt"):
+                    s["withdrawnAt"] = withdrawn_at
+                res[k] = s
+            else:
+                res[k] = v
+    return res
+
+
+def normalize_consent_cycles(
+    raw_history: Optional[list],
+    fallback_decls: Optional[dict] = None,
+    fallback_accepted_at: Optional[str] = None,
+    fallback_withdrawn_at: Optional[str] = None,
+    fallback_is_withdrawn: bool = False,
+) -> list[dict]:
+    """
+    Normalizes any consent history (whether legacy event format or cycle format)
+    into a clean list of consent cycles. Each cycle represents a distinct consent granting
+    and its subsequent withdrawal (if any). If a cycle is withdrawn, its nested declarations
+    have accepted=False and all_accepted=False.
+    """
+    if not isinstance(raw_history, list):
+        raw_history = []
+
+    cycles: list[dict] = []
+    current_cycle: Optional[dict] = None
+
+    for item in raw_history:
+        if not isinstance(item, dict):
+            continue
+
+        # If already a cycle object (has 'cycle' or 'all_accepted' or 'withdrawn' boolean)
+        if "cycle" in item or ("withdrawn" in item and ("declarations" in item or "granted_at" in item or "accepted_at" in item)):
+            c = dict(item)
+            c["cycle"] = c.get("cycle") or (len(cycles) + 1)
+            c["granted_at"] = c.get("granted_at") or c.get("accepted_at") or c.get("declarationAcceptedAt") or c.get("timestamp")
+            c["withdrawn"] = bool(c.get("withdrawn", False))
+            c["withdrawn_at"] = c.get("withdrawn_at") or c.get("withdrawnAt")
+            c["status"] = "withdrawn" if c["withdrawn"] else "granted"
+            raw_c_decls = c.get("declarations") or {}
+            if c["withdrawn"]:
+                c["all_accepted"] = False
+                c["declarations"] = mark_declarations_withdrawn(raw_c_decls, c["withdrawn_at"])
+            else:
+                c["all_accepted"] = bool(c.get("all_accepted", True))
+                c["declarations"] = raw_c_decls
+            cycles.append(c)
+            current_cycle = c
+            continue
+
+        # Otherwise it's a legacy event object ('event': 'granted' or 'event': 'withdrawn')
+        evt = item.get("event") or item.get("action") or item.get("status")
+
+        if evt == "granted":
+            current_cycle = {
+                "cycle": len(cycles) + 1,
+                "status": "granted",
+                "all_accepted": True,
+                "granted_at": item.get("timestamp") or item.get("granted_at") or item.get("grantedAt"),
+                "declarations": item.get("declarations") or {},
+                "withdrawn": False,
+                "withdrawn_at": None,
+            }
+            cycles.append(current_cycle)
+
+        elif evt == "withdrawn":
+            w_ts = item.get("timestamp") or item.get("withdrawn_at") or item.get("withdrawnAt")
+            prev_d = item.get("previous_declarations") or item.get("declarations") or {}
+            withdrawn_d = mark_declarations_withdrawn(prev_d, w_ts)
+            if current_cycle:
+                current_cycle["status"] = "withdrawn"
+                current_cycle["all_accepted"] = False
+                current_cycle["withdrawn"] = True
+                current_cycle["withdrawn_at"] = w_ts
+                current_cycle["reason"] = item.get("reason", "Candidate voluntarily withdrew consent via profile")
+                current_cycle["declarations"] = mark_declarations_withdrawn(current_cycle.get("declarations") or prev_d, w_ts)
+            else:
+                current_cycle = {
+                    "cycle": len(cycles) + 1,
+                    "status": "withdrawn",
+                    "all_accepted": False,
+                    "granted_at": item.get("timestamp") or w_ts,
+                    "declarations": withdrawn_d,
+                    "withdrawn": True,
+                    "withdrawn_at": w_ts,
+                    "reason": item.get("reason", "Candidate voluntarily withdrew consent via profile"),
+                }
+                cycles.append(current_cycle)
+
+    # Fallback if raw_history was completely empty but we have fallback declarations or withdrawal info
+    if not cycles and (fallback_decls or fallback_accepted_at or fallback_withdrawn_at):
+        f_decls = mark_declarations_withdrawn(fallback_decls, fallback_withdrawn_at) if fallback_is_withdrawn else (fallback_decls or {})
+        cycles.append({
+            "cycle": 1,
+            "status": "withdrawn" if fallback_is_withdrawn else "granted",
+            "all_accepted": False if fallback_is_withdrawn else True,
+            "granted_at": fallback_accepted_at or fallback_withdrawn_at,
+            "declarations": f_decls,
+            "withdrawn": fallback_is_withdrawn,
+            "withdrawn_at": fallback_withdrawn_at if fallback_is_withdrawn else None,
+        })
+
+    return cycles
+
+
 def check_all_declarations_accepted(user: Optional[dict] = None, cand: Optional[dict] = None) -> bool:
     """
     Returns True if and only if the candidate has consented to all 4 declaration forms:
@@ -395,6 +509,15 @@ def check_all_declarations_accepted(user: Optional[dict] = None, cand: Optional[
     3. slide3_groundTruthModule
     4. slide4_documentVerificationDPDP
     """
+    if cand and cand.get("consent_withdrawn"):
+        return False
+    if user and user.get("consent_withdrawn"):
+        return False
+    if cand and cand.get("declaration_accepted") is False:
+        return False
+    if user and user.get("declarationAccepted") is False:
+        return False
+
     user_decls = (user.get("declarations") if user else None) or (cand.get("declarations") if cand else None) or {}
     if not isinstance(user_decls, dict):
         return False
@@ -455,7 +578,8 @@ async def get_candidate_profile(email: Optional[str] = Query(None)):
             email=resolved_email,
             fullName=resolved_full_name,
             declarationAccepted=has_all_declarations,
-            declarations=declarations_dict
+            declarations=declarations_dict,
+            consentHistory=user.get("consent_history", []) if user else [],
         )
 
     # Sync full_name / email / declaration data to candidate document if missing
@@ -469,6 +593,8 @@ async def get_candidate_profile(email: Optional[str] = Query(None)):
         updates_to_cand["declaration_accepted"] = True
         updates_to_cand["declaration_accepted_at"] = decl_time
         updates_to_cand["declarations"] = declarations_dict
+
+        updates_to_cand["consent_status"] = "granted"
     if updates_to_cand:
         db.candidates.update_one({"_id": cand["_id"]}, {"$set": updates_to_cand})
 
@@ -487,6 +613,39 @@ async def get_candidate_profile(email: Optional[str] = Query(None)):
         resume_name = resume.get("file_name")
         resume_id = str(resume["_id"])
         resume_status = resume.get("status")
+
+    # Normalize consent history and auto-repair if DB had legacy separate events or unwithdrawn nested declarations
+    raw_history = cand.get("consent_history") or (user.get("consent_history") if user else None)
+    is_withdrawn = bool(cand.get("consent_withdrawn") or (user and user.get("consent_withdrawn")))
+    withdrawn_at = cand.get("consent_withdrawn_at") or (user.get("consent_withdrawn_at") if user else None)
+    accepted_at = cand.get("declaration_accepted_at") or (user.get("declarationAcceptedAt") if user else None) or cand.get("consent_timestamp")
+    cleaned_history = normalize_consent_cycles(
+        raw_history,
+        fallback_decls=declarations_dict,
+        fallback_accepted_at=accepted_at,
+        fallback_withdrawn_at=withdrawn_at,
+        fallback_is_withdrawn=is_withdrawn,
+    )
+    if is_withdrawn:
+        declarations_dict = mark_declarations_withdrawn(declarations_dict, withdrawn_at)
+
+    if cand:
+        cand_update_fields = {}
+        if cand.get("consent_history") != cleaned_history:
+            cand_update_fields["consent_history"] = cleaned_history
+        if is_withdrawn and cand.get("declarations") != declarations_dict:
+            cand_update_fields["declarations"] = declarations_dict
+        if cand_update_fields:
+            db.candidates.update_one({"_id": cand["_id"]}, {"$set": cand_update_fields})
+
+    if user:
+        user_update_fields = {}
+        if user.get("consent_history") != cleaned_history:
+            user_update_fields["consent_history"] = cleaned_history
+        if is_withdrawn and user.get("declarations") != declarations_dict:
+            user_update_fields["declarations"] = declarations_dict
+        if user_update_fields:
+            db.users.update_one({"_id": user["_id"]}, {"$set": user_update_fields})
 
     # Check if onboarding profile has truly been completed
     profile_completed_val = cand.get("profile_completed_at")
@@ -537,10 +696,7 @@ async def get_candidate_profile(email: Optional[str] = Query(None)):
         documentsSubmittedAt=cand.get("documents_submitted_at"),
         consentAccepted=(
             False if cand.get("consent_withdrawn", False)
-            else bool(
-                cand.get("consent_accepted", False)
-                or (declarations_dict.get("slide4_documentVerificationDPDP", {}).get("accepted", False) if isinstance(declarations_dict, dict) else False)
-            )
+            else bool(has_all_declarations)
         ),
         consentTimestamp=(
             cand.get("consent_timestamp")
@@ -549,6 +705,7 @@ async def get_candidate_profile(email: Optional[str] = Query(None)):
         ),
         consentWithdrawn=cand.get("consent_withdrawn", False),
         consentWithdrawnAt=cand.get("consent_withdrawn_at"),
+        consentHistory=cleaned_history,
         declarationAccepted=has_all_declarations,
         declarations=declarations_dict,
         profileCompleted=is_profile_completed,
@@ -573,24 +730,118 @@ async def delete_candidate(request: Request):
 @router.post("/consent/withdraw")
 async def withdraw_consent(request: Request):
     """Withdraw candidate data access and document verification consent (DPDP Act)."""
-    candidate_id = _get_candidate_id_from_request(request)
+    try:
+        candidate_id = _get_candidate_id_with_email_fallback(request)
+    except Exception:
+        candidate_id = _get_candidate_id_from_request(request)
+
     db = get_sync_db()
-    now = datetime.now(timezone.utc)
-    res = db.candidates.update_one(
-        {"_id": _to_objectid(candidate_id)},
-        {
-            "$set": {
-                "consent_withdrawn": True,
-                "consent_withdrawn_at": now.isoformat(),
-                "consent_accepted": False,
-                "consent_status": "withdrawn",
-                "updated_at": now,
-            }
-        }
-    )
-    if res.matched_count == 0:
+    cand = db.candidates.find_one({"_id": _to_objectid(candidate_id)})
+    if not cand:
         raise HTTPException(status_code=404, detail="Candidate not found")
-    return {"success": True, "message": "Consent has been successfully withdrawn."}
+
+    user = None
+    if cand.get("user_id"):
+        user = db.users.find_one({"_id": _to_objectid(cand["user_id"])})
+    if not user and cand.get("email"):
+        user = db.users.find_one({"email": cand["email"].lower().strip()})
+
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
+
+    prev_declarations = cand.get("declarations") or (user.get("declarations") if user else None) or {}
+    prev_accepted_at = cand.get("declaration_accepted_at") or (user.get("declarationAcceptedAt") if user else None) or cand.get("consent_timestamp")
+    prev_withdrawn_at = cand.get("consent_withdrawn_at") or (user.get("consent_withdrawn_at") if user else None)
+
+    withdrawn_declarations = mark_declarations_withdrawn(prev_declarations, now_iso)
+
+    raw_history = cand.get("consent_history") or (user.get("consent_history") if user else None)
+    cycles = normalize_consent_cycles(
+        raw_history,
+        fallback_decls=withdrawn_declarations,
+        fallback_accepted_at=prev_accepted_at,
+        fallback_withdrawn_at=now_iso,
+        fallback_is_withdrawn=True,
+    )
+    if cycles:
+        cycles[-1]["status"] = "withdrawn"
+        cycles[-1]["all_accepted"] = False
+        cycles[-1]["withdrawn"] = True
+        cycles[-1]["withdrawn_at"] = now_iso
+        cycles[-1]["reason"] = "Candidate voluntarily withdrew consent via profile"
+        cycles[-1]["declarations"] = withdrawn_declarations
+    else:
+        cycles = [{
+            "cycle": 1,
+            "status": "withdrawn",
+            "all_accepted": False,
+            "granted_at": prev_accepted_at or now_iso,
+            "declarations": withdrawn_declarations,
+            "withdrawn": True,
+            "withdrawn_at": now_iso,
+            "reason": "Candidate voluntarily withdrew consent via profile",
+        }]
+    updated_history = cycles
+
+    # Delete all documents uploaded in doc upload phase (candidate_documents)
+    id_variants = _get_id_variants(candidate_id)
+    if cand.get("_id"):
+        id_variants.extend(_get_id_variants(cand["_id"]))
+    id_variants = list(set(id_variants))
+
+    docs = list(db.candidate_documents.find({"candidate_id": {"$in": id_variants}}))
+    if docs:
+        from app.core.storage import get_storage
+        storage = get_storage()
+        for doc in docs:
+            storage_path = doc.get("storage_path", "")
+            if storage_path:
+                try:
+                    await storage.delete(storage_path)
+                except FileNotFoundError:
+                    pass
+                except Exception as ex:
+                    pass
+        db.candidate_documents.delete_many({"candidate_id": {"$in": id_variants}})
+
+    had_submitted_docs = bool(cand.get("documents_submitted"))
+
+    cand_update = {
+        "consent_withdrawn": True,
+        "consent_withdrawn_at": now_iso,
+        "consent_status": "withdrawn",
+        "declaration_accepted": False,
+        "declaration_accepted_at": None,
+        "declarations": withdrawn_declarations,
+        "consent_history": updated_history,
+        "updated_at": now,
+    }
+
+    if had_submitted_docs or cand.get("current_phase") == "documents" or len(docs) > 0:
+        cand_update["documents_submitted"] = False
+        cand_update["documents_submitted_at"] = None
+        cand_update["current_phase"] = "documents"
+        cand_update["had_documents_submitted_before_withdraw"] = True
+
+    db.candidates.update_one({"_id": cand["_id"]}, {"$set": cand_update, "$unset": {"consent_accepted": "", "allDeclarationsAccepted": ""}})
+
+    if user:
+        user_update = {
+            "declarationAccepted": False,
+            "declarationAcceptedAt": None,
+            "declarations": withdrawn_declarations,
+            "consent_withdrawn": True,
+            "consent_withdrawn_at": now_iso,
+            "consent_history": updated_history,
+            "updated_at": now,
+        }
+        db.users.update_one({"_id": user["_id"]}, {"$set": user_update, "$unset": {"consent_accepted": "", "allDeclarationsAccepted": ""}})
+
+    return {
+        "success": True,
+        "message": "Consent has been successfully withdrawn.",
+        "redirectTo": "/declaration",
+    }
 
 
 @router.post("/consent/grant")
@@ -603,7 +854,6 @@ async def grant_consent(request: Request):
         {"_id": _to_objectid(candidate_id)},
         {
             "$set": {
-                "consent_accepted": True,
                 "consent_timestamp": now.isoformat(),
                 "consent_withdrawn": False,
                 "consent_withdrawn_at": None,
@@ -823,29 +1073,94 @@ async def accept_declaration(request: Request, body: DeclarationRequest):
 
     has_all = check_all_declarations_accepted({'declarations': consents_data})
 
+    # Look up existing candidate document if already created
+    cand = db.candidates.find_one({'user_id': {'$in': [str(user['_id']), user['_id']]}})
+    if not cand:
+        cand = db.candidates.find_one({'email': email.lower().strip()})
+
+    raw_history = cand.get("consent_history") if cand else None
+    if not raw_history and user:
+        raw_history = user.get("consent_history")
+
+    prev_accepted_at = (cand.get("declaration_accepted_at") if cand else None) or user.get("declarationAcceptedAt") or (cand.get("consent_timestamp") if cand else None)
+    prev_withdrawn_at = (cand.get("consent_withdrawn_at") if cand else None) or user.get("consent_withdrawn_at")
+    prev_decls = (cand.get("declarations") if cand else None) or user.get("declarations") or {}
+
+    cycles = normalize_consent_cycles(
+        raw_history,
+        fallback_decls=prev_decls,
+        fallback_accepted_at=prev_accepted_at,
+        fallback_withdrawn_at=prev_withdrawn_at,
+        fallback_is_withdrawn=bool(cand.get("consent_withdrawn") if cand else (user.get("consent_withdrawn") if user else False)),
+    )
+
+    if cycles and cycles[-1].get("withdrawn"):
+        # Previous consent was withdrawn. Candidate is now granting consent again — append Cycle 2!
+        new_cycle = {
+            "cycle": len(cycles) + 1,
+            "status": "granted",
+            "all_accepted": has_all,
+            "granted_at": now_iso,
+            "declarations": consents_data,
+            "withdrawn": False,
+            "withdrawn_at": None,
+        }
+        cycles.append(new_cycle)
+    elif cycles:
+        # Candidate is updating current active consent
+        cycles[-1]["status"] = "granted"
+        cycles[-1]["all_accepted"] = has_all
+        cycles[-1]["granted_at"] = now_iso
+        cycles[-1]["declarations"] = consents_data
+        cycles[-1]["withdrawn"] = False
+        cycles[-1]["withdrawn_at"] = None
+    else:
+        # First consent ever!
+        cycles = [{
+            "cycle": 1,
+            "status": "granted",
+            "all_accepted": has_all,
+            "granted_at": now_iso,
+            "declarations": consents_data,
+            "withdrawn": False,
+            "withdrawn_at": None,
+        }]
+    updated_history = cycles
+
+    now_dt = datetime.now(timezone.utc)
     user_update = {
         'declarationAccepted': has_all,
         'declarationAcceptedAt': now_iso,
         'declarations': consents_data,
+        'consent_withdrawn': False,
+        'consent_withdrawn_at': None,
+        'consent_history': updated_history,
+        'updated_at': now_dt,
     }
     db.users.update_one(
         {'_id': user['_id']},
         {
             '$set': user_update,
-            '$unset': {'allDeclarationsAccepted': ''}
+            '$unset': {'allDeclarationsAccepted': '', 'consent_accepted': ''}
         }
     )
 
-    # Also update candidate document if already created, or create it if not present
-    cand = db.candidates.find_one({'user_id': {'$in': [str(user['_id']), user['_id']]}})
-    if not cand:
-        cand = db.candidates.find_one({'email': email.lower().strip()})
     if cand:
         cand_update = {
             'declaration_accepted': has_all,
             'declaration_accepted_at': now_iso,
             'declarations': consents_data,
+            'consent_withdrawn': False,
+            'consent_withdrawn_at': None,
+            'consent_status': 'granted',
+            'consent_history': updated_history,
+            'updated_at': now_dt,
         }
+        if cand.get("had_documents_submitted_before_withdraw") or cand.get("current_phase") == "documents":
+            cand_update["current_phase"] = "documents"
+            cand_update["documents_submitted"] = False
+            cand_update["had_documents_submitted_before_withdraw"] = False
+
         db.candidates.update_one(
             {'_id': cand['_id']},
             {
@@ -853,7 +1168,6 @@ async def accept_declaration(request: Request, body: DeclarationRequest):
                 '$unset': {
                     'allDeclarationsAccepted': '',
                     'consent_accepted': '',
-                    'consent_timestamp': '',
                 }
             }
         )
@@ -867,10 +1181,14 @@ async def accept_declaration(request: Request, body: DeclarationRequest):
             'declaration_accepted': has_all,
             'declaration_accepted_at': now_iso,
             'declarations': consents_data,
+            'consent_withdrawn': False,
+            'consent_withdrawn_at': None,
+            'consent_status': 'granted',
+            'consent_history': updated_history,
             'isdeleted': False,
             'is_deleted': False,
-            'created_at': datetime.now(timezone.utc),
-            'updated_at': datetime.now(timezone.utc),
+            'created_at': now_dt,
+            'updated_at': now_dt,
         }
         db.candidates.insert_one(cand_doc)
 

@@ -192,10 +192,6 @@
   gap: 16px;
 }
 
-.consentSectionWithdrawn {
-  border-left-color: #ef4444;
-  background: #fffafa;
-}
 
 .consentHeader {
   display: flex;
@@ -222,10 +218,6 @@
   color: #16a34a;
 }
 
-.consentIconBadgeWithdrawn {
-  background: rgba(239, 68, 68, 0.12);
-  color: #dc2626;
-}
 
 .consentTitle {
   font-size: 17px;
@@ -249,15 +241,6 @@
   color: #16a34a;
 }
 
-.consentStatusWithdrawn {
-  background: #fee2e2;
-  color: #dc2626;
-}
-
-.consentStatusPending {
-  background: #f1f5f9;
-  color: #64748b;
-}
 
 .consentDescription {
   font-size: 14px;
@@ -685,4 +668,83 @@
 .uploadHint {
   font-size: 12px;
   color: #94a3b8;
+}
+
+/* Declarations list inside Profile Consent Card */
+.declarationsList {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+  margin-bottom: 8px;
+}
+
+@media (max-width: 640px) {
+  .declarationsList {
+    grid-template-columns: 1fr;
+  }
+}
+
+.declarationItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #1e293b;
+  font-weight: 500;
+}
+
+
+.declarationCheck {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: #22c55e;
+  color: #ffffff;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+
+.declarationName {
+  flex: 1;
+  line-height: 1.35;
+}
+
+
+.modalDeclarationsList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.modalDeclarationsList li {
+  font-size: 13px;
+  color: #334155;
+  background: #f8fafc;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border-left: 3px solid #ef4444;
+  font-weight: 500;
+}
+
+.modalWarningBox {
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #9f1239;
 }

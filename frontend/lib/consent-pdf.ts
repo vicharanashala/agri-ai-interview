@@ -17,9 +17,19 @@ export interface ConsentPdfDeclaration {
   consentName?: Text;
   accepted?: boolean;
   acceptedAt?: Text;
+  withdrawnAt?: Text;
   fullName?: Text;
   signature?: Text;
   extra?: Record<string, string | number | boolean>;
+}
+
+export interface ConsentPdfDeclarationCycle {
+  cycle?: number;
+  allAccepted: boolean;
+  declarationAcceptedAt?: Text;
+  withdrawn?: boolean;
+  withdrawnAt?: Text;
+  records: ConsentPdfDeclaration[];
 }
 
 export interface ConsentPdfInput {
@@ -29,9 +39,15 @@ export interface ConsentPdfInput {
     timestamp?: Text;
     withdrawn?: boolean;
     withdrawnAt?: Text;
-    inferredFromDocuments?: boolean;
   };
-  declarations: { allAccepted: boolean; declarationAcceptedAt?: Text; records: ConsentPdfDeclaration[] };
+  declarations: {
+    allAccepted: boolean;
+    declarationAcceptedAt?: Text;
+    withdrawn?: boolean;
+    withdrawnAt?: Text;
+    records: ConsentPdfDeclaration[];
+    history?: ConsentPdfDeclarationCycle[];
+  };
   generatedAt: string;
 }
 
@@ -68,41 +84,64 @@ export function consentPdfLines(input: ConsentPdfInput, formatDateTime: (iso: st
 
   lines.push({ text: "Consent status", bold: true, size: 12, gapBefore: 10 });
   lines.push(field("Status", has(consent.status) ? humanize(consent.status) : NOT_RECORDED));
-  if (declarations.records.some((r) => r.present)) {
-    lines.push(field("All four declarations accepted", declarations.allAccepted ? "Yes" : "No"));
-  }
-  if (has(declarations.declarationAcceptedAt)) lines.push(field("Declarations submitted", stamp(declarations.declarationAcceptedAt)));
-  if (has(consent.timestamp)) lines.push(field("Data-access consent recorded", stamp(consent.timestamp)));
-  if (consent.withdrawn) lines.push(field("Consent withdrawn", "Yes"));
-  if (has(consent.withdrawnAt)) lines.push(field("Withdrawn at", stamp(consent.withdrawnAt)));
-  if (consent.inferredFromDocuments) {
-    lines.push({
-      text: "Consent status is inferred from the candidate having submitted documents; no explicit consent flag is stored.",
-      muted: true,
-      size: 9,
+
+
+  const rawCycles = (declarations.history && declarations.history.length > 0)
+    ? declarations.history
+    : [{
+        allAccepted: declarations.allAccepted,
+        declarationAcceptedAt: declarations.declarationAcceptedAt,
+        withdrawn: consent.withdrawn,
+        withdrawnAt: consent.withdrawnAt,
+        records: declarations.records,
+      }];
+
+  // Show the latest consent cycle at the top
+  const cycles = [...rawCycles].sort((a, b) => {
+    if (a.cycle != null && b.cycle != null) return b.cycle - a.cycle;
+    const timeA = new Date(a.declarationAcceptedAt || a.withdrawnAt || 0).getTime();
+    const timeB = new Date(b.declarationAcceptedAt || b.withdrawnAt || 0).getTime();
+    return timeB - timeA;
+  });
+
+  cycles.forEach((cycle, cycleIdx) => {
+    if (cycleIdx > 0) {
+      lines.push({ kind: "rule", gapBefore: 12 });
+    }
+    if (cycle.withdrawn) {
+      lines.push(field("Consent status", "Withdrawn"));
+      if (has(cycle.withdrawnAt)) lines.push(field("Withdrawn at", stamp(cycle.withdrawnAt)));
+      lines.push(field("All four declarations accepted", "No (Withdrawn)"));
+    } else if (cycle.records.some((r) => r.present)) {
+      lines.push(field("All four declarations accepted", cycle.allAccepted ? "Yes" : "No"));
+    }
+    if (has(cycle.declarationAcceptedAt)) lines.push(field("Declarations submitted", stamp(cycle.declarationAcceptedAt)));
+
+    cycle.records.forEach((r, i) => {
+      lines.push({ kind: "rule", gapBefore: 8 });
+      lines.push({ text: `Declaration ${i + 1} of ${cycle.records.length}`, muted: true, size: 9, gapBefore: 4 });
+      lines.push({ text: has(r.consentName) ? r.consentName : r.label, bold: true, size: 11 });
+      if (has(r.consentName) && r.consentName !== r.label) lines.push({ text: r.label, muted: true, size: 9 });
+
+      if (!r.present) {
+        lines.push(field("Status", NOT_RECORDED));
+        return;
+      }
+      lines.push(field("Status", cycle.withdrawn || !r.accepted ? "Rejected" : "Accepted"));
+      lines.push(field("Signer name", has(r.fullName) ? r.fullName : NOT_RECORDED));
+      lines.push(field("Signature", has(r.signature) ? r.signature : NOT_RECORDED));
+      lines.push(field("Accepted at", has(r.acceptedAt) ? stamp(r.acceptedAt) : NOT_RECORDED));
+      const wAt = has(r.withdrawnAt) ? r.withdrawnAt : has(cycle.withdrawnAt) ? cycle.withdrawnAt : null;
+      if (cycle.withdrawn && wAt) {
+        lines.push(field("Withdrawn at", stamp(wAt)));
+      }
+      const extra = r.extra || {};
+      if (extra.version !== undefined) lines.push(field("Version", String(extra.version)));
+      for (const [key, value] of Object.entries(extra)) {
+        if (key === "version" || key === "withdrawnAt" || key === "withdrawn_at") continue;
+        lines.push(field(humanize(key), typeof value === "boolean" ? (value ? "Yes" : "No") : String(value)));
+      }
     });
-  }
-
-  declarations.records.forEach((r, i) => {
-    lines.push({ kind: "rule", gapBefore: 8 });
-    lines.push({ text: `Declaration ${i + 1} of ${declarations.records.length}`, muted: true, size: 9, gapBefore: 4 });
-    lines.push({ text: has(r.consentName) ? r.consentName : r.label, bold: true, size: 11 });
-    if (has(r.consentName) && r.consentName !== r.label) lines.push({ text: r.label, muted: true, size: 9 });
-
-    if (!r.present) {
-      lines.push(field("Status", NOT_RECORDED));
-      return;
-    }
-    lines.push(field("Status", r.accepted ? "Accepted" : "Not accepted"));
-    lines.push(field("Signer name", has(r.fullName) ? r.fullName : NOT_RECORDED));
-    lines.push(field("Signature", has(r.signature) ? r.signature : NOT_RECORDED));
-    lines.push(field("Accepted at", has(r.acceptedAt) ? stamp(r.acceptedAt) : NOT_RECORDED));
-    const extra = r.extra || {};
-    if (extra.version !== undefined) lines.push(field("Version", String(extra.version)));
-    for (const [key, value] of Object.entries(extra)) {
-      if (key === "version") continue;
-      lines.push(field(humanize(key), typeof value === "boolean" ? (value ? "Yes" : "No") : String(value)));
-    }
   });
   return lines;
 }

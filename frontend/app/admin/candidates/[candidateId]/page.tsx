@@ -48,6 +48,7 @@ interface DeclarationRecord {
   consentName?: string | null;
   accepted?: boolean;
   acceptedAt?: string | null;
+  withdrawnAt?: string | null;
   fullName?: string | null;
   signature?: string | null;
   extra?: Record<string, string | number | boolean>;
@@ -147,6 +148,15 @@ interface DocumentRecord {
   createdAt?: string | null;
 }
 
+interface DeclarationCycle {
+  cycle?: number;
+  allAccepted: boolean;
+  declarationAcceptedAt?: string | null;
+  withdrawn?: boolean;
+  withdrawnAt?: string | null;
+  records: DeclarationRecord[];
+}
+
 interface CandidateProfile {
   id: string;
   fullName?: string | null;
@@ -204,7 +214,6 @@ interface CandidateProfile {
   consent: {
     status?: string | null;
     accepted?: boolean;
-    inferredFromDocuments?: boolean;
     timestamp?: string | null;
     withdrawn?: boolean;
     withdrawnAt?: string | null;
@@ -212,8 +221,11 @@ interface CandidateProfile {
   declarations: {
     allAccepted: boolean;
     declarationAcceptedAt?: string | null;
+    withdrawn?: boolean;
+    withdrawnAt?: string | null;
     source?: string | null;
     records: DeclarationRecord[];
+    history?: DeclarationCycle[];
   };
   resumes: ResumeRecord[];
   interviews: InterviewSummary[];
@@ -1232,66 +1244,150 @@ export default function AdminCandidateProfilePage() {
             </div>
           }
         >
-          <dl className={styles.fieldGrid4}>
-            <Field label="All four declarations accepted" value={presentDeclarations.length > 0 ? yesNo(p.declarations.allAccepted) : null} />
-            <Field label="Declarations submitted" value={p.declarations.declarationAcceptedAt ? formatDateTime(p.declarations.declarationAcceptedAt) : null} />
-            <Field label="Data-access consent recorded" value={p.consent.timestamp ? formatDateTime(p.consent.timestamp) : null} />
-            <Field label="Consent withdrawn" value={p.consent.withdrawn ? "Yes" : null} />
-            <Field label="Withdrawn at" value={p.consent.withdrawnAt ? formatDateTime(p.consent.withdrawnAt) : null} />
-          </dl>
-          {p.consent.inferredFromDocuments && (
-            <p className={styles.note}>
-              Consent status is inferred from the candidate having submitted documents; no explicit consent flag is stored.
-            </p>
-          )}
+          {(() => {
+            const rawCycles: DeclarationCycle[] = (p.declarations.history && p.declarations.history.length > 0)
+              ? p.declarations.history
+              : [{
+                  allAccepted: p.declarations.allAccepted,
+                  declarationAcceptedAt: p.declarations.declarationAcceptedAt,
+                  withdrawn: p.consent.withdrawn,
+                  withdrawnAt: p.consent.withdrawnAt,
+                  records: p.declarations.records,
+                }];
 
-          <div className={styles.declarations}>
-            {p.declarations.records.map((r, i) => (
-              <div key={r.key} className={`${styles.declaration} ${!r.present ? styles.declarationMissing : ""}`}>
-                <div className={styles.declarationHead}>
-                  <div>
-                    <div className={styles.declarationStep}>Declaration {i + 1} of {p.declarations.records.length}</div>
-                    <div className={styles.declarationTitle}>{r.consentName || r.label}</div>
-                    {r.consentName && r.consentName !== r.label && <div className={styles.muted}>{r.label}</div>}
-                  </div>
-                  {!r.present ? (
-                    <Badge tone="gray">Not recorded</Badge>
-                  ) : r.accepted ? (
-                    <Badge tone="green">Accepted</Badge>
-                  ) : (
-                    <Badge tone="red">Not accepted</Badge>
+            // Show the latest consent cycle at the top
+            const cycles = [...rawCycles].sort((a, b) => {
+              if (a.cycle != null && b.cycle != null) return b.cycle - a.cycle;
+              const timeA = new Date(a.declarationAcceptedAt || a.withdrawnAt || 0).getTime();
+              const timeB = new Date(b.declarationAcceptedAt || b.withdrawnAt || 0).getTime();
+              return timeB - timeA;
+            });
+
+            return cycles.map((cycle, cycleIdx) => {
+              const present = cycle.records.filter((r) => r.present);
+              return (
+                <div key={cycleIdx} className={cycleIdx > 0 ? styles.consentCycleDivider : undefined}>
+                  {cycle.withdrawn && (
+                    <div className={styles.withdrawalNotice}>
+                      <div className={styles.withdrawalNoticeHeader}>
+                        <span className={styles.withdrawalNoticeIcon}>⚠️</span>
+                        <div className={styles.withdrawalNoticeTitleBox}>
+                          <span className={styles.withdrawalNoticeTitle}>Consent Withdrawn</span>
+                          <span className={styles.withdrawalNoticeDate}>
+                            Withdrawn on {cycle.withdrawnAt ? formatDateTime(cycle.withdrawnAt) : "Unknown date"}
+                          </span>
+                        </div>
+                        <Badge tone="red">Withdrawn</Badge>
+                      </div>
+                      <p className={styles.withdrawalNoticeText}>
+                        All declarations were revoked upon withdrawal and any uploaded documents were permanently deleted.
+                      </p>
+                    </div>
                   )}
-                </div>
-                {r.present ? (
-                  <dl className={styles.declarationRows}>
-                    <dt>Signer name</dt>
-                    <dd>{r.fullName || "—"}</dd>
-                    <dt>Signature</dt>
-                    <dd>{r.signature ? <span className={styles.signature}>{r.signature}</span> : "—"}</dd>
-                    <dt>Accepted at</dt>
-                    <dd>
-                      {r.acceptedAt ? (
-                        <time dateTime={r.acceptedAt} title={r.acceptedAt}>
-                          {formatDateTime(r.acceptedAt)}
-                          <span className={styles.rawTime}>{r.acceptedAt}</span>
-                        </time>
-                      ) : (
-                        "—"
-                      )}
-                    </dd>
-                    {Object.entries(r.extra || {}).map(([k, v]) => (
-                      <Fragment key={k}>
-                        <dt>{humanize(k)}</dt>
-                        <dd>{typeof v === "boolean" ? yesNo(v) : String(v)}</dd>
-                      </Fragment>
-                    ))}
+
+                  <dl className={cycle.withdrawn ? styles.fieldGrid4 : styles.fieldGrid}>
+                    <Field
+                      label="All four declarations accepted"
+                      value={
+                        cycle.withdrawn ? (
+                          <span className={styles.declRejectedText}>No (Withdrawn)</span>
+                        ) : present.length > 0 ? (
+                          yesNo(cycle.allAccepted)
+                        ) : null
+                      }
+                    />
+                    <Field
+                      label="Declarations submitted"
+                      value={cycle.declarationAcceptedAt ? formatDateTime(cycle.declarationAcceptedAt) : null}
+                    />
+                    {cycle.withdrawn && (
+                      <>
+                        <Field
+                          label="Consent status"
+                          value={<Badge tone="red">Withdrawn</Badge>}
+                        />
+                        <Field
+                          label="Withdrawn at"
+                          value={
+                            cycle.withdrawnAt ? (
+                              <span className={styles.declRejectedText}>{formatDateTime(cycle.withdrawnAt)}</span>
+                            ) : (
+                              "—"
+                            )
+                          }
+                        />
+                      </>
+                    )}
                   </dl>
-                ) : (
-                  <p className={styles.empty}>No record of this consent.</p>
-                )}
-              </div>
-            ))}
-          </div>
+
+                  <div className={styles.declarations}>
+                    {cycle.records.map((r, i) => (
+                      <div
+                        key={r.key}
+                        className={`${styles.declaration} ${!r.present ? styles.declarationMissing : ""} ${cycle.withdrawn ? styles.declarationWithdrawn : ""}`}
+                      >
+                        <div className={styles.declarationHead}>
+                          <div>
+                            <div className={styles.declarationStep}>Declaration {i + 1} of {cycle.records.length}</div>
+                            <div className={styles.declarationTitle}>{r.consentName || r.label}</div>
+                            {r.consentName && r.consentName !== r.label && <div className={styles.muted}>{r.label}</div>}
+                          </div>
+                          {!r.present ? (
+                            <Badge tone="gray">Not recorded</Badge>
+                          ) : cycle.withdrawn || !r.accepted ? (
+                            <Badge tone="red">Rejected</Badge>
+                          ) : (
+                            <Badge tone="green">Accepted</Badge>
+                          )}
+                        </div>
+                        {r.present ? (
+                          <dl className={styles.declarationRows}>
+                            <dt>Signer name</dt>
+                            <dd>{r.fullName || "—"}</dd>
+                            <dt>Signature</dt>
+                            <dd>{r.signature ? <span className={styles.signature}>{r.signature}</span> : "—"}</dd>
+                            <dt>Accepted at</dt>
+                            <dd>
+                              {r.acceptedAt ? (
+                                <time dateTime={r.acceptedAt} title={r.acceptedAt}>
+                                  {formatDateTime(r.acceptedAt)}
+                                  <span className={styles.rawTime}>{r.acceptedAt}</span>
+                                </time>
+                              ) : (
+                                "—"
+                              )}
+                            </dd>
+                            {cycle.withdrawn && (r.withdrawnAt || cycle.withdrawnAt) && (
+                              <>
+                                <dt>Withdrawn at</dt>
+                                <dd className={styles.declRejectedText}>
+                                  <time dateTime={r.withdrawnAt || cycle.withdrawnAt || ""}>
+                                    {formatDateTime((r.withdrawnAt || cycle.withdrawnAt)!)}
+                                  </time>
+                                </dd>
+                              </>
+                            )}
+                            {Object.entries(r.extra || {})
+                              .filter(([k]) => k !== "withdrawnAt" && k !== "withdrawn_at")
+                              .map(([k, v]) => (
+                                <Fragment key={k}>
+                                  <dt>{humanize(k)}</dt>
+                                  <dd>{typeof v === "boolean" ? yesNo(v) : String(v)}</dd>
+                                </Fragment>
+                              ))}
+                          </dl>
+                        ) : (
+                          <p className={styles.empty}>No record of this consent.</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            });
+          })()}
+
+
         </Card>
 
         {/* ── Documents (uploaded files only; last card) ── */}

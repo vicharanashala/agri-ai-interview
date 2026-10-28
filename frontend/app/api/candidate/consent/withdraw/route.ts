@@ -26,7 +26,8 @@ export async function POST(request: NextRequest) {
     }
     if (token) {
       headers['Authorization'] = `Bearer ${token}`
-    } else if (email) {
+    }
+    if (email) {
       headers['X-User-Email'] = email
     }
 

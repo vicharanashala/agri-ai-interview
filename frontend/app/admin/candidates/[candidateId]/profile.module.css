@@ -1328,3 +1328,67 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.consentCycleDivider {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px dashed var(--border);
+}
+
+/* ── Withdrawal Notice inside Consent & Declarations ── */
+.withdrawalNotice {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-left: 4px solid #ef4444;
+  border-radius: 8px;
+  padding: 14px 18px;
+  margin-bottom: 20px;
+}
+
+.withdrawalNoticeHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.withdrawalNoticeIcon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.withdrawalNoticeTitleBox {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex: 1;
+}
+
+.withdrawalNoticeTitle {
+  font-weight: 700;
+  font-size: 15px;
+  color: #991b1b;
+}
+
+.withdrawalNoticeDate {
+  font-size: 13px;
+  color: #b91c1c;
+  font-weight: 500;
+}
+
+.withdrawalNoticeText {
+  font-size: 13px;
+  color: #7f1d1d;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.declRejectedText {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.declarationWithdrawn {
+  border-color: #fecaca;
+  background: #fffafa;
+}

@@ -14,6 +14,7 @@ import {
 } from "recharts";
 import styles from "./AnalyticsTab.module.css";
 import PageSelector from "./PageSelector";
+import { serialNumber } from "@/lib/serial-number";
 
 // KPI overview funnel cards. `kpi` is both the key in the overview `funnel` counts and the kpi-details
 // type the card's modal loads; `of` is the card whose count is this card's denominator.
@@ -1077,7 +1078,7 @@ export default function AnalyticsTab({
                   <tbody>
                     {kpiModalData.slice(kpiPage * kpiLimit, (kpiPage + 1) * kpiLimit).map((cand: any, i: number) => (
                       <tr key={cand.id}>
-                        <td className={styles.serialCol}>{kpiPage * kpiLimit + i + 1}</td>
+                        <td className={styles.serialCol}>{serialNumber(kpiPage, kpiLimit, i)}</td>
                         <td>{cand.fullName}</td>
                         <td>{cand.email}</td>
                         {kpiModalType === "registered" && <td>{cand.state}</td>}

@@ -292,6 +292,30 @@
   cursor: not-allowed;
 }
 
+.rewatchButton {
+  min-height: 46px;
+  border-radius: 10px;
+  padding: 0 20px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s ease-in-out;
+  color: #0f2238;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.rewatchButton:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: #16a34a;
+}
+
 .spinner {
   width: 13px;
   height: 13px;

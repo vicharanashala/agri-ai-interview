@@ -52,10 +52,7 @@ export default function ProfilePage() {
   const [resumeFile, setResumeFile] = useState<File | null>(null);
 
   // Consent state
-  const [consentAccepted, setConsentAccepted] = useState(false);
   const [consentTimestamp, setConsentTimestamp] = useState<string | null>(null);
-  const [consentWithdrawn, setConsentWithdrawn] = useState(false);
-  const [consentWithdrawnAt, setConsentWithdrawnAt] = useState<string | null>(null);
 
   const availableDistricts = state && INDIA_STATES_DISTRICTS[state] ? INDIA_STATES_DISTRICTS[state] : [];
 
@@ -70,6 +67,12 @@ export default function ProfilePage() {
         }
         const data = await res.json();
         if (data) {
+          // If consent has been withdrawn or declarations not accepted, redirect immediately to declaration
+          if (data.consentWithdrawn || !data.declarationAccepted) {
+            router.replace('/declaration');
+            return;
+          }
+
           setEmail(data.email || '');
           setFullName(data.fullName || '');
           setPhone(data.phone || '');
@@ -87,10 +90,7 @@ export default function ProfilePage() {
           setDocumentsSubmitted(Boolean(data.documentsSubmitted));
 
           // Consent info
-          setConsentAccepted(Boolean(data.consentAccepted));
           setConsentTimestamp(data.consentTimestamp || null);
-          setConsentWithdrawn(Boolean(data.consentWithdrawn));
-          setConsentWithdrawnAt(data.consentWithdrawnAt || null);
 
           // Education list
           if (Array.isArray(data.education) && data.education.length > 0) {
@@ -236,26 +236,14 @@ export default function ProfilePage() {
     try {
       const res = await fetch('/api/candidate/consent/withdraw', { method: 'POST' });
       if (!res.ok) throw new Error('Failed to withdraw consent');
-      setConsentWithdrawn(true);
-      setConsentAccepted(false);
-      setConsentWithdrawnAt(new Date().toISOString());
       setShowWithdrawModal(false);
-      setFeedback({ type: 'success', text: 'Data access consent has been withdrawn.' });
+      try {
+        sessionStorage.removeItem('documentsSubmitted');
+        localStorage.removeItem('documentsSubmitted');
+      } catch {}
+      router.replace('/declaration');
     } catch (err: any) {
       setFeedback({ type: 'error', text: err.message || 'Error withdrawing consent.' });
-    }
-  };
-
-  const handleGrantConsent = async () => {
-    try {
-      const res = await fetch('/api/candidate/consent/grant', { method: 'POST' });
-      if (!res.ok) throw new Error('Failed to grant consent');
-      setConsentAccepted(true);
-      setConsentWithdrawn(false);
-      setConsentTimestamp(new Date().toISOString());
-      setFeedback({ type: 'success', text: 'Data access consent has been restored.' });
-    } catch (err: any) {
-      setFeedback({ type: 'error', text: err.message || 'Error granting consent.' });
     }
   };
 
@@ -317,19 +305,11 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* ─── DPDP Data Access Consent Section ─── */}
-        <section
-          className={`${styles.consentSection} ${
-            consentWithdrawn ? styles.consentSectionWithdrawn : ''
-          }`}
-        >
+        {/* ─── Candidate Declarations & Consent Section ─── */}
+        <section className={styles.consentSection}>
           <div className={styles.consentHeader}>
             <div className={styles.consentTitleWrap}>
-              <div
-                className={`${styles.consentIconBadge} ${
-                  consentWithdrawn ? styles.consentIconBadgeWithdrawn : ''
-                }`}
-              >
+              <div className={styles.consentIconBadge}>
                 <svg
                   width="20"
                   height="20"
@@ -344,69 +324,49 @@ export default function ProfilePage() {
                   <path d="m9 12 2 2 4-4" />
                 </svg>
               </div>
-              <h2 className={styles.consentTitle}>Data Access & Privacy Consent (DPDP Act)</h2>
+              <h2 className={styles.consentTitle}>Candidate Declarations & Consent (4 Declarations)</h2>
             </div>
-            {consentWithdrawn ? (
-              <span className={`${styles.consentStatusBadge} ${styles.consentStatusWithdrawn}`}>
-                ⚠️ Consent Withdrawn
-              </span>
-            ) : consentAccepted ? (
-              <span className={`${styles.consentStatusBadge} ${styles.consentStatusGranted}`}>
-                ✓ Consent Granted
-              </span>
-            ) : (
-              <span className={`${styles.consentStatusBadge} ${styles.consentStatusPending}`}>
-                Pending Submission
-              </span>
-            )}
+            <span className={`${styles.consentStatusBadge} ${styles.consentStatusGranted}`}>
+              ✓ All 4 Consents Granted
+            </span>
           </div>
 
           <div>
-            {consentWithdrawn ? (
-              <>
-                <p className={styles.consentDescription}>
-                  You have withdrawn your consent for processing and verifying your documents. Document verification and recruitment processing are currently paused.
-                </p>
-                {consentWithdrawnAt && (
-                  <p className={styles.consentTimestamp}>
-                    Withdrawn on: {new Date(consentWithdrawnAt).toLocaleString()}
-                  </p>
-                )}
-                <div className={styles.consentActions}>
-                  <button
-                    type="button"
-                    onClick={handleGrantConsent}
-                    className={styles.grantBtn}
-                  >
-                    Restore & Grant Consent
-                  </button>
-                </div>
-              </>
-            ) : consentAccepted ? (
-              <>
-                <p className={styles.consentDescription}>
-                  You have voluntarily provided consent to <strong>Annam / Samagama</strong> to collect, process, and verify your submitted documents and personal data solely for recruitment and selection purposes under the <em>Digital Personal Data Protection Act, 2023</em>.
-                </p>
-                {consentTimestamp && (
-                  <p className={styles.consentTimestamp}>
-                    Granted on: {new Date(consentTimestamp).toLocaleString()}
-                  </p>
-                )}
-                <div className={styles.consentActions}>
-                  <button
-                    type="button"
-                    onClick={() => setShowWithdrawModal(true)}
-                    className={styles.withdrawBtn}
-                  >
-                    Withdraw Consent
-                  </button>
-                </div>
-              </>
-            ) : (
-              <p className={styles.consentDescription}>
-                Consent has not been granted yet. Please complete the declaration form after login.
+            <p className={styles.consentDescription}>
+              You have voluntarily reviewed, acknowledged, and submitted all <strong>4 assessment and privacy declarations</strong> required for recruitment and selection:
+            </p>
+            <div className={styles.declarationsList}>
+              <div className={styles.declarationItem}>
+                <span className={styles.declarationCheck}>✓</span>
+                <span className={styles.declarationName}>AI-Based Interview & Assessment Process Declaration</span>
+              </div>
+              <div className={styles.declarationItem}>
+                <span className={styles.declarationCheck}>✓</span>
+                <span className={styles.declarationName}>ViBe Platform Consent (Audio, Video & Proctoring)</span>
+              </div>
+              <div className={styles.declarationItem}>
+                <span className={styles.declarationCheck}>✓</span>
+                <span className={styles.declarationName}>Ground Truth Module Consent (Field Assessment)</span>
+              </div>
+              <div className={styles.declarationItem}>
+                <span className={styles.declarationCheck}>✓</span>
+                <span className={styles.declarationName}>Document Verification & Data Privacy Consent (DPDP Act)</span>
+              </div>
+            </div>
+            {consentTimestamp && (
+              <p className={styles.consentTimestamp}>
+                All 4 declarations signed & granted on: {new Date(consentTimestamp).toLocaleString()}
               </p>
             )}
+            <div className={styles.consentActions}>
+              <button
+                type="button"
+                onClick={() => setShowWithdrawModal(true)}
+                className={styles.withdrawBtn}
+              >
+                Withdraw Consent
+              </button>
+            </div>
           </div>
         </section>
 
@@ -775,13 +735,19 @@ export default function ProfilePage() {
       {showWithdrawModal && (
         <div className={styles.modalOverlay} onClick={() => setShowWithdrawModal(false)}>
           <div className={styles.modalCard} onClick={(e) => e.stopPropagation()}>
-            <h3 className={styles.modalTitle}>Withdraw Data Access Consent?</h3>
+            <h3 className={styles.modalTitle}>Withdraw All 4 Declarations & Consents?</h3>
             <p className={styles.modalText}>
-              Are you sure you want to withdraw your data access and document verification consent?
+              Are you sure you want to withdraw your consent? This will revoke <strong>all 4 accepted declarations</strong>:
             </p>
-            <p className={styles.modalText}>
-              Withdrawing consent will pause the organisation&apos;s ability to verify your documents and process your application for recruitment. You can re-grant consent at any time from this profile page.
-            </p>
+            <ul className={styles.modalDeclarationsList}>
+              <li>1. AI-Based Interview & Assessment Process Declaration</li>
+              <li>2. ViBe Platform Candidate Consent (Audio, Video & Proctoring)</li>
+              <li>3. Ground Truth Module Consent (Field Assessment)</li>
+              <li>4. Document Verification & Data Privacy Consent (DPDP Act, 2023)</li>
+            </ul>
+            <div className={styles.modalWarningBox}>
+              ⚠️ <strong>Warning:</strong> Withdrawing consent will pause your recruitment process and permanently delete all documents uploaded in the document verification phase. You will be redirected to the declaration page to review and sign all 4 declarations again before you can proceed.
+            </div>
             <div className={styles.modalButtons}>
               <button
                 type="button"
@@ -795,7 +761,7 @@ export default function ProfilePage() {
                 onClick={handleWithdrawConsent}
                 className={styles.modalConfirmBtn}
               >
-                Yes, Withdraw Consent
+                Yes, Withdraw All Consents
               </button>
             </div>
           </div>

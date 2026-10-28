@@ -11,6 +11,7 @@ interface CandidateProfile {
   fullName?: string;
   email?: string;
   declarationAccepted?: boolean;
+  consentWithdrawn?: boolean;
 }
 
 export default function DeclarationPage() {
@@ -146,7 +147,7 @@ export default function DeclarationPage() {
         if (res.ok && !isCancelled) {
           const data: CandidateProfile = await res.json();
 
-          if (data.declarationAccepted) {
+          if (data.declarationAccepted && !data.consentWithdrawn) {
             console.log('[Declaration] All declarations already accepted, redirecting away to post-login...');
             setIsRedirecting(true);
             router.replace('/post-login');

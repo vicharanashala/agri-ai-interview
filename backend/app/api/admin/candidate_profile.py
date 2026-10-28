@@ -22,6 +22,7 @@ from fastapi.responses import Response
 from app.db.mongodb import get_sync_db
 from app.api.admin.middleware import require_admin_auth
 from app.services.role_match import match_role
+from app.api.candidate.route import normalize_consent_cycles
 from app.api.admin.candidates import (
     VALID_ROLES,
     _calculated_role,
@@ -43,7 +44,7 @@ DECLARATION_SLIDES = [
     ("slide3_groundTruthModule", "Ground Truth Module Consent"),
     ("slide4_documentVerificationDPDP", "Document Verification & DPDP Consent"),
 ]
-_DECLARATION_CORE_FIELDS = {"consentName", "accepted", "acceptedAt", "fullName", "signature"}
+_DECLARATION_CORE_FIELDS = {"consentName", "accepted", "acceptedAt", "withdrawnAt", "withdrawn_at", "fullName", "signature"}
 
 _RESUME_CONTENT_TYPES = {
     "pdf": "application/pdf",
@@ -102,15 +103,9 @@ def _education_entries(cand: dict) -> List[dict]:
     return [{k: e.get(k) for k in _EDUCATION_KEYS} for e in education if isinstance(e, dict)]
 
 
-def _declarations(cand: dict, user: Optional[dict]) -> Dict[str, Any]:
-    """
-    Same precedence as check_all_declarations_accepted(): the user's declarations (always written by
-    POST /declaration), else the candidate's copy.
-    """
-    raw = (user.get("declarations") if user else None) or cand.get("declarations") or {}
+def _format_declaration_records(raw: dict) -> List[dict]:
     if not isinstance(raw, dict):
         raw = {}
-
     records = []
     for key, default_label in DECLARATION_SLIDES:
         slide = raw.get(key)
@@ -128,17 +123,74 @@ def _declarations(cand: dict, user: Optional[dict]) -> Dict[str, Any]:
             "consentName": slide.get("consentName"),
             "accepted": bool(slide.get("accepted", False)),
             "acceptedAt": _format_iso(slide.get("acceptedAt")),
+            "withdrawnAt": _format_iso(slide.get("withdrawnAt")),
             "fullName": slide.get("fullName"),
             "signature": slide.get("signature"),
             "extra": extra,
         })
+    return records
 
-    accepted_at = cand.get("declaration_accepted_at") or (user.get("declarationAcceptedAt") if user else None)
+
+def _consent_cycles(cand: dict, user: Optional[dict]) -> List[Dict[str, Any]]:
+    raw_history = cand.get("consent_history") or (user.get("consent_history") if user else None) or []
+    decls = (user.get("declarations") if user else None) or cand.get("declarations") or {}
+    accepted_at = cand.get("declaration_accepted_at") or (user.get("declarationAcceptedAt") if user else None) or cand.get("consent_timestamp")
+    is_withdrawn = bool(cand.get("consent_withdrawn", False) or (user.get("consent_withdrawn", False) if user else False))
+    withdrawn_at = cand.get("consent_withdrawn_at") or (user.get("consent_withdrawn_at") if user else None)
+
+    cycles = normalize_consent_cycles(
+        raw_history,
+        fallback_decls=decls,
+        fallback_accepted_at=accepted_at,
+        fallback_withdrawn_at=withdrawn_at,
+        fallback_is_withdrawn=is_withdrawn,
+    )
+
+    results = []
+    for c in cycles:
+        c_decls = c.get("declarations") or {}
+        records = _format_declaration_records(c_decls)
+        is_withdrawn = bool(c.get("withdrawn", False))
+        if is_withdrawn:
+            all_acc = False
+            for r in records:
+                r["accepted"] = False
+                if not r.get("withdrawnAt"):
+                    r["withdrawnAt"] = _format_iso(c.get("withdrawn_at"))
+        else:
+            all_acc = c.get("all_accepted")
+            if all_acc is None:
+                all_acc = all(r.get("accepted") for r in records) if records else True
+
+        results.append({
+            "cycle": c.get("cycle", len(results) + 1),
+            "allAccepted": all_acc,
+            "declarationAcceptedAt": _format_iso(c.get("granted_at")),
+            "withdrawn": is_withdrawn,
+            "withdrawnAt": _format_iso(c.get("withdrawn_at")),
+            "records": records,
+        })
+    return results
+
+
+def _declarations(cand: dict, user: Optional[dict]) -> Dict[str, Any]:
+    cycles = _consent_cycles(cand, user)
+    latest_cycle = cycles[-1] if cycles else {
+        "allAccepted": False,
+        "declarationAcceptedAt": None,
+        "withdrawn": False,
+        "withdrawnAt": None,
+        "records": [],
+    }
+
     return {
-        "allAccepted": all(r.get("accepted") for r in records),
-        "declarationAcceptedAt": _format_iso(accepted_at),
+        "allAccepted": latest_cycle.get("allAccepted", False),
+        "declarationAcceptedAt": latest_cycle.get("declarationAcceptedAt"),
+        "withdrawn": latest_cycle.get("withdrawn", False),
+        "withdrawnAt": latest_cycle.get("withdrawnAt"),
         "source": "user" if (user and user.get("declarations")) else ("candidate" if cand.get("declarations") else None),
-        "records": records,
+        "records": latest_cycle.get("records", []),
+        "history": list(reversed(cycles)),
     }
 
 
@@ -275,6 +327,35 @@ async def get_candidate_profile(candidate_id: str, _admin=Depends(require_admin_
 
     consent_withdrawn = bool(cand.get("consent_withdrawn", False))
     status_session = _latest_result_session(db, cand)
+
+    decls = (user.get("declarations") if user else None) or cand.get("declarations") or {}
+    has_declaration_consent = (
+        isinstance(decls, dict)
+        and bool(
+            decls.get("slide1_aiAssessment", {}).get("accepted")
+            and decls.get("slide2_vibePlatform", {}).get("accepted")
+            and decls.get("slide3_groundTruthModule", {}).get("accepted")
+            and decls.get("slide4_documentVerificationDPDP", {}).get("accepted")
+        )
+    ) or bool(cand.get("declaration_accepted") or (user and user.get("declarationAccepted")))
+
+    if consent_withdrawn:
+        consent_status = "withdrawn"
+        consent_accepted = False
+    elif has_declaration_consent:
+        consent_status = "granted"
+        consent_accepted = True
+    else:
+        consent_status = "pending"
+        consent_accepted = False
+
+    consent_ts = (
+        (decls.get("slide4_documentVerificationDPDP", {}).get("acceptedAt") if isinstance(decls, dict) else None)
+        or cand.get("declaration_accepted_at")
+        or (user.get("declarationAcceptedAt") if user else None)
+        or cand.get("consent_timestamp")
+    )
+
     return {
         **overview,
         # Genuine completion time only: the list view falls back to updated_at, which is not a completion time.
@@ -316,13 +397,10 @@ async def get_candidate_profile(candidate_id: str, _admin=Depends(require_admin_
             "breakdown": _eligibility_breakdown(cand) if _calculated_role(cand) else None,
         },
         "consent": {
-            "status": overview["consentStatus"],
-            "accepted": overview["consentAccepted"],
-            # True when consent_accepted is not set but is implied by documents_submitted (list-view rule)
-            "inferredFromDocuments": bool(
-                not cand.get("consent_accepted") and cand.get("documents_submitted") and not consent_withdrawn
-            ),
-            "timestamp": overview["consentTimestamp"],
+            "status": consent_status,
+            "accepted": consent_accepted,
+            "inferredFromDocuments": False,
+            "timestamp": _format_iso(consent_ts),
             "withdrawn": consent_withdrawn,
             "withdrawnAt": overview["consentWithdrawnAt"],
         },

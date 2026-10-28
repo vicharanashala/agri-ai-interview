@@ -222,13 +222,32 @@ def _candidate_to_response(cand: dict, user_email: Optional[str]) -> CandidateRe
     module_status = cand.get("module_status", "completed" if module_completed else "not_started")
 
     consent_withdrawn = bool(cand.get("consent_withdrawn", False))
-    consent_accepted = bool(cand.get("consent_accepted", False) or (cand.get("documents_submitted") and not consent_withdrawn))
+    decls = cand.get("declarations") or {}
+    has_declaration_consent = (
+        isinstance(decls, dict)
+        and bool(
+            decls.get("slide1_aiAssessment", {}).get("accepted")
+            and decls.get("slide2_vibePlatform", {}).get("accepted")
+            and decls.get("slide3_groundTruthModule", {}).get("accepted")
+            and decls.get("slide4_documentVerificationDPDP", {}).get("accepted")
+        )
+    ) or bool(cand.get("declaration_accepted"))
+
     if consent_withdrawn:
         consent_status = "withdrawn"
-    elif consent_accepted:
+        consent_accepted = False
+    elif has_declaration_consent:
         consent_status = "granted"
+        consent_accepted = True
     else:
         consent_status = "pending"
+        consent_accepted = False
+
+    consent_ts = (
+        (decls.get("slide4_documentVerificationDPDP", {}).get("acceptedAt") if isinstance(decls, dict) else None)
+        or cand.get("declaration_accepted_at")
+        or cand.get("consent_timestamp")
+    )
 
     return CandidateResponse(
         id=str(cand["_id"]),
@@ -260,7 +279,7 @@ def _candidate_to_response(cand: dict, user_email: Optional[str]) -> CandidateRe
         consentStatus=consent_status,
             isSelected=cand.get("is_selected", False),
             isNotJoined=cand.get("is_not_joined", False),
-        consentTimestamp=_format_iso(cand.get("consent_timestamp")),
+        consentTimestamp=_format_iso(consent_ts),
         consentWithdrawnAt=_format_iso(cand.get("consent_withdrawn_at")),
     )
 
@@ -401,13 +420,32 @@ async def get_candidates(
         module_status = cand.get("module_status", "completed" if module_completed else "not_started")
 
         consent_withdrawn = bool(cand.get("consent_withdrawn", False))
-        consent_accepted = bool(cand.get("consent_accepted", False) or (cand.get("documents_submitted") and not consent_withdrawn))
+        decls = cand.get("declarations") or {}
+        has_declaration_consent = (
+            isinstance(decls, dict)
+            and bool(
+                decls.get("slide1_aiAssessment", {}).get("accepted")
+                and decls.get("slide2_vibePlatform", {}).get("accepted")
+                and decls.get("slide3_groundTruthModule", {}).get("accepted")
+                and decls.get("slide4_documentVerificationDPDP", {}).get("accepted")
+            )
+        ) or bool(cand.get("declaration_accepted"))
+
         if consent_withdrawn:
             consent_status = "withdrawn"
-        elif consent_accepted:
+            consent_accepted = False
+        elif has_declaration_consent:
             consent_status = "granted"
+            consent_accepted = True
         else:
             consent_status = "pending"
+            consent_accepted = False
+
+        consent_ts = (
+            (decls.get("slide4_documentVerificationDPDP", {}).get("acceptedAt") if isinstance(decls, dict) else None)
+            or cand.get("declaration_accepted_at")
+            or cand.get("consent_timestamp")
+        )
 
         response = CandidateResponse(
             id=cand_id_str,
@@ -439,7 +477,7 @@ async def get_candidates(
             consentStatus=consent_status,
             isSelected=cand.get("is_selected", False),
             isNotJoined=cand.get("is_not_joined", False),
-            consentTimestamp=_format_iso(cand.get("consent_timestamp")),
+            consentTimestamp=_format_iso(consent_ts),
             consentWithdrawnAt=_format_iso(cand.get("consent_withdrawn_at")),
         )
 

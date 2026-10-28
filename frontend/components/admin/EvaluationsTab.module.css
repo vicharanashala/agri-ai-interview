@@ -99,6 +99,17 @@
   color: #222;
 }
 
+/* S. No. column (same rules as the Analytics KPI modal's) */
+.table .serialCol {
+  width: 1%;
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.table .serialCol .skeletonBox {
+  margin: 0 auto;
+}
+
 /* ─── Row ──────────────────────────────────────────────────────────── */
 .row {
   cursor: pointer;

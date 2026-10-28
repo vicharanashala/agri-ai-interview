@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import styles from "./EvaluationsTab.module.css";
 import PageSelector from "./PageSelector";
+import { serialNumber } from "@/lib/serial-number";
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -642,6 +643,7 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken, onCandidat
                 <table className={styles.table}>
                   <thead>
                     <tr>
+                      <th className={styles.serialCol}>S. No.</th>
                       <th style={{ width: 32 }}></th>
                       <th>Candidate</th>
                       <th>Mobile</th>
@@ -657,6 +659,7 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken, onCandidat
                   <tbody>
                     {Array.from({ length: evalLimit }).map((_, i) => (
                       <tr key={i} className={styles.row}>
+                        <td className={styles.serialCol}><div className={styles.skeletonBox} style={{ width: 20, height: 16 }} /></td>
                         <td><div className={styles.skeletonBox} style={{ width: 16, height: 16 }} /></td>
                         <td>
                           <div className={styles.skeletonBox} style={{ width: 120, height: 16, marginBottom: 4 }} />
@@ -687,6 +690,7 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken, onCandidat
                 <table className={styles.table}>
                   <thead>
                     <tr>
+                      <th className={styles.serialCol}>S. No.</th>
                       <th style={{ width: 32 }}></th>
                       <th>Candidate</th>
                       <th>Mobile</th>
@@ -700,12 +704,13 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken, onCandidat
                     </tr>
                   </thead>
                   <tbody>
-                    {evaluations.map(evaluation => (
+                    {evaluations.map((evaluation, i) => (
                       <React.Fragment key={evaluation.id}>
                         <tr
                           className={`${styles.row} ${expandedId === evaluation.id ? styles.rowExpanded : ""}`}
                           onClick={() => toggleExpand(evaluation.id)}
                         >
+                          <td className={styles.serialCol}>{serialNumber(evalPage, evalLimit, i)}</td>
                           <td>
                             <span className={styles.expandIcon}>
                               {expandedId === evaluation.id ? "▼" : "▶"}
@@ -779,7 +784,7 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken, onCandidat
                             adminApiBase={adminApiBase}
                             getAdminToken={getAdminToken}
                             onReevaluate={handleReevaluate}
-                            colSpan={8}
+                            colSpan={9}
                           />
                         )}
                       </React.Fragment>
@@ -792,7 +797,7 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken, onCandidat
                 page={evalPage}
                 limit={evalLimit}
                 onPageChange={setEvalPage}
-                onLimitChange={setEvalLimit}
+                onLimitChange={(l) => { setEvalLimit(l); setEvalPage(0); }}
                 loading={loading}
               />
             </>
@@ -808,6 +813,7 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken, onCandidat
                 <table className={styles.table}>
                 <thead>
                   <tr>
+                    <th className={styles.serialCol}>S. No.</th>
                     <th style={{ width: 32 }}></th>
                     <th>Candidate Name</th>
                     <th>Mobile</th>
@@ -824,6 +830,7 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken, onCandidat
                 <tbody>
                   {Array.from({ length: reEvalLimit }).map((_, i) => (
                     <tr key={i} className={styles.row}>
+                      <td className={styles.serialCol}><div className={styles.skeletonBox} style={{ width: 20, height: 16 }} /></td>
                       <td><div className={styles.skeletonBox} style={{ width: 16, height: 16 }} /></td>
                       <td>
                         <div className={styles.skeletonBox} style={{ width: 120, height: 16, marginBottom: 4 }} />
@@ -855,6 +862,7 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken, onCandidat
                 <table className={styles.table}>
                 <thead>
                   <tr>
+                    <th className={styles.serialCol}>S. No.</th>
                     <th style={{ width: 32 }}></th>
                     <th>Candidate Name</th>
                     <th>Mobile</th>
@@ -869,12 +877,13 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken, onCandidat
                   </tr>
                 </thead>
                 <tbody>
-                  {reEvaluations.map(item => (
+                  {reEvaluations.map((item, i) => (
                     <React.Fragment key={item.id}>
                       <tr
                         className={`${styles.row} ${expandedId === item.id ? styles.rowExpanded : ""}`}
                         onClick={() => toggleExpand(item.id)}
                       >
+                        <td className={styles.serialCol}>{serialNumber(reEvalPage, reEvalLimit, i)}</td>
                         <td>
                           <span className={styles.expandIcon}>
                             {expandedId === item.id ? "▼" : "▶"}
@@ -983,7 +992,7 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken, onCandidat
                           getAdminToken={getAdminToken}
                           onReevaluate={handleReevaluateReEvalItem}
                           reEvaluationReason={item.reason}
-                          colSpan={11}
+                          colSpan={12}
                         />
                       )}
                     </React.Fragment>
@@ -996,7 +1005,7 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken, onCandidat
               page={reEvalPage}
               limit={reEvalLimit}
               onPageChange={setReEvalPage}
-              onLimitChange={setReEvalLimit}
+              onLimitChange={(l) => { setReEvalLimit(l); setReEvalPage(0); }}
               loading={reEvalLoading}
             />
           </>

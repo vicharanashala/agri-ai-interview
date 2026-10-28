@@ -338,9 +338,9 @@ async def get_candidate_profile(candidate_id: str, _admin=Depends(require_admin_
 @router.get("/candidates/{candidate_id}/match-role")
 async def get_candidate_match_role(candidate_id: str, _admin=Depends(require_admin_auth)):
     """
-    Role for the Match feature: the candidate's eligible role (explained) when there is one; otherwise a role
-    suggested from the latest parsed resume's education plus the profile's years of experience, or the reasons it
-    cannot be checked. Read-only, never stored, and separate from the candidate's eligible role.
+    Role for the Match feature, always calculated from the latest parsed resume's education plus the profile's years
+    of experience (also when the candidate has an eligible role), or the reasons it cannot be checked. Read-only,
+    never stored, and separate from the candidate's eligible role.
     """
     db = get_sync_db()
     cand = _find_candidate(db, candidate_id)
@@ -350,7 +350,7 @@ async def get_candidate_match_role(candidate_id: str, _admin=Depends(require_adm
         sort=[("created_at", -1)],
     )
     result = match_role(cand, resume)
-    return {**result, "resumeId": str(resume["_id"]) if resume and result["outcome"] != "eligible_role" else None}
+    return {**result, "resumeId": str(resume["_id"]) if resume else None}
 
 
 @router.get("/candidates/{candidate_id}/interviews/{interview_id}")

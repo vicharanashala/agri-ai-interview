@@ -4,11 +4,9 @@ Role for the admin Match feature only.
 Separate from the eligible-role calculation: nothing here is stored, nothing changes `eligible_role`, and the existing
 eligibility functions are only called, never changed.
 
-- Candidate has an eligible role (stored or calculated, as shown on the profile): Match returns that same role and
-  explains it with the profile's education entries and years of experience.
-- Eligible role Not Available (typically older profiles): Match suggests a role from the latest parsed resume's
-  education (structured fields from the current parser, or a strict reading of older parses' degree/year text) and
-  the profile's years of experience, using the same eligibility rules.
+- Every check calculates the role from the latest parsed resume's education (structured fields from the current
+  parser, or a strict reading of older parses' degree/year text) and the profile's years of experience, using the same
+  eligibility rules — also when the candidate already has an eligible role, which is left as it is.
 - Completion status: explicit wording first ("completed", "pursuing", "present", "expected" ...). Otherwise, only
   for this feature, a clearly identified end year (the end of a start–end range, or the only year written) decides
   it, recorded as inferred: up to and including the current year is Completed, a later (upcoming) year is ongoing.
@@ -22,7 +20,7 @@ import re
 from datetime import date
 from typing import Any, Dict, List, Optional, Tuple
 
-from app.api.admin.candidates import _calculated_role, _effective_role, _eligibility_breakdown, _role_source
+from app.api.admin.candidates import _calculated_role, _eligibility_breakdown
 from app.services.resume_llm_parser import NA, education_terms, term_key
 
 SCHOOL = re.compile(
@@ -242,15 +240,6 @@ def _resume_entries(parsed: dict) -> List[dict]:
     return entries
 
 
-def _profile_entries(cand: dict) -> List[dict]:
-    return [
-        {"degree": NA, "from": "profile", "level": e.get("level") or NA, "discipline": e.get("discipline") or NA, "specialisation": NA, "details": NA,
-         "status": e.get("status") or NA, "statusBasis": "profile", "statusEvidence": NA,
-         "startYear": NA, "endYear": e.get("yearOfCompletion") or NA}
-        for e in cand.get("education") or [] if isinstance(e, dict)
-    ]
-
-
 def _label(e: dict) -> str:
     if e["level"] not in (NA, "Ambiguous", "Other") and e["discipline"] not in (NA, "Ambiguous", "Other"):
         return f"{e['level']} in {e['discipline']}"
@@ -321,27 +310,11 @@ def match_role_from_resume(parsed: Optional[dict], years_of_experience: Any) -> 
 
 def match_role(cand: dict, latest_resume: Optional[dict]) -> Dict[str, Any]:
     """
-    outcome: "eligible_role" (the profile's eligible role, explained), "suggested" (from the resume; not stored) or
-    "cannot_be_checked" (with issues). Never stored; never changes the candidate.
+    Always calculated from the latest parsed resume, whether or not the candidate has an eligible role.
+    outcome: "suggested" (from the resume; not stored) or "cannot_be_checked" (with issues). Never changes the candidate.
     """
     years = cand.get("years_of_experience")
     years_out = years if _usable_years(years) else None
-    effective = _effective_role(cand)
-    if effective:
-        calculated = _calculated_role(cand)
-        source = _role_source(cand)
-        notes = []
-        if source == "stored" and calculated is None:
-            notes.append("This role was stored at onboarding. The profile's education or experience details are "
-                         "incomplete, so the calculation steps cannot be shown.")
-        elif source == "stored" and calculated != effective:
-            notes.append(f"This role was stored at onboarding. A calculation from the current profile details gives "
-                         f"{calculated}.")
-        return {
-            "outcome": "eligible_role", "role": effective, "roleSource": source, "yearsOfExperience": years_out,
-            "education": _profile_entries(cand), "breakdown": _eligibility_breakdown(cand) if calculated else None,
-            "issues": [], "notes": notes,
-        }
     from_resume = match_role_from_resume(_parsed(latest_resume), years)
     notes = from_resume["notes"]
     if from_resume["role"]:

@@ -425,6 +425,12 @@
 }
 .reportTableWrapper .table .attemptScoreCol,
 .kpiModalTable .attemptScoreCol { font-variant-numeric: tabular-nums; }
+.kpiModalTable .serialCol {
+  width: 1%;
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
 /* KPI modal attempt cells sit at the top so multi-line attempts align with Name/Email */
 .kpiModalTable td { vertical-align: top; }
 .attemptLine {

@@ -1032,6 +1032,7 @@ export default function AnalyticsTab({
                 <table className={`${styles.table} ${styles.kpiModalTable}`}>
                   <thead>
                     <tr>
+                      <th className={styles.serialCol}>S. No.</th>
                       <th>Name</th>
                       <th>Email</th>
                       {kpiModalType === "registered" && <th>State</th>}
@@ -1074,8 +1075,9 @@ export default function AnalyticsTab({
                     </tr>
                   </thead>
                   <tbody>
-                    {kpiModalData.slice(kpiPage * kpiLimit, (kpiPage + 1) * kpiLimit).map((cand: any) => (
+                    {kpiModalData.slice(kpiPage * kpiLimit, (kpiPage + 1) * kpiLimit).map((cand: any, i: number) => (
                       <tr key={cand.id}>
+                        <td className={styles.serialCol}>{kpiPage * kpiLimit + i + 1}</td>
                         <td>{cand.fullName}</td>
                         <td>{cand.email}</td>
                         {kpiModalType === "registered" && <td>{cand.state}</td>}
@@ -1142,7 +1144,7 @@ export default function AnalyticsTab({
                   page={kpiPage}
                   limit={kpiLimit}
                   onPageChange={setKpiPage}
-                  onLimitChange={setKpiLimit}
+                  onLimitChange={(l) => { setKpiLimit(l); setKpiPage(0); }}
                 />
               </>
             )}

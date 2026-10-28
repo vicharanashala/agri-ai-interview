@@ -1156,13 +1156,36 @@ async def get_state_stats(state: str = Query(None), _admin=Depends(require_admin
 async def get_anti_cheat_violations(
     limit: int = Query(10, ge=1, le=100000),
     offset: int = Query(0, ge=0),
+    search: Optional[str] = Query(None),
     _admin=Depends(require_admin_auth),
 ):
     from bson import ObjectId
+    import re
 
     db = get_sync_db()
-    total = db.anti_cheat_events.count_documents({})
-    cursor = db.anti_cheat_events.find().sort("created_at", -1).skip(offset).limit(limit)
+    query: dict = {}
+    search = (search or "").strip()
+    if search:
+        # Match the displayed name (full_name, else the user's name) or email, case-insensitive and literal.
+        pattern = {"$regex": re.escape(search), "$options": "i"}
+        email_user_ids, name_user_ids = [], []
+        for u in db.users.find({"$or": [{"email": pattern}, {"name": pattern}]}, {"_id": 1, "email": 1, "name": 1}):
+            if re.search(re.escape(search), u.get("email") or "", re.I):
+                email_user_ids.extend(_get_id_variants(u["_id"]))
+            if re.search(re.escape(search), u.get("name") or "", re.I):
+                name_user_ids.extend(_get_id_variants(u["_id"]))
+        no_full_name = {"$or": [{"full_name": {"$exists": False}}, {"full_name": None}, {"full_name": ""}]}
+        matched_cand_ids = []
+        for c in db.candidates.find({"$or": [
+            {"full_name": pattern},
+            {"user_id": {"$in": email_user_ids}},
+            {"$and": [{"user_id": {"$in": name_user_ids}}, no_full_name]},
+        ]}, {"_id": 1}):
+            matched_cand_ids.extend(_get_id_variants(c["_id"]))
+        query["candidate_id"] = {"$in": matched_cand_ids}
+
+    total = db.anti_cheat_events.count_documents(query)
+    cursor = db.anti_cheat_events.find(query).sort("created_at", -1).skip(offset).limit(limit)
     events = list(cursor)
 
     cand_ids = [e.get("candidate_id") for e in events if e.get("candidate_id")]

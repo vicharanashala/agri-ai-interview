@@ -230,7 +230,7 @@ function AdminDashboard() {
       return () => clearInterval(interval);
     }
     if (activeTab === "anti-cheat") {
-      const interval = setInterval(loadViolations, 5000);
+      const interval = setInterval(() => loadViolationsRef.current(), 5000);
       return () => clearInterval(interval);
     }
   }, [activeTab]);
@@ -491,13 +491,19 @@ function AdminDashboard() {
   const [violationsTotal, setViolationsTotal] = useState(0);
   const [violationsPage, setViolationsPage] = useState(0);
   const [violationsLimit, setViolationsLimit] = useState(10);
+  const [violationsSearch, setViolationsSearch] = useState("");
+  const violationsRequestRef = useRef(0);
 
   const loadViolations = async () => {
+    const requestId = ++violationsRequestRef.current;
     setViolationsLoading(true);
     try {
       const offset = violationsPage * violationsLimit;
-      const res = await withAuth(`/api/admin/anti-cheat/violations?limit=${violationsLimit}&offset=${offset}`);
-      if (res.ok) {
+      const search = violationsSearch.trim();
+      const searchParam = search ? `&search=${encodeURIComponent(search)}` : "";
+      const res = await withAuth(`/api/admin/anti-cheat/violations?limit=${violationsLimit}&offset=${offset}${searchParam}`);
+      // Ignore responses for an older page/search that finished after a newer request.
+      if (res.ok && requestId === violationsRequestRef.current) {
         const data = await res.json();
         setViolations(data.violations || []);
         setViolationsTotal(data.total || 0);
@@ -505,15 +511,18 @@ function AdminDashboard() {
     } catch (err) {
       console.error("Failed to load violations:", err);
     } finally {
-      setViolationsLoading(false);
+      if (requestId === violationsRequestRef.current) setViolationsLoading(false);
     }
   };
+  // The polling interval calls this so it uses the current page, limit and search.
+  const loadViolationsRef = useRef(loadViolations);
+  loadViolationsRef.current = loadViolations;
 
   useEffect(() => {
     if (activeTab === "anti-cheat") {
       loadViolations();
     }
-  }, [violationsPage, violationsLimit]);
+  }, [violationsPage, violationsLimit, violationsSearch]);
 
   const loadStateFunnel = async () => {
     try {
@@ -1067,7 +1076,16 @@ function AdminDashboard() {
         {/* Anti-Cheat Tab */}
         {activeTab === "anti-cheat" && (
           <div className={styles.antiCheatContainer}>
-            <h2 className={styles.antiCheatTitle}>🛡️ Anti-Cheat Violations</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '20px' }}>
+              <h2 className={styles.antiCheatTitle} style={{ margin: 0 }}>🛡️ Anti-Cheat Violations</h2>
+              <input
+                type="text"
+                placeholder="Search by name or email..."
+                value={violationsSearch}
+                onChange={e => { setViolationsSearch(e.target.value); setViolationsPage(0); }}
+                style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '14px', width: '250px', maxWidth: '100%' }}
+              />
+            </div>
             {violationsLoading ? (
               <div className={styles.violationsTable}>
                 <table>
@@ -1096,7 +1114,9 @@ function AdminDashboard() {
                 </table>
               </div>
             ) : violations.length === 0 ? (
-              <p className={styles.noDataMessage}>No violations recorded yet.</p>
+              <p className={styles.noDataMessage}>
+                {violationsSearch.trim() ? "No violations match your search." : "No violations recorded yet."}
+              </p>
             ) : (
               <>
                 <div className={styles.violationsTable}>

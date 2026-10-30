@@ -92,6 +92,22 @@ async def upload_resume(
     raw_text = extract_raw_text(file_bytes, file_type)
 
     db = get_sync_db()
+    from bson import ObjectId
+    cand_variants = [candidateId, str(candidateId)]
+    if ObjectId.is_valid(candidateId):
+        cand_variants.append(ObjectId(candidateId))
+
+    # Old resumes cleanup: replace existing resume so old one is replaced by new one
+    old_resumes = list(db.resumes.find({"candidate_id": {"$in": [candidateId, str(candidateId)]}}))
+    for old_r in old_resumes:
+        old_path = old_r.get("storage_path")
+        if old_path:
+            try:
+                await storage.delete(old_path)
+            except Exception:
+                pass
+    db.resumes.delete_many({"candidate_id": {"$in": [candidateId, str(candidateId)]}})
+
     db.resumes.insert_one({
         "_id": resume_id,
         "candidate_id": candidateId,
@@ -104,6 +120,19 @@ async def upload_resume(
         "created_at": datetime.now(timezone.utc),
     })
 
+    # Update candidate record with the new resume details
+    db.candidates.update_one(
+        {"_id": {"$in": cand_variants}},
+        {
+            "$set": {
+                "resume_id": resume_id,
+                "resume_name": file.filename,
+                "resume_status": "uploaded",
+                "updated_at": datetime.now(timezone.utc),
+            }
+        }
+    )
+
     background_tasks.add_task(_run_llm_parse, resume_id, raw_text or "")
 
     return ResumeUploadResponse(
@@ -112,6 +141,46 @@ async def upload_resume(
         fileType=file_type,
         status="uploaded",
     )
+
+
+@router.delete("/resume")
+async def delete_candidate_resume(request: Request, candidateId: Optional[str] = Query(None)):
+    """Delete candidate's resume from DB and storage."""
+    cand_id = candidateId or request.headers.get("x-candidate-id")
+    if not cand_id:
+        from app.api.candidate.route import _get_candidate_id_with_email_fallback
+        try:
+            cand_id = _get_candidate_id_with_email_fallback(request)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Candidate ID required")
+
+    from bson import ObjectId
+    from app.core.storage import get_storage
+    storage = get_storage()
+    db = get_sync_db()
+
+    cand_variants = [cand_id, str(cand_id)]
+    if ObjectId.is_valid(cand_id):
+        cand_variants.append(ObjectId(cand_id))
+
+    old_resumes = list(db.resumes.find({"candidate_id": {"$in": [cand_id, str(cand_id)]}}))
+    for old_r in old_resumes:
+        old_path = old_r.get("storage_path")
+        if old_path:
+            try:
+                await storage.delete(old_path)
+            except Exception:
+                pass
+    db.resumes.delete_many({"candidate_id": {"$in": [cand_id, str(cand_id)]}})
+
+    db.candidates.update_one(
+        {"_id": {"$in": cand_variants}},
+        {
+            "$unset": {"resume_id": "", "resume_name": "", "resume_status": ""},
+            "$set": {"updated_at": datetime.now(timezone.utc)},
+        }
+    )
+    return {"success": True, "message": "Resume deleted"}
 
 
 from datetime import datetime, timezone

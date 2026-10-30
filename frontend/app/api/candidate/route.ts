@@ -67,8 +67,9 @@ export async function POST(request: NextRequest) {
     }
     if (token) {
       headers['Authorization'] = `Bearer ${token}`
-    } else if (email) {
-      // New user without candidate session yet — pass email for email-based auth fallback
+    }
+    if (email) {
+      // Always pass email from verified NextAuth session for fallback
       headers['X-User-Email'] = email
     }
 
@@ -108,7 +109,8 @@ export async function PATCH(request: NextRequest) {
     }
     if (token) {
       headers['Authorization'] = `Bearer ${token}`
-    } else if (email) {
+    }
+    if (email) {
       headers['X-User-Email'] = email
     }
 

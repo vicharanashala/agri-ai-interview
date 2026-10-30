@@ -2,13 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { signOut } from 'next-auth/react';
 import styles from './page.module.css';
 import BrandLogos from '@/components/BrandLogos';
-import SearchableSelect from '@/components/SearchableSelect';
 import ProfileNavButton from '@/components/ProfileNavButton';
-import { INDIAN_STATES, INDIA_STATES_DISTRICTS } from '@/data/india-states-districts';
-import { EDUCATION_LEVELS, DISCIPLINES } from '@/data/education-data';
+import { roleDisplayName, phaseLabel } from '@/lib/candidate-profile-display';
 
 interface EducationItem {
   id: string;
@@ -24,12 +21,9 @@ interface EducationItem {
 export default function ProfilePage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [loggingOut, setLoggingOut] = useState(false);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
-  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Candidate data state
+  // Candidate personal & contact data (read-only)
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
@@ -37,24 +31,29 @@ export default function ProfilePage() {
   const [district, setDistrict] = useState('');
   const [pincode, setPincode] = useState('');
   const [address, setAddress] = useState('');
+
+  // Professional & agricultural background state (read-only)
   const [currentRole, setCurrentRole] = useState('');
   const [yearsOfExperience, setYearsOfExperience] = useState('');
   const [farmingBackground, setFarmingBackground] = useState('No');
   const [cropsGrown, setCropsGrown] = useState('');
   const [farmSize, setFarmSize] = useState('');
   const [primaryExpertise, setPrimaryExpertise] = useState('');
+
+  // Educational qualifications & progress (read-only)
   const [currentPhase, setCurrentPhase] = useState('onboarding');
+  const [eligibleRole, setEligibleRole] = useState<string | null>(null);
   const [documentsSubmitted, setDocumentsSubmitted] = useState(false);
   const [educationList, setEducationList] = useState<EducationItem[]>([]);
-  
-  // Resume state
-  const [resume, setResume] = useState<{ id?: string; name: string; size?: string; data?: string } | null>(null);
-  const [resumeFile, setResumeFile] = useState<File | null>(null);
+
+  // Resume state (the only field that can be added / replaced)
+  const [resume, setResume] = useState<{ id?: string; name: string; size?: string } | null>(null);
+  const [stagedFile, setStagedFile] = useState<File | null>(null);
+  const [uploadingResume, setUploadingResume] = useState(false);
+  const [resumeFeedback, setResumeFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Consent state
   const [consentTimestamp, setConsentTimestamp] = useState<string | null>(null);
-
-  const availableDistricts = state && INDIA_STATES_DISTRICTS[state] ? INDIA_STATES_DISTRICTS[state] : [];
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -73,26 +72,37 @@ export default function ProfilePage() {
             return;
           }
 
+          const rawState = data.state || '';
+          const displayDistrict = data.districtCustom
+            ? `${data.districtCustom} (Others)`
+            : (data.district || '');
+
           setEmail(data.email || '');
           setFullName(data.fullName || '');
           setPhone(data.phone || '');
-          setState(data.state || '');
-          setDistrict(data.district || '');
+          setState(rawState);
+          setDistrict(displayDistrict);
           setPincode(data.pincode || '');
           setAddress(data.address || '');
+
           setCurrentRole(data.currentRole || '');
-          setYearsOfExperience(data.yearsOfExperience !== undefined && data.yearsOfExperience !== null ? String(data.yearsOfExperience) : '');
+          setYearsOfExperience(
+            data.yearsOfExperience !== undefined && data.yearsOfExperience !== null
+              ? String(data.yearsOfExperience)
+              : ''
+          );
           setFarmingBackground(data.farmingBackground || 'No');
           setCropsGrown(data.cropsGrown || '');
           setFarmSize(data.farmSize || '');
           setPrimaryExpertise(data.primaryExpertise || '');
+          setEligibleRole(data.eligibleRole || null);
           setCurrentPhase(data.currentPhase || 'onboarding');
           setDocumentsSubmitted(Boolean(data.documentsSubmitted));
 
           // Consent info
           setConsentTimestamp(data.consentTimestamp || null);
 
-          // Education list
+          // Education list (read-only)
           if (Array.isArray(data.education) && data.education.length > 0) {
             setEducationList(
               data.education.map((item: any, idx: number) => ({
@@ -119,7 +129,7 @@ export default function ProfilePage() {
               },
             ]);
           }
-          
+
           // Resume info
           if (data.resumeName) {
             setResume({
@@ -127,6 +137,8 @@ export default function ProfilePage() {
               name: data.resumeName,
               size: data.resumeSize || 'Uploaded',
             });
+          } else {
+            setResume(null);
           }
         }
       } catch (err) {
@@ -139,96 +151,61 @@ export default function ProfilePage() {
     loadProfile();
   }, [router]);
 
-  const handleAddEducation = () => {
-    setEducationList((prev) => [
-      ...prev,
-      {
-        id: `edu_${Date.now()}`,
-        level: '',
-        discipline: '',
-        status: '',
-        institution: '',
-        yearOfCompletion: '',
-      },
-    ]);
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        setResumeFeedback({ type: 'error', text: 'Resume file size must be less than 5MB.' });
+        return;
+      }
+      setResumeFeedback(null);
+      setStagedFile(file);
+    }
+    e.target.value = '';
   };
 
-  const handleRemoveEducation = (index: number) => {
-    setEducationList((prev) => prev.filter((_, idx) => idx !== index));
+  const handleCancelStaged = () => {
+    setStagedFile(null);
+    setResumeFeedback(null);
   };
 
-  const handleEducationChange = (index: number, field: keyof EducationItem, val: string) => {
-    setEducationList((prev) => {
-      const next = [...prev];
-      next[index] = { ...next[index], [field]: val };
-      return next;
-    });
-  };
+  const handleUploadResume = async () => {
+    if (!stagedFile) return;
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    setFeedback(null);
+    setUploadingResume(true);
+    setResumeFeedback(null);
 
     try {
-      // 1. Upload resume first if changed
-      if (resumeFile) {
-        const formData = new FormData();
-        formData.append('file', resumeFile);
-        
-        const resumeRes = await fetch('/api/resume', {
-          method: 'POST',
-          body: formData,
-        });
+      const formData = new FormData();
+      formData.append('file', stagedFile);
 
-        if (!resumeRes.ok) {
-          const errorData = await resumeRes.json().catch(() => ({}));
-          throw new Error(errorData.error || 'Failed to upload resume');
-        }
-        
-        // Clear file to avoid re-uploading
-        setResumeFile(null);
-      }
-
-      // 2. Save profile payload
-      const payload = {
-        fullName,
-        phone,
-        state,
-        district,
-        pincode,
-        address,
-        currentRole,
-        yearsOfExperience: yearsOfExperience ? parseFloat(yearsOfExperience) : 0,
-        farmingBackground,
-        cropsGrown,
-        farmSize,
-        primaryExpertise,
-        education: educationList,
-        highestEducation: educationList[0]?.level || '',
-        institution: educationList[0]?.institution || '',
-        discipline: educationList[0]?.discipline || '',
-        disciplineOther: educationList[0]?.disciplineOther || '',
-        educationStatus: educationList[0]?.status || '',
-      };
-
-      const res = await fetch('/api/candidate', {
+      const res = await fetch('/api/resume', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: formData,
       });
 
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || 'Failed to save profile changes.');
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to upload resume.');
       }
 
-      setFeedback({ type: 'success', text: 'Profile updated successfully!' });
-      setTimeout(() => setFeedback(null), 4000);
+      const isReplacement = Boolean(resume);
+      const newResumeData = {
+        name: stagedFile.name,
+        size: (stagedFile.size / (1024 * 1024)).toFixed(2) + ' MB',
+      };
+
+      setResume(newResumeData);
+      setStagedFile(null);
+      setResumeFeedback({
+        type: 'success',
+        text: isReplacement ? 'Resume successfully replaced!' : 'Resume successfully uploaded!',
+      });
+      setTimeout(() => setResumeFeedback(null), 5000);
     } catch (err: any) {
-      setFeedback({ type: 'error', text: err.message || 'Failed to save profile.' });
+      setResumeFeedback({ type: 'error', text: err.message || 'Failed to update resume.' });
     } finally {
-      setSaving(false);
+      setUploadingResume(false);
     }
   };
 
@@ -243,24 +220,8 @@ export default function ProfilePage() {
       } catch {}
       router.replace('/declaration');
     } catch (err: any) {
-      setFeedback({ type: 'error', text: err.message || 'Error withdrawing consent.' });
+      setResumeFeedback({ type: 'error', text: err.message || 'Error withdrawing consent.' });
     }
-  };
-
-  const handleLogout = async () => {
-    setLoggingOut(true);
-    const redisToken = sessionStorage.getItem('candidate_session_token');
-    if (redisToken) {
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL;
-      fetch(`${backendUrl}/api/candidate/session/logout`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${redisToken}` },
-      }).catch(() => {});
-    }
-    sessionStorage.clear();
-    localStorage.clear();
-    await signOut({ redirect: false });
-    router.push('/login');
   };
 
   const getInitials = (name: string) => {
@@ -271,6 +232,21 @@ export default function ProfilePage() {
     }
     return name.slice(0, 2).toUpperCase();
   };
+
+  if (loading) {
+    return (
+      <main className={styles.container}>
+        <nav className={styles.topNavbar}>
+          <div className={styles.navbarContent}>
+            <BrandLogos variant="header" />
+          </div>
+        </nav>
+        <div className={styles.content}>
+          <p style={{ textAlign: 'center', padding: '60px 0', color: '#64748b' }}>Loading candidate profile...</p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className={styles.container}>
@@ -293,19 +269,24 @@ export default function ProfilePage() {
             <div className={styles.heroDetails}>
               <h1>{fullName || 'Candidate Profile'}</h1>
               <p className={styles.heroEmail}>
-                <span>✉️ {email || '—'}</span>
-                {phone && <span>• 📞 {phone}</span>}
+                <span>✉ {email || '—'}</span>
+                {phone && <span> • 📞 {phone}</span>}
               </p>
             </div>
           </div>
           <div className={styles.heroBadges}>
+            {eligibleRole && (
+              <span className={styles.roleBadge} title="Role assigned based on qualifications and experience">
+              Eligible Role: <strong>{roleDisplayName(eligibleRole)}</strong>
+              </span>
+            )}
             {!documentsSubmitted && (
-              <span className={styles.phaseBadge}>Phase: {currentPhase}</span>
+              <span className={styles.phaseBadge}>Phase: {phaseLabel(currentPhase)}</span>
             )}
           </div>
         </div>
 
-        {/* ─── Candidate Declarations & Consent Section ─── */}
+        {/* Candidate Declarations & Consent Section */}
         <section className={styles.consentSection}>
           <div className={styles.consentHeader}>
             <div className={styles.consentTitleWrap}>
@@ -324,7 +305,7 @@ export default function ProfilePage() {
                   <path d="m9 12 2 2 4-4" />
                 </svg>
               </div>
-              <h2 className={styles.consentTitle}>Candidate Declarations & Consent (4 Declarations)</h2>
+              <h2 className={styles.consentTitle}>Candidate Declarations &amp; Consent (4 Declarations)</h2>
             </div>
             <span className={`${styles.consentStatusBadge} ${styles.consentStatusGranted}`}>
               ✓ All 4 Consents Granted
@@ -338,11 +319,11 @@ export default function ProfilePage() {
             <div className={styles.declarationsList}>
               <div className={styles.declarationItem}>
                 <span className={styles.declarationCheck}>✓</span>
-                <span className={styles.declarationName}>AI-Based Interview & Assessment Process Declaration</span>
+                <span className={styles.declarationName}>AI-Based Interview &amp; Assessment Process Declaration</span>
               </div>
               <div className={styles.declarationItem}>
                 <span className={styles.declarationCheck}>✓</span>
-                <span className={styles.declarationName}>ViBe Platform Consent (Audio, Video & Proctoring)</span>
+                <span className={styles.declarationName}>ViBe Platform Consent (Audio, Video &amp; Proctoring)</span>
               </div>
               <div className={styles.declarationItem}>
                 <span className={styles.declarationCheck}>✓</span>
@@ -350,12 +331,12 @@ export default function ProfilePage() {
               </div>
               <div className={styles.declarationItem}>
                 <span className={styles.declarationCheck}>✓</span>
-                <span className={styles.declarationName}>Document Verification & Data Privacy Consent (DPDP Act)</span>
+                <span className={styles.declarationName}>Document Verification &amp; Data Privacy Consent (DPDP Act)</span>
               </div>
             </div>
             {consentTimestamp && (
               <p className={styles.consentTimestamp}>
-                All 4 declarations signed & granted on: {new Date(consentTimestamp).toLocaleString()}
+                All 4 declarations signed &amp; granted on: {new Date(consentTimestamp).toLocaleString()}
               </p>
             )}
             <div className={styles.consentActions}>
@@ -370,380 +351,291 @@ export default function ProfilePage() {
           </div>
         </section>
 
-        {/* ─── Profile Edit Form ─── */}
-        <form onSubmit={handleSave} className={styles.formCard}>
-          {/* Section 1: Personal Details */}
+        {/* Profile Details Container (All Read-only except Resume Update) */}
+        <div className={styles.formCard}>
+          {/* Section 1: Personal Details (Read-only) */}
           <div>
             <h3 className={styles.sectionTitle}>1. Personal Information</h3>
             <div className={styles.grid2}>
               <div className={styles.formGroup}>
-                <label className={styles.label}>Full Name *</label>
-                <input
-                  type="text"
-                  required
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  className={styles.input}
-                  placeholder="Enter your full name"
-                />
+                <label className={styles.label}>Full Name</label>
+                <div className={styles.readOnlyBox}>{fullName || '—'}</div>
               </div>
 
               <div className={styles.formGroup}>
-                <label className={styles.label}>Phone Number *</label>
-                <input
-                  type="tel"
-                  required
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className={styles.input}
-                  placeholder="10-digit mobile number"
-                />
+                <label className={styles.label}>Phone Number</label>
+                <div className={styles.readOnlyBox}>{phone || '—'}</div>
               </div>
 
               <div className={styles.formGroup}>
-                <label className={styles.label}>State *</label>
-                <SearchableSelect
-                  id="profile_state"
-                  name="profile_state"
-                  options={INDIAN_STATES}
-                  value={state}
-                  onChange={(e) => {
-                    setState(e.target.value);
-                    setDistrict('');
-                  }}
-                  placeholder="Select State"
-                />
+                <label className={styles.label}>State</label>
+                <div className={styles.readOnlyBox}>{state || '—'}</div>
               </div>
 
               <div className={styles.formGroup}>
-                <label className={styles.label}>District *</label>
-                <SearchableSelect
-                  id="profile_district"
-                  name="profile_district"
-                  options={availableDistricts}
-                  value={district}
-                  onChange={(e) => setDistrict(e.target.value)}
-                  placeholder={state ? 'Select District' : 'Select State First'}
-                  disabled={!state}
-                />
+                <label className={styles.label}>District</label>
+                <div className={styles.readOnlyBox}>{district || '—'}</div>
               </div>
 
               <div className={styles.formGroup}>
-                <label className={styles.label}>Pincode *</label>
-                <input
-                  type="text"
-                  value={pincode}
-                  onChange={(e) => setPincode(e.target.value)}
-                  className={styles.input}
-                  placeholder="6-digit PIN"
-                  maxLength={6}
-                />
+                <label className={styles.label}>Pincode</label>
+                <div className={styles.readOnlyBox}>{pincode || '—'}</div>
               </div>
 
               <div className={`${styles.formGroup} ${styles.fullWidth}`}>
                 <label className={styles.label}>Residential Address</label>
-                <textarea
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  className={styles.textarea}
-                  placeholder="Enter your current address"
-                />
+                <div
+                  className={styles.readOnlyBox}
+                  style={{ minHeight: '60px', alignItems: 'flex-start', paddingTop: '10px' }}
+                >
+                  {address || '—'}
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Section 2: Professional & Farming Background */}
+          {/* Section 2: Professional & Farming Background (Read-only) */}
           <div>
-            <h3 className={styles.sectionTitle}>2. Professional & Agricultural Background</h3>
+            <h3 className={styles.sectionTitle}>2. Professional &amp; Agricultural Background</h3>
             <div className={styles.grid2}>
               <div className={styles.formGroup}>
                 <label className={styles.label}>Current Role / Designation</label>
-                <input
-                  type="text"
-                  value={currentRole}
-                  onChange={(e) => setCurrentRole(e.target.value)}
-                  className={styles.input}
-                  placeholder="e.g. Agri Intern / Young Professional / Student"
-                />
+                <div className={styles.readOnlyBox}>{currentRole || '—'}</div>
               </div>
 
               <div className={styles.formGroup}>
                 <label className={styles.label}>Years of Experience</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  value={yearsOfExperience}
-                  onChange={(e) => setYearsOfExperience(e.target.value)}
-                  className={styles.input}
-                  placeholder="e.g. 0 or 1.5"
-                />
+                <div className={styles.readOnlyBox}>
+                  {yearsOfExperience !== '' ? `${yearsOfExperience} Years` : '0 Years'}
+                </div>
               </div>
 
               <div className={styles.formGroup}>
                 <label className={styles.label}>Farming / RAWE Background</label>
-                <select
-                  value={farmingBackground}
-                  onChange={(e) => setFarmingBackground(e.target.value)}
-                  className={styles.select}
-                >
-                  <option value="Yes">Yes</option>
-                  <option value="No">No</option>
-                </select>
+                <div className={styles.readOnlyBox}>{farmingBackground || 'No'}</div>
               </div>
 
               <div className={styles.formGroup}>
-                <label className={styles.label}>Farm Size (in acres, if applicable)</label>
-                <input
-                  type="text"
-                  value={farmSize}
-                  onChange={(e) => setFarmSize(e.target.value)}
-                  className={styles.input}
-                  placeholder="e.g. 2.5 acres"
-                />
+                <label className={styles.label}>Farm Size</label>
+                <div className={styles.readOnlyBox}>{farmSize || 'Not applicable'}</div>
               </div>
 
               <div className={`${styles.formGroup} ${styles.fullWidth}`}>
                 <label className={styles.label}>Crops Grown / Handled</label>
-                <input
-                  type="text"
-                  value={cropsGrown}
-                  onChange={(e) => setCropsGrown(e.target.value)}
-                  className={styles.input}
-                  placeholder="e.g. Paddy, Cotton, Chilli, Wheat, Maize"
-                />
+                <div className={styles.readOnlyBox}>{cropsGrown || '—'}</div>
               </div>
 
               <div className={`${styles.formGroup} ${styles.fullWidth}`}>
                 <label className={styles.label}>Primary Agricultural Expertise</label>
-                <input
-                  type="text"
-                  value={primaryExpertise}
-                  onChange={(e) => setPrimaryExpertise(e.target.value)}
-                  className={styles.input}
-                  placeholder="e.g. Pest Management, Soil Testing, Crop Advisory, Agronomy"
-                />
+                <div className={styles.readOnlyBox}>{primaryExpertise || '—'}</div>
               </div>
             </div>
           </div>
 
-          {/* Section 3: Educational Qualifications */}
+          {/* Section 3: Educational Qualifications (Read-only) */}
           <div>
             <div className={styles.sectionTitle}>
               <span>3. Educational Qualifications</span>
             </div>
 
-            {educationList.map((edu, index) => (
-              <div key={edu.id} className={styles.educationCard}>
-                <div className={styles.educationCardHeader}>
-                  <span className={styles.educationNumber}>Qualification #{index + 1}</span>
-                  {educationList.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveEducation(index)}
-                      className={styles.removeEduBtn}
+            {educationList.length === 0 ? (
+              <p style={{ color: '#64748b', fontSize: '14px', fontStyle: 'italic', padding: '10px 0' }}>
+                No qualifications recorded.
+              </p>
+            ) : (
+              educationList.map((edu, index) => (
+                <div key={edu.id || index} className={styles.educationCard}>
+                  <div className={styles.educationCardHeader}>
+                    <span className={styles.educationNumber}>Qualification #{index + 1}</span>
+                    <span
+                      className={
+                        edu.status === 'Completed'
+                          ? styles.statusBadgeCompleted
+                          : styles.statusBadgePursuing
+                      }
                     >
-                      ✕ Remove
-                    </button>
-                  )}
-                </div>
-
-                <div className={styles.grid2}>
-                  <div className={styles.formGroup}>
-                    <label className={styles.label}>Degree Level *</label>
-                    <select
-                      value={edu.level}
-                      onChange={(e) => handleEducationChange(index, 'level', e.target.value)}
-                      className={styles.select}
-                      required
-                    >
-                      <option value="">Select Degree Level</option>
-                      {EDUCATION_LEVELS.map((lvl) => (
-                        <option key={lvl} value={lvl}>
-                          {lvl}
-                        </option>
-                      ))}
-                    </select>
+                      {edu.status || 'Completed'}
+                    </span>
                   </div>
 
-                  {edu.level === 'Other' && (
+                  <div className={styles.grid2}>
                     <div className={styles.formGroup}>
-                      <label className={styles.label}>Specify Other Degree *</label>
-                      <input
-                        type="text"
-                        value={edu.levelOther || ''}
-                        onChange={(e) => handleEducationChange(index, 'levelOther', e.target.value)}
-                        className={styles.input}
-                        placeholder="Enter degree name"
-                      />
+                      <label className={styles.label}>Degree Level</label>
+                      <div className={styles.readOnlyBox}>
+                        {edu.level === 'Other' ? (edu.levelOther || 'Other') : (edu.level || '—')}
+                      </div>
                     </div>
-                  )}
 
-                  <div className={styles.formGroup}>
-                    <label className={styles.label}>Discipline / Major *</label>
-                    <select
-                      value={edu.discipline}
-                      onChange={(e) => handleEducationChange(index, 'discipline', e.target.value)}
-                      className={styles.select}
-                      required
-                    >
-                      <option value="">Select Discipline</option>
-                      {DISCIPLINES.map((d) => (
-                        <option key={d} value={d}>
-                          {d}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {edu.discipline === 'Other' && (
                     <div className={styles.formGroup}>
-                      <label className={styles.label}>Specify Other Discipline *</label>
-                      <input
-                        type="text"
-                        value={edu.disciplineOther || ''}
-                        onChange={(e) => handleEducationChange(index, 'disciplineOther', e.target.value)}
-                        className={styles.input}
-                        placeholder="Enter discipline name"
-                      />
+                      <label className={styles.label}>Discipline / Major</label>
+                      <div className={styles.readOnlyBox}>
+                        {edu.discipline === 'Other'
+                          ? (edu.disciplineOther || 'Other')
+                          : (edu.discipline || '—')}
+                      </div>
                     </div>
-                  )}
 
-                  <div className={styles.formGroup}>
-                    <label className={styles.label}>Status *</label>
-                    <select
-                      value={edu.status}
-                      onChange={(e) => handleEducationChange(index, 'status', e.target.value)}
-                      className={styles.select}
-                    >
-                      <option value="">Select Status</option>
-                      <option value="Completed">Completed</option>
-                      <option value="Pursuing">Pursuing</option>
-                    </select>
-                  </div>
+                    <div className={styles.formGroup}>
+                      <label className={styles.label}>Institution / University</label>
+                      <div className={styles.readOnlyBox}>{edu.institution || '—'}</div>
+                    </div>
 
-                  <div className={styles.formGroup}>
-                    <label className={styles.label}>Institution / University *</label>
-                    <input
-                      type="text"
-                      value={edu.institution}
-                      onChange={(e) => handleEducationChange(index, 'institution', e.target.value)}
-                      className={styles.input}
-                      placeholder="College or University name"
-                    />
-                  </div>
-
-                  <div className={styles.formGroup}>
-                    <label className={styles.label}>Year of Completion</label>
-                    <input
-                      type="text"
-                      value={edu.yearOfCompletion}
-                      onChange={(e) => handleEducationChange(index, 'yearOfCompletion', e.target.value)}
-                      className={styles.input}
-                      placeholder="e.g. 2024"
-                      maxLength={4}
-                    />
+                    <div className={styles.formGroup}>
+                      <label className={styles.label}>Year of Completion</label>
+                      <div className={styles.readOnlyBox}>{edu.yearOfCompletion || '—'}</div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-
-            <button
-              type="button"
-              onClick={handleAddEducation}
-              className={styles.addEduBtn}
-            >
-              <span>+</span> Add Another Education Entry
-            </button>
+              ))
+            )}
           </div>
 
-          {/* Section 4: Resume / CV */}
+          {/* Section 4: Resume / CV (Add if missing, Replace if present) */}
           <div>
-            <h3 className={styles.sectionTitle}>4. Resume / CV</h3>
+            <h3 className={styles.sectionTitle}>
+              <span>4. Resume / CV</span>
+            </h3>
+
             <div className={styles.resumeSection}>
+              {/* Feedback messages */}
+              {resumeFeedback && (
+                <div
+                  style={{ marginBottom: '12px' }}
+                  className={resumeFeedback.type === 'success' ? styles.toastSuccess : styles.toastError}
+                >
+                  {resumeFeedback.type === 'success' ? '✓ ' : '⚠️ '}
+                  {resumeFeedback.text}
+                </div>
+              )}
+
+              {/* Case A: Resume is already present */}
               {resume ? (
-                <div className={styles.resumePreview}>
-                  <span className={styles.resumeIcon}>📄</span>
-                  <div className={styles.resumeInfo}>
-                    <p className={styles.resumeName}>{resume.name}</p>
-                    <p className={styles.resumeSize}>{resume.size || 'Uploaded'}</p>
+                <div>
+                  <div className={styles.resumePreview}>
+                    <span className={styles.resumeIcon}>📄</span>
+                    <div className={styles.resumeInfo}>
+                      <p className={styles.resumeName}>{resume.name}</p>
+                      <p className={styles.resumeSize}>{resume.size || 'Uploaded'}</p>
+                    </div>
+                    <div className={styles.resumeActions}>
+                      <label className={styles.changeResumeBtn}>
+                        Update Resume
+                        <input
+                          type="file"
+                          accept=".pdf,.doc,.docx"
+                          className={styles.resumeInput}
+                          onChange={handleFileSelect}
+                        />
+                      </label>
+                    </div>
                   </div>
-                  <div className={styles.resumeActions}>
-                    <button
-                      type="button"
-                      className={styles.removeButton}
-                      onClick={() => {
-                        setResume(null);
-                        setResumeFile(null);
-                      }}
-                    >
-                      Remove
-                    </button>
-                  </div>
+
+                  {/* Staged file card for replacement confirmation */}
+                  {stagedFile && (
+                    <div className={styles.stagedResumeCard}>
+                      <div className={styles.stagedResumeInfo}>
+                        <span style={{ fontSize: '24px' }}>📎</span>
+                        <div>
+                          <strong style={{ fontSize: '14px', color: '#0f172a' }}>{stagedFile.name}</strong>
+                          <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+                            {(stagedFile.size / (1024 * 1024)).toFixed(2)} MB • Ready to replace current resume
+                          </div>
+                        </div>
+                      </div>
+                      <div className={styles.stagedResumeActions}>
+                        <button
+                          type="button"
+                          onClick={handleCancelStaged}
+                          disabled={uploadingResume}
+                          className={styles.cancelResumeBtn}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleUploadResume}
+                          disabled={uploadingResume}
+                          className={styles.saveResumeBtn}
+                        >
+                          {uploadingResume ? 'Replacing...' : '✓ Confirm & Update Resume'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
-                <label className={styles.resumeUpload}>
-                  <span className={styles.uploadIcon}>📄</span>
-                  <p className={styles.uploadText}>Click to upload your resume</p>
-                  <p className={styles.uploadHint}>PDF or DOCX (Max 5MB)</p>
-                  <input
-                    type="file"
-                    accept=".pdf,.doc,.docx"
-                    className={styles.resumeInput}
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        if (file.size > 5 * 1024 * 1024) {
-                          setFeedback({ type: 'error', text: 'Resume file size must be less than 5MB' });
-                          return;
-                        }
-                        setResumeFile(file);
-                        setResume({
-                          name: file.name,
-                          size: (file.size / (1024 * 1024)).toFixed(2) + ' MB',
-                        });
-                      }
-                    }}
-                  />
-                </label>
-              )}
-            </div>
-          </div>
+                /* Case B: Resume is NOT present (e.g. rare onboarding network drop) */
+                <div>
+                  <div className={styles.noResumeWarning}>
+                    <span style={{ fontSize: '18px' }}>⚠️</span>
+                    <div>
+                      <strong>No resume attached:</strong> A resume was not saved during onboarding. Please upload your resume below to complete your application profile.
+                    </div>
+                  </div>
 
-          {/* Bottom Actions */}
-          <div className={styles.bottomActions}>
-            <div>
-              {feedback && (
-                <span className={feedback.type === 'success' ? styles.toastSuccess : styles.toastError}>
-                  {feedback.type === 'success' ? '✓ ' : '⚠️ '}
-                  {feedback.text}
-                </span>
+                  {!stagedFile ? (
+                    <label className={styles.resumeUpload}>
+                      <span className={styles.uploadIcon}>📄</span>
+                      <p className={styles.uploadText}>Click to upload your resume *</p>
+                      <p className={styles.uploadHint}>PDF or DOCX (Max 5MB) • Mandatory</p>
+                      <input
+                        type="file"
+                        accept=".pdf,.doc,.docx"
+                        className={styles.resumeInput}
+                        onChange={handleFileSelect}
+                      />
+                    </label>
+                  ) : (
+                    <div className={styles.stagedResumeCard}>
+                      <div className={styles.stagedResumeInfo}>
+                        <span style={{ fontSize: '24px' }}>📎</span>
+                        <div>
+                          <strong style={{ fontSize: '14px', color: '#0f172a' }}>{stagedFile.name}</strong>
+                          <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+                            {(stagedFile.size / (1024 * 1024)).toFixed(2)} MB • Ready to upload
+                          </div>
+                        </div>
+                      </div>
+                      <div className={styles.stagedResumeActions}>
+                        <button
+                          type="button"
+                          onClick={handleCancelStaged}
+                          disabled={uploadingResume}
+                          className={styles.cancelResumeBtn}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleUploadResume}
+                          disabled={uploadingResume}
+                          className={styles.saveResumeBtn}
+                        >
+                          {uploadingResume ? 'Uploading...' : '✓ Upload & Save Resume'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
-            <button
-              type="submit"
-              disabled={saving}
-              className={styles.saveBtn}
-            >
-              {saving ? 'Saving...' : 'Save Profile Changes'}
-            </button>
           </div>
-        </form>
+        </div>
       </div>
 
       {/* Confirmation Modal for Consent Withdrawal */}
       {showWithdrawModal && (
         <div className={styles.modalOverlay} onClick={() => setShowWithdrawModal(false)}>
           <div className={styles.modalCard} onClick={(e) => e.stopPropagation()}>
-            <h3 className={styles.modalTitle}>Withdraw All 4 Declarations & Consents?</h3>
+            <h3 className={styles.modalTitle}>Withdraw All 4 Declarations &amp; Consents?</h3>
             <p className={styles.modalText}>
               Are you sure you want to withdraw your consent? This will revoke <strong>all 4 accepted declarations</strong>:
             </p>
             <ul className={styles.modalDeclarationsList}>
-              <li>1. AI-Based Interview & Assessment Process Declaration</li>
-              <li>2. ViBe Platform Candidate Consent (Audio, Video & Proctoring)</li>
+              <li>1. AI-Based Interview &amp; Assessment Process Declaration</li>
+              <li>2. ViBe Platform Candidate Consent (Audio, Video &amp; Proctoring)</li>
               <li>3. Ground Truth Module Consent (Field Assessment)</li>
-              <li>4. Document Verification & Data Privacy Consent (DPDP Act, 2023)</li>
+              <li>4. Document Verification &amp; Data Privacy Consent (DPDP Act, 2023)</li>
             </ul>
             <div className={styles.modalWarningBox}>
               ⚠️ <strong>Warning:</strong> Withdrawing consent will pause your recruitment process and permanently delete all documents uploaded in the document verification phase. You will be redirected to the declaration page to review and sign all 4 declarations again before you can proceed.

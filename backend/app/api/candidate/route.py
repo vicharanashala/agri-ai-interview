@@ -44,36 +44,29 @@ _PHASE_MAP = {1: "onboarding", 2: "interview", 3: "summary", 4: "foundation", 5:
 # ── Auth helper ───────────────────────────────────────────────────────────────
 
 def _get_candidate_id_from_request(request: Request) -> str:
-    auth = request.headers.get("authorization", "")
-    token = auth[7:] if auth.startswith("Bearer ") else request.cookies.get("candidate_session")
-    if not token:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    store = get_session_store()
-    session = store.find_by_token_hash(_hash_token(token))
-    if not session:
-        raise HTTPException(status_code=401, detail="Session expired or invalid")
-    candidate_id = session.get("candidate_id")
-    if not candidate_id:
-        raise HTTPException(status_code=401, detail="Invalid session")
-    return candidate_id
+    """Helper that extracts candidate ID, falling back to X-User-Email when token is missing or expired."""
+    return _get_candidate_id_with_email_fallback(request)
 
 
 def _get_candidate_id_with_email_fallback(request: Request) -> str:
     """
-    Returns candidate_id from candidate session token if present.
-    For new users without a session token, falls back to X-User-Email header
+    Returns candidate_id from candidate session token if present and valid.
+    If token is expired, invalid, or missing, falls back to X-User-Email header
     to look up the user + candidate in MongoDB directly.
     """
     auth = request.headers.get("authorization", "")
     token = auth[7:] if auth.startswith("Bearer ") else request.cookies.get("candidate_session")
     if token:
-        store = get_session_store()
-        session = store.find_by_token_hash(_hash_token(token))
-        if session:
-            candidate_id = session.get("candidate_id")
-            if candidate_id:
-                return candidate_id
-    # Fallback: new user without candidate session — use X-User-Email header
+        try:
+            store = get_session_store()
+            session = store.find_by_token_hash(_hash_token(token))
+            if session:
+                candidate_id = session.get("candidate_id")
+                if candidate_id:
+                    return str(candidate_id)
+        except Exception:
+            pass
+    # Fallback: verified NextAuth user via X-User-Email header
     email = request.headers.get("x-user-email")
     if not email:
         raise HTTPException(status_code=401, detail="Authentication required")
@@ -87,12 +80,18 @@ def _get_candidate_id_with_email_fallback(request: Request) -> str:
         "$or": [{"isdeleted": {"$ne": True}}, {"is_deleted": {"$ne": True}}]
     })
     if not candidate:
+        candidate = db.candidates.find_one({
+            "email": email.lower().strip(),
+            "$or": [{"isdeleted": {"$ne": True}}, {"is_deleted": {"$ne": True}}]
+        })
+    if not candidate:
         candidate = db.candidates.find_one({"user_id": {"$in": [user_id_str, user["_id"]]}})
     if not candidate:
         # New user — create candidate record first
         from bson import ObjectId
         result = db.candidates.insert_one({
             "user_id": user_id_str,
+            "email": email.lower().strip(),
             "current_phase": "onboarding",
             "isdeleted": False,
             "is_deleted": False,
@@ -116,13 +115,14 @@ class EducationItem(BaseModel):
 
 
 class OnboardingRequest(BaseModel):
-    fullName: str
-    phone: str
-    state: str
-    district: str
-    pincode: str
-    address: str
-    currentRole: str
+    fullName: Optional[str] = None
+    phone: Optional[str] = None
+    state: Optional[str] = None
+    district: Optional[str] = None
+    districtCustom: Optional[str] = None
+    pincode: Optional[str] = None
+    address: Optional[str] = None
+    currentRole: Optional[str] = None
     yearsOfExperience: Optional[float] = None
     highestEducation: Optional[str] = None
     institution: Optional[str] = None
@@ -133,9 +133,9 @@ class OnboardingRequest(BaseModel):
     nonAgriConsent: Optional[bool] = None
     isInternshipConsent: Optional[bool] = None
     farmingBackground: Optional[str] = None
-    cropsGrown: str
+    cropsGrown: Optional[str] = None
     farmSize: Optional[str] = None
-    primaryExpertise: str
+    primaryExpertise: Optional[str] = None
     eligibleRole: Optional[str] = None
 
 
@@ -145,6 +145,7 @@ _ONBOARDING_FIELDS = {
     "phone": "phone",
     "state": "state",
     "district": "district",
+    "districtCustom": "district_custom",
     "pincode": "pincode",
     "address": "address",
     "currentRole": "current_role",
@@ -171,6 +172,7 @@ class CandidateProfileResponse(BaseModel):
     phone: Optional[str] = None
     state: Optional[str] = None
     district: Optional[str] = None
+    districtCustom: Optional[str] = None
     pincode: Optional[str] = None
     address: Optional[str] = None
     currentRole: Optional[str] = None
@@ -301,17 +303,33 @@ async def upsert_candidate(request: Request, body: OnboardingRequest):
     updates["updated_at"] = datetime.now(timezone.utc)
 
     # Safely get ObjectId variant
-    id_variants = [candidate_id]
-    try:
-        from bson.errors import InvalidId
-        if not isinstance(candidate_id, ObjectId):
-            id_variants.append(ObjectId(candidate_id))
-    except Exception:
-        pass
+    id_variants = _get_id_variants(candidate_id)
 
     cand = db.candidates.find_one({"_id": {"$in": id_variants}})
     if not cand:
         raise HTTPException(status_code=404, detail="Candidate not found")
+
+    # Automatically synchronize eligible_role if education/experience was updated or if missing
+    if "education" in updates or "years_of_experience" in updates or not cand.get("eligible_role"):
+        try:
+            from app.api.admin.candidates import compute_eligible_role
+            merged_cand = dict(cand)
+            merged_cand.update(updates)
+            calc_role = compute_eligible_role(merged_cand)
+            if calc_role:
+                updates["eligible_role"] = calc_role
+        except Exception as e:
+            logger.warning(f"[upsert_candidate] failed to auto-sync eligible role: {e}")
+
+    # Keep user name synchronized if full_name was updated
+    if "full_name" in updates and updates["full_name"] and cand.get("user_id"):
+        try:
+            db.users.update_one(
+                {"_id": {"$in": _get_id_variants(cand["user_id"])}},
+                {"$set": {"name": updates["full_name"], "fullName": updates["full_name"], "updated_at": datetime.now(timezone.utc)}}
+            )
+        except Exception:
+            pass
 
     if not cand.get("profile_completed_at"):
         updates["profile_completed_at"] = datetime.now(timezone.utc)
@@ -669,6 +687,7 @@ async def get_candidate_profile(email: Optional[str] = Query(None)):
         phone=cand.get("phone"),
         state=cand.get("state"),
         district=cand.get("district"),
+        districtCustom=cand.get("district_custom") or cand.get("districtCustom"),
         pincode=cand.get("pincode"),
         address=cand.get("address"),
         currentRole=cand.get("current_role"),
@@ -883,6 +902,11 @@ async def patch_candidate(request: Request, body: CandidatePatchRequest):
         phase_str = _PHASE_MAP.get(body.phase)
         if not phase_str:
             raise HTTPException(status_code=400, detail=f"Invalid phase: {body.phase}")
+        # Guard against accidental downgrade if candidate has already progressed to foundation or later
+        if phase_str == "summary":
+            cand_check = db.candidates.find_one({"_id": {"$in": _get_id_variants(candidate_id)}})
+            if cand_check and cand_check.get("current_phase") in ["foundation", "module", "documents"]:
+                phase_str = cand_check.get("current_phase")
         updates["current_phase"] = phase_str
 
     if body.offerLetterViewed is not None:

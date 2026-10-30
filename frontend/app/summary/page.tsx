@@ -257,7 +257,8 @@ export default function SummaryPage() {
             const alreadyVisited = localStorage.getItem('passedAndVisitedSummary') === 'true';
             const fcCompleted = localStorage.getItem('foundationCourseCompleted') === 'completed' || localStorage.getItem('foundationCourseCompleted') === 'true';
             const modCompleted = localStorage.getItem('moduleCompleted') === 'completed' || localStorage.getItem('moduleCompleted') === 'true';
-            if (!alreadyVisited && !fcCompleted && !modCompleted) {
+            // Always sync to DB if candidate passed (to ensure foundation phase is unlocked in DB) or if not visited yet
+            if ((latest.result === 'PASS' || !alreadyVisited) && !fcCompleted && !modCompleted) {
               await syncPhaseToDb(targetPhase, { passedAndVisitedSummary: true });
               localStorage.setItem('passedAndVisitedSummary', 'true');
             }

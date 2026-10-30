@@ -92,11 +92,15 @@ class InterviewGraphManager:
                 # Update candidate phase so phase 4 unlocks on the dashboard
                 try:
                     from app.db.mongodb import get_sync_db
+                    from bson import ObjectId
                     db = get_sync_db()
                     new_phase = "foundation" if result == "PASS" else "summary"
+                    cand_variants = [candidate_id]
+                    if not isinstance(candidate_id, ObjectId) and ObjectId.is_valid(str(candidate_id)):
+                        cand_variants.append(ObjectId(candidate_id))
                     db.candidates.update_one(
-                        {"_id": candidate_id},
-                        {"$set": {"current_phase": new_phase}}
+                        {"_id": {"$in": cand_variants}},
+                        {"$set": {"current_phase": new_phase, "updated_at": datetime.now(timezone.utc)}}
                     )
                     logger.info(f"[InterviewGraph] {interview_id}: candidate current_phase set to {new_phase}")
                 except Exception as e:

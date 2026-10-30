@@ -317,6 +317,7 @@ export default function DashboardPage() {
         // 4. Reconstruct actual phase from DB phase + flags
         let actualPhase: Phase = dbPhaseNum;
 
+        if (hasPassed && actualPhase < 4) actualPhase = 4;
         if (fcDone  && actualPhase < 5) actualPhase = 5;
         if (modDone && actualPhase < 6) actualPhase = 6;
         if (docsSubmitted && actualPhase < 6) actualPhase = 6;
@@ -592,7 +593,8 @@ export default function DashboardPage() {
     dbCelebratedPhasesRef.current = updatedCelebrated;
 
     // Persist to database so it survives across sessions, refreshes, and devices
-    syncPhaseToDb(currentPhase, { celebratedPhases: updatedCelebrated });
+    const phaseToSync = (hasPassed && currentPhase < 4) ? (4 as Phase) : currentPhase;
+    syncPhaseToDb(phaseToSync, { celebratedPhases: updatedCelebrated });
 
     if (milestoneId === 6) {
       // Hold center modal hidden until celebration banner finishes

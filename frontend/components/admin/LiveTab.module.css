@@ -310,3 +310,40 @@
 }
 
 .userMsg .msgTime { text-align: right; }
+
+/* ─── Tablets and phones: list above the chat ──────────────────────── */
+@media (max-width: 768px) {
+  .layout {
+    flex-direction: column;
+    height: auto;
+    min-height: 0;
+  }
+
+  .sidebar {
+    width: 100%;
+    min-width: 0;
+    max-height: 240px;
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  }
+
+  .chatArea {
+    height: 60vh;
+    min-height: 360px;
+  }
+
+  .chatHeader {
+    padding: 12px 16px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .chatMessages { padding: 16px; }
+  .message { max-width: 90%; }
+
+  .empty {
+    height: auto;
+    min-height: 280px;
+    padding: 24px 16px;
+  }
+}

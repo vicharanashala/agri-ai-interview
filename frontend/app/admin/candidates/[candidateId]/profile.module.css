@@ -1073,6 +1073,11 @@
   .fileActions {
     width: 100%;
     margin-left: 0;
+    flex-wrap: wrap;
+  }
+
+  .fileInfo {
+    min-width: 0;
   }
 
   .logo {

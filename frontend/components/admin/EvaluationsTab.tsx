@@ -340,8 +340,10 @@ function ExpandedRow({
   return (
     <tr className={styles.expandedRow}>
       <td colSpan={colSpan} className={styles.expandedCell}>
+        <div className={styles.expandedInner}>
         {reEvaluationReason ? (
           <div
+            className={styles.reEvalReason}
             style={{
               background: "#fef3c7",
               borderBottom: "1px solid #fde68a",
@@ -356,7 +358,7 @@ function ExpandedRow({
             </p>
           </div>
         ) : (
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginBottom: "12px", padding: "12px 24px 0" }}>
+          <div className={styles.expandedActions} style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginBottom: "12px", padding: "12px 24px 0" }}>
             {result === "FAIL" && (
               <button
                 onClick={handleResetCooldown}
@@ -407,6 +409,7 @@ function ExpandedRow({
               <p className={styles.noEval}>No evaluation data available.</p>
             )}
           </div>
+        </div>
         </div>
       </td>
     </tr>
@@ -615,7 +618,7 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken, onCandidat
         <button onClick={handleSearch} className={styles.searchBtn}>Search</button>
 
         {/* Sub-tab navigation before total count */}
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "8px" }}>
+        <div className={styles.subTabs} style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "8px" }}>
           <button
             className={`${styles.subTabBtn} ${activeSubTab === 'evaluations' ? styles.activeSubTabBtn : ''}`}
             onClick={() => setActiveSubTab('evaluations')}
@@ -738,7 +741,7 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken, onCandidat
                             <span className={styles.candidateEmail}>{evaluation.phone || "—"}</span>
                           </td>
                           <td>
-                            <span style={{ fontSize: "12px", background: "#f1f5f9", padding: "4px 8px", borderRadius: "12px", color: "#475569" }}>{levelLabel(evaluation.level)}</span>
+                            <span style={{ fontSize: "12px", background: "#f1f5f9", padding: "4px 8px", borderRadius: "12px", color: "#475569", whiteSpace: "nowrap" }}>{levelLabel(evaluation.level)}</span>
                           </td>
                           <td>
                             <span className={styles.candidateEmail}>{evaluation.passThreshold != null ? `${evaluation.passThreshold}/100` : "—"}</span>
@@ -779,7 +782,7 @@ export default function EvaluationsTab({ adminApiBase, getAdminToken, onCandidat
                             adminApiBase={adminApiBase}
                             getAdminToken={getAdminToken}
                             onReevaluate={handleReevaluate}
-                            colSpan={8}
+                            colSpan={10}
                           />
                         )}
                       </React.Fragment>

@@ -14,6 +14,7 @@ import {
 } from "recharts";
 import styles from "./AnalyticsTab.module.css";
 import PageSelector from "./PageSelector";
+import { isAbortError } from "../../lib/polling";
 
 // KPI overview funnel cards. `kpi` is both the key in the overview `funnel` counts and the kpi-details
 // type the card's modal loads; `of` is the card whose count is this card's denominator.
@@ -354,11 +355,14 @@ const formatDisplayDate = (value: string | null | undefined) => {
 interface AnalyticsTabProps {
   adminApiBase: string;
   getAdminToken: () => string | null;
+  /** Called with the geo stats once loaded, so the dashboard can reuse them without another request */
+  onGeoStatsLoaded?: (data: any) => void;
 }
 
 export default function AnalyticsTab({
   adminApiBase,
   getAdminToken,
+  onGeoStatsLoaded,
 }: AnalyticsTabProps) {
   const [globalStats, setGlobalStats] = useState<any>(null);
   const [kpiStats, setKpiStats] = useState<any>(null);
@@ -459,25 +463,37 @@ export default function AnalyticsTab({
   ];
 
   useEffect(() => {
-    fetchInitialData();
+    const controller = new AbortController();
+    fetchInitialData(controller.signal);
+    return () => controller.abort();
   }, []);
 
+  // The unfiltered overview comes from fetchInitialData, so these refetch only when their filters change.
+  // Compared against the last fetched filters (not "first run") so StrictMode's re-run does not refetch.
+  const phaseFilterKey = JSON.stringify([phaseState, phaseDistrict]);
+  const lastPhaseFilterKey = useRef(phaseFilterKey);
   useEffect(() => {
+    if (lastPhaseFilterKey.current === phaseFilterKey) return;
+    lastPhaseFilterKey.current = phaseFilterKey;
     fetchPhaseStats();
-  }, [phaseState, phaseDistrict]);
+  }, [phaseFilterKey]);
 
+  const kpiFilterKey = JSON.stringify([kpiState, kpiDistrict, kpiStartDate, kpiEndDate, kpiRole]);
+  const lastKpiFilterKey = useRef(kpiFilterKey);
   useEffect(() => {
+    if (lastKpiFilterKey.current === kpiFilterKey) return;
+    lastKpiFilterKey.current = kpiFilterKey;
     fetchKpiStats();
-  }, [kpiState, kpiDistrict, kpiStartDate, kpiEndDate, kpiRole]);
+  }, [kpiFilterKey]);
 
-  const fetchInitialData = async () => {
+  const fetchInitialData = async (signal: AbortSignal) => {
     setLoading(true);
     try {
       const token = getAdminToken();
       const headers: Record<string, string> = token ? { "X-Admin-Token": token } : {};
       const [statsRes, geoRes] = await Promise.all([
-        fetch(`${adminApiBase}/api/admin/stats/overview`, { headers }),
-        fetch(`${adminApiBase}/api/admin/geo/stats`, { headers })
+        fetch(`${adminApiBase}/api/admin/stats/overview`, { headers, signal }),
+        fetch(`${adminApiBase}/api/admin/geo/stats`, { headers, signal })
       ]);
       if (statsRes.ok) {
         const d = await statsRes.json();
@@ -489,11 +505,15 @@ export default function AnalyticsTab({
           setKpiStats(d);
         }
       }
-      if (geoRes.ok) setGeoStats(await geoRes.json());
+      if (geoRes.ok) {
+        const geo = await geoRes.json();
+        setGeoStats(geo);
+        onGeoStatsLoaded?.(geo);
+      }
     } catch (error) {
-      console.error("Failed to fetch initial data:", error);
+      if (!isAbortError(error)) console.error("Failed to fetch initial data:", error);
     } finally {
-      setLoading(false);
+      if (!signal.aborted) setLoading(false);
     }
   };
 
@@ -982,9 +1002,9 @@ export default function AnalyticsTab({
         </div>
       </div>
       {kpiModalOpen && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center' }} onClick={() => setKpiModalOpen(false)}>
-          <div style={{ background: 'white', borderRadius: '8px', padding: '24px', width: '95%', maxWidth: '1200px', maxHeight: '85vh', overflowY: 'auto', overflowX: 'hidden' }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+        <div className={styles.kpiModalOverlay} onClick={() => setKpiModalOpen(false)}>
+          <div className={styles.kpiModal} onClick={e => e.stopPropagation()}>
+            <div className={styles.kpiModalHeader}>
               <div>
                 <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 'bold' }}>{kpiModalTitle}</h2>
                 {(kpiStartDate || kpiEndDate) && (
@@ -998,22 +1018,22 @@ export default function AnalyticsTab({
               <button onClick={() => setKpiModalOpen(false)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer' }}>&times;</button>
             </div>
             
-            <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
-              <select value={kpiModalState} onChange={(e) => { setKpiModalState(e.target.value); setKpiModalDistrict("All"); }} style={{ padding: '8px', border: '1px solid #cbd5e1', borderRadius: '4px' }}>
+            <div className={styles.kpiModalFilters}>
+              <select value={kpiModalState} onChange={(e) => { setKpiModalState(e.target.value); setKpiModalDistrict("All"); }}>
                 <option value="All">All States</option>
                 {uniqueStates.map((s: string) => (
                   <option key={s} value={s}>{s}</option>
                 ))}
               </select>
               {kpiModalState !== "All" && (
-                <select value={kpiModalDistrict} onChange={(e) => setKpiModalDistrict(e.target.value)} style={{ padding: '8px', border: '1px solid #cbd5e1', borderRadius: '4px' }}>
+                <select value={kpiModalDistrict} onChange={(e) => setKpiModalDistrict(e.target.value)}>
                   <option value="All">All Districts</option>
                   {kpiModalDistricts.map((d) => (
                     <option key={d} value={d}>{d}</option>
                   ))}
                 </select>
               )}
-              <select value={kpiModalRole} onChange={(e) => setKpiModalRole(e.target.value)} style={{ padding: '8px', border: '1px solid #cbd5e1', borderRadius: '4px' }}>
+              <select value={kpiModalRole} onChange={(e) => setKpiModalRole(e.target.value)}>
                 <option value="All">All Roles</option>
                 <option value="Intern">Intern</option>
                 <option value="YP">YP</option>
@@ -1029,6 +1049,7 @@ export default function AnalyticsTab({
               <div style={{ textAlign: 'center', padding: '24px', color: '#666' }}>No candidates found for this KPI.</div>
             ) : (
               <>
+                <div className={styles.kpiModalTableWrap}>
                 <table className={`${styles.table} ${styles.kpiModalTable}`}>
                   <thead>
                     <tr>
@@ -1139,6 +1160,7 @@ export default function AnalyticsTab({
                     ))}
                   </tbody>
                 </table>
+                </div>
                 <PageSelector
                   total={kpiModalData.length}
                   page={kpiPage}

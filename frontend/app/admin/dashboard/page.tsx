@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, Suspense } from "react";
+import { createPoller, isAbortError, startPolling, type Poller } from "../../../lib/polling";
 import styles from "./dashboard.module.css";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -77,6 +78,9 @@ type SettingsTab = "guidelines" | "criteria" | "interview-config" | "anti-cheat"
 // so returning from a candidate profile restores the same tab, filters and page.
 const TABS: Tab[] = ["live", "candidates", "analytics", "evaluations", "course-completion", "module-completion", "anti-cheat", "settings", "trash"];
 const PAGE_LIMITS = [10, 20, 50, 100];
+const POLL_INTERVAL_MS = 5000;
+const ANTI_CHEAT_POLL_INTERVAL_MS = 30_000;
+const SEARCH_DEBOUNCE_MS = 300;
 // Set when a profile is opened from the table, so the profile's back button can use browser history
 const PROFILE_OPENED_FROM_DASHBOARD_KEY = "admin_profile_opened_from_dashboard";
 
@@ -155,7 +159,6 @@ function AdminDashboard() {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; candidateId: string } | null>(null);
   const [deletingCandidate, setDeletingCandidate] = useState(false);
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
   const [editingGuideline, setEditingGuideline] = useState<string | null>(null);
   const [guidelineContent, setGuidelineContent] = useState("");
   const [editingCriteria, setEditingCriteria] = useState<string | null>(null);
@@ -179,23 +182,15 @@ function AdminDashboard() {
   const [idleThresholdInput, setIdleThresholdInput] = useState<number>(15);
   const [platformIdleInput, setPlatformIdleInput] = useState<number>(15);
   const [savingAntiCheat, setSavingAntiCheat] = useState(false);
-  const [stats, setStats] = useState({ 
-    totalCandidates: 0, 
-    activeInterviews: 0, 
-    completedInterviews: 0,
-    phaseDistribution: {},
-    statusDistribution: {}
-  });
-  
-  const [geoStats, setGeoStats] = useState<any>(null);
   const [violations, setViolations] = useState<any[]>([]);
   const [violationsLoading, setViolationsLoading] = useState(false);
+  // State filter options; filled from the geo stats the Analytics tab loads
   const [uniqueStates, setUniqueStates] = useState<string[]>([]);
-  const [stateFunnel, setStateFunnel] = useState<{states: any[]; totalStates: number} | null>(null);
-  const [stateFunnelFilter, setStateFunnelFilter] = useState<string>("");
 
   // Filters
   const [searchQuery, setSearchQuery] = useState(() => initialQuery.get("q") || "");
+  // The search text the candidates request uses; follows searchQuery after a typing pause
+  const [debouncedSearch, setDebouncedSearch] = useState(searchQuery);
   const [phaseFilter, setPhaseFilter] = useState<string>(() => initialQuery.get("phase") || "");
   const [stateFilter, setStateFilter] = useState<string>(() => initialQuery.get("state") || "");
   const [interviewStatusFilter, setInterviewStatusFilter] = useState<string>(() => initialQuery.get("interview") || "");
@@ -213,7 +208,6 @@ function AdminDashboard() {
         }
         const session = await res.json();
         setAdminData({ name: "Admin User", email: session.email });
-        loadData();
         // Wipe stale live-interview cache so the UI never shows outdated sessions
         setActiveInterviews([]);
       } catch {
@@ -223,105 +217,52 @@ function AdminDashboard() {
     verifyAndLoad();
   }, [router]);
 
-  // Poll for live updates
+  // Tab data loads only after the session is verified. Analytics, Evaluations, Course Completion and
+  // Module Completion load their own data; Candidates/Trash, Live and Anti-Cheat have effects below.
+  const authed = adminData !== null;
+
+  // On narrow screens the tab bar scrolls sideways; bring the active tab into view (horizontally only)
+  const tabsRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (activeTab === "live") {
-      const interval = setInterval(loadActiveInterviews, 5000);
-      return () => clearInterval(interval);
-    }
-    if (activeTab === "anti-cheat") {
-      const interval = setInterval(() => loadViolationsRef.current(), 5000);
-      return () => clearInterval(interval);
-    }
-  }, [activeTab]);
+    const strip = tabsRef.current;
+    const active = strip?.querySelector<HTMLElement>(`.${styles.activeTab}`);
+    if (!strip || !active) return;
+    const s = strip.getBoundingClientRect();
+    const a = active.getBoundingClientRect();
+    if (a.left < s.left || a.right > s.right) strip.scrollLeft += a.left - s.left - (s.width - a.width) / 2;
+  }, [activeTab, authed]);
 
-  // Reload state funnel when filter changes
   useEffect(() => {
-    loadStateFunnel();
-  }, [stateFunnelFilter]);
+    if (!authed || activeTab !== "settings") return;
+    const controller = new AbortController();
+    loadGuidelines(controller.signal);
+    loadCriteria(controller.signal);
+    loadInterviewConfig(controller.signal);
+    loadAntiCheatConfig(controller.signal);
+    return () => controller.abort();
+  }, [authed, activeTab]);
 
-  // Reload data when tab changes
+  // Live interviews: load on entry, then refresh every 5s without overlapping, paused while the page is hidden
+  const activeInterviewsJsonRef = useRef("[]");
   useEffect(() => {
-    loadData(activeTab);
-  }, [activeTab]);
+    if (!authed || activeTab !== "live") return;
+    return startPolling({ run: loadActiveInterviews, intervalMs: POLL_INTERVAL_MS, immediate: true });
+  }, [authed, activeTab]);
 
-
-
-  const loadData = async (tab?: Tab) => {
-    const target = tab ?? activeTab;
-    setLoading(true);
+  const loadActiveInterviews = async (signal: AbortSignal) => {
     try {
-      const calls: Promise<void>[] = [];
-      if (target === "live") {
-        calls.push(
-          loadStats().catch(err => console.error("loadStats error:", err)),
-          loadActiveInterviews().catch(err => console.error("loadActiveInterviews error:", err)),
-        );
-      } else if (target === "candidates" || target === "trash") {
-        calls.push(
-          loadStats().catch(err => console.error("loadStats error:", err)),
-          loadCandidates(false, target).catch(err => console.error("loadCandidates error:", err)),
-        );
-      } else if (target === "analytics") {
-        calls.push(
-          loadStats().catch(err => console.error("loadStats error:", err)),
-          loadGeoStats().catch(err => console.error("loadGeoStats error:", err)),
-          loadStateFunnel().catch(err => console.error("loadStateFunnel error:", err)),
-        );
-      } else if (target === "evaluations") {
-        calls.push(
-          loadStats().catch(err => console.error("loadStats error:", err)),
-        );
-      } else if (target === "course-completion") {
-        calls.push(
-          loadStats().catch(err => console.error("loadStats error:", err)),
-          loadCandidates(false, target).catch(err => console.error("loadCandidates error:", err)),
-        );
-      } else if (target === "module-completion") {
-        calls.push(
-          loadStats().catch(err => console.error("loadStats error:", err)),
-          loadCandidates().catch(err => console.error("loadCandidates error:", err)),
-        );
-      } else if (target === "anti-cheat") {
-        calls.push(
-          loadStats().catch(err => console.error("loadStats error:", err)),
-          loadViolations().catch(err => console.error("loadViolations error:", err)),
-        );
-      } else if (target === "settings") {
-        calls.push(
-          loadGuidelines().catch(err => console.error("loadGuidelines error:", err)),
-          loadCriteria().catch(err => console.error("loadCriteria error:", err)),
-          loadInterviewConfig().catch(err => console.error("loadInterviewConfig error:", err)),
-          loadAntiCheatConfig().catch(err => console.error("loadAntiCheatConfig error:", err)),
-        );
-      }
-      await Promise.all(calls);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadStats = async () => {
-    try {
-      const res = await withAuth("/api/admin/stats/overview");
+      const res = await withAuth("/api/admin/interviews/active", { signal });
       if (res.ok) {
-        const data = await res.json();
-        setStats(data);
+        const interviews = (await res.json()).interviews || [];
+        // Unchanged polls skip the state update, so the dashboard does not re-render every 5s
+        const json = JSON.stringify(interviews);
+        if (json !== activeInterviewsJsonRef.current) {
+          activeInterviewsJsonRef.current = json;
+          setActiveInterviews(interviews);
+        }
       }
     } catch (err) {
-      console.error("Failed to load stats:", err);
-    }
-  };
-
-  const loadActiveInterviews = async () => {
-    try {
-      const res = await withAuth("/api/admin/interviews/active");
-      if (res.ok) {
-        const data = await res.json();
-        setActiveInterviews(data.interviews || []);
-      }
-    } catch (err) {
-      console.error("Failed to load active interviews:", err);
+      if (!isAbortError(err)) console.error("Failed to load active interviews:", err);
     }
   };
 
@@ -347,7 +288,7 @@ function AdminDashboard() {
         throw new Error("Failed to delete candidate");
       }
       // Reload candidates
-      loadCandidates();
+      reloadCandidates();
     } catch (err) {
       console.error(err);
       alert("Error deleting candidate");
@@ -365,7 +306,7 @@ function AdminDashboard() {
       if (!res.ok) {
         throw new Error("Failed to update candidate status");
       }
-      loadCandidates();
+      reloadCandidates();
     } catch (err) {
       console.error(err);
       alert("Error updating candidate status");
@@ -382,7 +323,7 @@ function AdminDashboard() {
       if (!res.ok) {
         throw new Error("Failed to restore candidate");
       }
-      loadCandidates();
+      reloadCandidates();
     } catch (err) {
       console.error(err);
       alert("Error restoring candidate");
@@ -391,43 +332,75 @@ function AdminDashboard() {
     }
   };
 
-  const loadCandidates = async (resetPage = false, targetTab = activeTab) => {
-    try {
-      const currentPage = resetPage ? 0 : candidatesPage;
-      if (resetPage) setCandidatesPage(0);
+  const [candidatesLoading, setCandidatesLoading] = useState(true);
+  // Bumped to refetch the current page (after an action, or Search / Enter)
+  const [candidatesReloadKey, setCandidatesReloadKey] = useState(0);
+  const reloadCandidates = () => setCandidatesReloadKey((n) => n + 1);
 
-      const params = new URLSearchParams();
-      if (searchQuery) params.append("search", searchQuery);
-      if (phaseFilter) params.append("phase", phaseFilter);
-      if (stateFilter) params.append("state", stateFilter);
-      if (districtFilter) params.append("district", districtFilter);
-      if (interviewStatusFilter) params.append("interviewStatus", interviewStatusFilter);
-      if (targetTab === "trash") params.append("status", "trash");
-      params.append("limit", candidatesLimit.toString());
-      params.append("offset", (currentPage * candidatesLimit).toString());
+  // Apply typed search text after a pause, so each keystroke does not send a request
+  useEffect(() => {
+    if (searchQuery === debouncedSearch) return;
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
-      const res = await withAuth(`/api/admin/candidates?${params}`);
-      if (res.ok) {
-        const data = await res.json();
-        setCandidates(data.candidates || []);
-        setCandidatesTotal(data.total || 0);
-      }
-    } catch (err) {
-      console.error("Failed to load candidates:", err);
-    }
+  const applySearchNow = (query: string) => {
+    setSearchQuery(query);
+    setDebouncedSearch(query);
   };
 
-  // Reset page when filters change. Compared against the last seen filters (not "first run") so the
-  // initial mount — and StrictMode's re-run of it — keep a page number restored from the URL.
-  const filterKey = JSON.stringify([phaseFilter, stateFilter, districtFilter, interviewStatusFilter, searchQuery, candidatesLimit]);
+  // Changed filters go back to the first page. Compared against the last seen filters (not "first run") so
+  // the initial mount — and StrictMode's re-run of it — keep a page number restored from the URL.
+  const filterKey = JSON.stringify([phaseFilter, stateFilter, districtFilter, interviewStatusFilter, debouncedSearch, candidatesLimit]);
   const lastFilterKeyRef = useRef(filterKey);
+  // The tab the candidates table last loaded for; entering a tab shows the skeleton, refetches keep the rows
+  const candidatesTabRef = useRef<Tab | null>(null);
+
   useEffect(() => {
-    if (lastFilterKeyRef.current === filterKey) return;
-    lastFilterKeyRef.current = filterKey;
-    if (activeTab === "candidates" || activeTab === "trash") {
-      loadCandidates(true);
+    if (!authed || (activeTab !== "candidates" && activeTab !== "trash")) {
+      candidatesTabRef.current = null;
+      return;
     }
-  }, [phaseFilter, stateFilter, districtFilter, interviewStatusFilter, searchQuery, candidatesLimit]);
+    if (lastFilterKeyRef.current !== filterKey) {
+      lastFilterKeyRef.current = filterKey;
+      if (candidatesPage !== 0) {
+        setCandidatesPage(0); // re-runs this effect for the first page
+        return;
+      }
+    }
+    if (candidatesTabRef.current !== activeTab) {
+      candidatesTabRef.current = activeTab;
+      setCandidatesLoading(true);
+    }
+
+    const params = new URLSearchParams();
+    if (debouncedSearch) params.append("search", debouncedSearch);
+    if (phaseFilter) params.append("phase", phaseFilter);
+    if (stateFilter) params.append("state", stateFilter);
+    if (districtFilter) params.append("district", districtFilter);
+    if (interviewStatusFilter) params.append("interviewStatus", interviewStatusFilter);
+    if (activeTab === "trash") params.append("status", "trash");
+    params.append("limit", candidatesLimit.toString());
+    params.append("offset", (candidatesPage * candidatesLimit).toString());
+
+    // A newer tab, filter or page aborts this request, so a slow older response never replaces newer rows
+    const controller = new AbortController();
+    (async () => {
+      try {
+        const res = await withAuth(`/api/admin/candidates?${params}`, { signal: controller.signal });
+        if (res.ok) {
+          const data = await res.json();
+          setCandidates(data.candidates || []);
+          setCandidatesTotal(data.total || 0);
+        }
+      } catch (err) {
+        if (!isAbortError(err)) console.error("Failed to load candidates:", err);
+      } finally {
+        if (!controller.signal.aborted) setCandidatesLoading(false);
+      }
+    })();
+    return () => controller.abort();
+  }, [authed, activeTab, filterKey, candidatesPage, candidatesReloadKey]);
 
   const buildDashboardQuery = () => {
     const params = new URLSearchParams();
@@ -477,12 +450,6 @@ function AdminDashboard() {
   };
 
   useEffect(() => {
-    if (activeTab === "candidates" || activeTab === "trash") {
-      loadCandidates(false);
-    }
-  }, [candidatesPage]);
-
-  useEffect(() => {
     const handleClick = () => setContextMenu(null);
     document.addEventListener("click", handleClick);
     return () => document.removeEventListener("click", handleClick);
@@ -492,65 +459,59 @@ function AdminDashboard() {
   const [violationsPage, setViolationsPage] = useState(0);
   const [violationsLimit, setViolationsLimit] = useState(10);
   const [violationsSearch, setViolationsSearch] = useState("");
-  const violationsRequestRef = useRef(0);
+  const [debouncedViolationsSearch, setDebouncedViolationsSearch] = useState("");
 
-  const loadViolations = async () => {
-    const requestId = ++violationsRequestRef.current;
-    setViolationsLoading(true);
+  // A new search applies after a typing pause and starts from the first page
+  useEffect(() => {
+    if (violationsSearch === debouncedViolationsSearch) return;
+    const timer = setTimeout(() => {
+      setDebouncedViolationsSearch(violationsSearch);
+      setViolationsPage(0);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [violationsSearch]);
+
+  // The skeleton shows only when the page, page size or search changes; background refreshes update rows in place
+  const loadViolations = async (signal: AbortSignal, showSkeleton: boolean) => {
+    if (showSkeleton) setViolationsLoading(true);
     try {
       const offset = violationsPage * violationsLimit;
-      const search = violationsSearch.trim();
+      const search = debouncedViolationsSearch.trim();
       const searchParam = search ? `&search=${encodeURIComponent(search)}` : "";
-      const res = await withAuth(`/api/admin/anti-cheat/violations?limit=${violationsLimit}&offset=${offset}${searchParam}`);
-      // Ignore responses for an older page/search that finished after a newer request.
-      if (res.ok && requestId === violationsRequestRef.current) {
+      const res = await withAuth(`/api/admin/anti-cheat/violations?limit=${violationsLimit}&offset=${offset}${searchParam}`, { signal });
+      if (res.ok) {
         const data = await res.json();
         setViolations(data.violations || []);
         setViolationsTotal(data.total || 0);
       }
     } catch (err) {
-      console.error("Failed to load violations:", err);
+      if (!isAbortError(err)) console.error("Failed to load violations:", err);
     } finally {
-      if (requestId === violationsRequestRef.current) setViolationsLoading(false);
+      if (showSkeleton && !signal.aborted) setViolationsLoading(false);
     }
   };
-  // The polling interval calls this so it uses the current page, limit and search.
-  const loadViolationsRef = useRef(loadViolations);
-  loadViolationsRef.current = loadViolations;
 
+  // Background refreshes pause while the search box is focused; focus/blur pause and resume the running poller
+  // rather than restarting it, so they never add a request or a second interval
+  const violationsSearchInputRef = useRef<HTMLInputElement>(null);
+  const violationsPollerRef = useRef<Poller | null>(null);
+
+  // Restarted for each page, page size or search, which aborts the request for the previous one
   useEffect(() => {
-    if (activeTab === "anti-cheat") {
-      loadViolations();
-    }
-  }, [violationsPage, violationsLimit, violationsSearch]);
-
-  const loadStateFunnel = async () => {
-    try {
-      const path = stateFunnelFilter
-        ? `/api/admin/stats/states?state=${encodeURIComponent(stateFunnelFilter)}`
-        : "/api/admin/stats/states";
-      const res = await withAuth(path);
-      if (res.ok) {
-        const data = await res.json();
-        setStateFunnel(stateFunnelFilter ? { states: [data], totalStates: 1 } : data);
-      }
-    } catch (err) {
-      console.error("Failed to load state funnel:", err);
-    }
-  };
-
-  const loadGeoStats = async () => {
-    try {
-      const res = await withAuth("/api/admin/geo/stats");
-      if (res.ok) {
-        const data = await res.json();
-        setGeoStats(data);
-        setUniqueStates(data.uniqueStates || []);
-      }
-    } catch (err) {
-      console.error("Failed to load geographic stats:", err);
-    }
-  };
+    if (!authed || activeTab !== "anti-cheat") return;
+    const poller = createPoller({
+      run: loadViolations,
+      intervalMs: ANTI_CHEAT_POLL_INTERVAL_MS,
+      immediate: true,
+      // A search applied while typing restarts polling; it stays paused until the box loses focus
+      paused: document.activeElement === violationsSearchInputRef.current,
+    });
+    violationsPollerRef.current = poller;
+    return () => {
+      poller.stop();
+      if (violationsPollerRef.current === poller) violationsPollerRef.current = null;
+    };
+  }, [authed, activeTab, violationsPage, violationsLimit, debouncedViolationsSearch]);
 
   const loadDistrictsForState = async (state: string) => {
     if (!state) {
@@ -577,33 +538,33 @@ function AdminDashboard() {
     }
   };
 
-  const loadGuidelines = async () => {
+  const loadGuidelines = async (signal?: AbortSignal) => {
     try {
-      const res = await withAuth("/api/admin/settings/guidelines");
+      const res = await withAuth("/api/admin/settings/guidelines", { signal });
       if (res.ok) {
         const data = await res.json();
         setGuidelines(data.guidelines || []);
       }
     } catch (err) {
-      console.error("Failed to load guidelines:", err);
+      if (!isAbortError(err)) console.error("Failed to load guidelines:", err);
     }
   };
 
-  const loadCriteria = async () => {
+  const loadCriteria = async (signal?: AbortSignal) => {
     try {
-      const res = await withAuth("/api/admin/settings/evaluation");
+      const res = await withAuth("/api/admin/settings/evaluation", { signal });
       if (res.ok) {
         const data = await res.json();
         setCriteria(data.criteria || []);
       }
     } catch (err) {
-      console.error("Failed to load criteria:", err);
+      if (!isAbortError(err)) console.error("Failed to load criteria:", err);
     }
   };
 
-  const loadInterviewConfig = async () => {
+  const loadInterviewConfig = async (signal?: AbortSignal) => {
     try {
-      const res = await withAuth("/api/admin/settings/interview");
+      const res = await withAuth("/api/admin/settings/interview", { signal });
       if (res.ok) {
         const data = await res.json();
         const baseLevel = {
@@ -626,13 +587,13 @@ function AdminDashboard() {
         setLevelInputs(levels);
       }
     } catch (err) {
-      console.error("Failed to load interview config:", err);
+      if (!isAbortError(err)) console.error("Failed to load interview config:", err);
     }
   };
 
-  const loadAntiCheatConfig = async () => {
+  const loadAntiCheatConfig = async (signal?: AbortSignal) => {
     try {
-      const res = await withAuth("/api/admin/settings/anti-cheat");
+      const res = await withAuth("/api/admin/settings/anti-cheat", { signal });
       if (res.ok) {
         const data = await res.json();
         setAntiCheatConfig(data);
@@ -640,7 +601,7 @@ function AdminDashboard() {
         setPlatformIdleInput(Math.round((data.platform_idle_ms ?? 900000) / 60000));
       }
     } catch (err) {
-      console.error("Failed to load anti-cheat config:", err);
+      if (!isAbortError(err)) console.error("Failed to load anti-cheat config:", err);
     }
   };
 
@@ -787,7 +748,7 @@ function AdminDashboard() {
 
 
       {/* Tabs */}
-      <div className={styles.tabs}>
+      <div className={styles.tabs} ref={tabsRef}>
         <button
           className={`${styles.tab} ${activeTab === "live" ? styles.activeTab : ""}`}
           onClick={() => setActiveTab("live")}
@@ -860,7 +821,12 @@ function AdminDashboard() {
                 placeholder="Search by name or email..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && loadCandidates()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    applySearchNow(searchQuery);
+                    reloadCandidates();
+                  }
+                }}
                 className={styles.searchInput}
               />
               <select
@@ -910,12 +876,21 @@ function AdminDashboard() {
                 <option value="fail">Fail</option>
                 <option value="requested_revaluation">Requested Revaluation</option>
               </select>
-              <button onClick={() => loadCandidates(true)} className={styles.searchBtn}>Search</button>
+              <button
+                onClick={() => {
+                  applySearchNow(searchQuery);
+                  setCandidatesPage(0);
+                  reloadCandidates();
+                }}
+                className={styles.searchBtn}
+              >
+                Search
+              </button>
 
             </div>
 
             {/* Candidates Table */}
-            {loading ? (
+            {candidatesLoading ? (
                 <div className={styles.candidatesTable}>
                   <table>
                     <thead>
@@ -1028,7 +1003,7 @@ function AdminDashboard() {
                   limit={candidatesLimit}
                   onPageChange={setCandidatesPage}
                   onLimitChange={setCandidatesLimit}
-                  loading={loading}
+                  loading={candidatesLoading}
                 />
               </>
             )}
@@ -1040,6 +1015,7 @@ function AdminDashboard() {
           <AnalyticsTab
             adminApiBase={ADMIN_API_BASE}
             getAdminToken={getAdminToken}
+            onGeoStatsLoaded={(data) => setUniqueStates(data.uniqueStates || [])}
           />
         )}
 
@@ -1049,7 +1025,7 @@ function AdminDashboard() {
             adminApiBase={ADMIN_API_BASE}
             getAdminToken={getAdminToken}
             onCandidateClick={(query) => {
-              setSearchQuery(query);
+              applySearchNow(query);
               setActiveTab("candidates");
             }}
           />
@@ -1060,7 +1036,6 @@ function AdminDashboard() {
           <CourseCompletionTab
             adminToken={getAdminToken()}
             adminApiBase={ADMIN_API_BASE}
-            onRefreshCandidates={loadCandidates}
           />
         )}
 
@@ -1069,7 +1044,6 @@ function AdminDashboard() {
           <ModuleCompletionTab
             adminToken={getAdminToken()}
             adminApiBase={ADMIN_API_BASE}
-            onRefreshCandidates={loadCandidates}
           />
         )}
 
@@ -1081,8 +1055,11 @@ function AdminDashboard() {
               <input
                 type="text"
                 placeholder="Search by name or email..."
+                ref={violationsSearchInputRef}
                 value={violationsSearch}
-                onChange={e => { setViolationsSearch(e.target.value); setViolationsPage(0); }}
+                onChange={e => setViolationsSearch(e.target.value)}
+                onFocus={() => violationsPollerRef.current?.pause()}
+                onBlur={() => violationsPollerRef.current?.resume()}
                 style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '14px', width: '250px', maxWidth: '100%' }}
               />
             </div>
@@ -1345,7 +1322,8 @@ function AdminDashboard() {
                       Level: {level === "YP" ? "Young Agriculture Professional (Level 0)" : level === "Junior" ? "Junior Agriculture Professional (Level 1)" : level === "Agri" ? "Agriculture Professional (Level 2)" : "Senior Agriculture Professional (Level 3)"}
                     </h3>
                     
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "1rem" }}>
+                    {/* Four columns on desktop; fewer as the screen narrows */}
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "1rem" }}>
                       {/* Max Questions */}
                       <div>
                         <label className={styles.interviewConfigLabel}>Max Questions</label>
@@ -1519,8 +1497,9 @@ function AdminDashboard() {
         <div
           style={{
             position: 'fixed',
-            top: contextMenu.y,
-            left: contextMenu.x,
+            // Kept on screen when opened near the right or bottom edge (e.g. on a phone)
+            top: Math.max(0, Math.min(contextMenu.y, window.innerHeight - 60)),
+            left: Math.max(0, Math.min(contextMenu.x, window.innerWidth - 160)),
             background: 'white',
             border: '1px solid #ccc',
             boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
@@ -1581,6 +1560,7 @@ function AdminDashboard() {
             display: "flex",
             justifyContent: "center",
             alignItems: "center",
+            padding: "16px",
             zIndex: 10000
           }}
           onClick={() => setDeleteConfirmModal(null)}

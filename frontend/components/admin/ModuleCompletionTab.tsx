@@ -18,6 +18,7 @@ interface Props {
 }
 
 import PageSelector from "./PageSelector";
+import { serialNumber } from "@/lib/serial-number";
 
 const SEARCH_DEBOUNCE_MS = 300;
 
@@ -158,6 +159,7 @@ export default function ModuleCompletionTab({ adminToken, adminApiBase, onRefres
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
             <thead>
               <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+                <th style={{ padding: '12px 16px', textAlign: 'center', color: '#4b5563', fontWeight: 600, fontSize: 12, width: '1%', whiteSpace: 'nowrap' }}>S. No.</th>
                 <th style={{ padding: '12px 16px', textAlign: 'left', color: '#4b5563', fontWeight: 600, fontSize: 12 }}>Name</th>
                 <th style={{ padding: '12px 16px', textAlign: 'left', color: '#4b5563', fontWeight: 600, fontSize: 12 }}>Email</th>
                 <th style={{ padding: '12px 16px', textAlign: 'left', color: '#4b5563', fontWeight: 600, fontSize: 12 }}>Status</th>
@@ -165,11 +167,12 @@ export default function ModuleCompletionTab({ adminToken, adminApiBase, onRefres
               </tr>
             </thead>
             <tbody>
-              {candidates.map((c) => {
+              {candidates.map((c, i) => {
                 const status = c.moduleStatus || (c.moduleCompleted ? 'completed' : 'not_started');
                 const colors = getStatusColor(status);
                 return (
                   <tr key={c.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                    <td style={{ padding: '16px', textAlign: 'center', color: '#4b5563', fontVariantNumeric: 'tabular-nums' }}>{serialNumber(page, limit, i)}</td>
                     <td style={{ padding: '16px', fontWeight: 500, color: '#111827' }}>{c.fullName || '-'}</td>
                     <td style={{ padding: '16px', color: '#4b5563' }}>{c.email || '-'}</td>
                     <td style={{ padding: '16px' }}>
@@ -224,7 +227,7 @@ export default function ModuleCompletionTab({ adminToken, adminApiBase, onRefres
           page={page}
           limit={limit}
           onPageChange={setPage}
-          onLimitChange={setLimit}
+          onLimitChange={(l) => { setLimit(l); setPage(0); }}
           loading={loading}
         />
       </>

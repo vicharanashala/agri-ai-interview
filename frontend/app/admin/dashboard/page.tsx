@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, Suspense } from "react";
 import { createPoller, isAbortError, startPolling, type Poller } from "../../../lib/polling";
 import styles from "./dashboard.module.css";
+import { serialNumber } from "@/lib/serial-number";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import LiveTab from "../../../components/admin/LiveTab";
@@ -895,6 +896,7 @@ function AdminDashboard() {
                   <table>
                     <thead>
                       <tr>
+                        <th className={styles.serialCol}>S. No.</th>
                         <th>Name</th>
                         <th>Email</th>
                         <th>Phone</th>
@@ -908,6 +910,7 @@ function AdminDashboard() {
                     <tbody>
                       {Array.from({ length: candidatesLimit }).map((_, i) => (
                         <tr key={i}>
+                          <td className={styles.serialCol}><div className={styles.skeletonBox} style={{ width: 20, height: 16 }} /></td>
                           <td><div className={styles.skeletonBox} style={{ width: 120, height: 16 }} /></td>
                           <td><div className={styles.skeletonBox} style={{ width: 150, height: 16 }} /></td>
                           <td><div className={styles.skeletonBox} style={{ width: 100, height: 16 }} /></td>
@@ -931,6 +934,7 @@ function AdminDashboard() {
                   <table>
                     <thead>
                       <tr>
+                        <th className={styles.serialCol}>S. No.</th>
                         <th>Name</th>
                         <th>Email</th>
                         <th>Phone</th>
@@ -942,7 +946,7 @@ function AdminDashboard() {
                       </tr>
                     </thead>
                     <tbody>
-                      {candidates.map((candidate) => (
+                      {candidates.map((candidate, i) => (
                         <tr
                           key={candidate.id}
                           className={styles.clickableRow}
@@ -957,6 +961,7 @@ function AdminDashboard() {
                             setContextMenu({ x: e.clientX, y: e.clientY, candidateId: candidate.id });
                           }}
                         >
+                          <td className={styles.serialCol}>{serialNumber(candidatesPage, candidatesLimit, i)}</td>
                           <td>{candidate.fullName || "-"}</td>
                           <td>{candidate.email || "-"}</td>
                           <td>{candidate.phone || "-"}</td>
@@ -1002,7 +1007,7 @@ function AdminDashboard() {
                   page={candidatesPage}
                   limit={candidatesLimit}
                   onPageChange={setCandidatesPage}
-                  onLimitChange={setCandidatesLimit}
+                  onLimitChange={(l) => { setCandidatesLimit(l); setCandidatesPage(0); }}
                   loading={candidatesLoading}
                 />
               </>
@@ -1068,6 +1073,7 @@ function AdminDashboard() {
                 <table>
                   <thead>
                     <tr>
+                      <th className={styles.serialCol}>S. No.</th>
                       <th>Candidate</th>
                       <th>Email</th>
                       <th>Violation</th>
@@ -1079,6 +1085,7 @@ function AdminDashboard() {
                   <tbody>
                     {Array.from({ length: violationsLimit }).map((_, i) => (
                       <tr key={i}>
+                        <td className={styles.serialCol}><div className={styles.skeletonBox} style={{ width: 20, height: 16 }} /></td>
                         <td><div className={styles.skeletonBox} style={{ width: 120, height: 16 }} /></td>
                         <td><div className={styles.skeletonBox} style={{ width: 150, height: 16 }} /></td>
                         <td><div className={styles.skeletonBox} style={{ width: 200, height: 16 }} /></td>
@@ -1100,6 +1107,7 @@ function AdminDashboard() {
                   <table>
                     <thead>
                       <tr>
+                        <th className={styles.serialCol}>S. No.</th>
                         <th>Candidate</th>
                         <th>Email</th>
                         <th>Violation</th>
@@ -1109,8 +1117,9 @@ function AdminDashboard() {
                       </tr>
                     </thead>
                     <tbody>
-                      {violations.map((v: any) => (
+                      {violations.map((v: any, i: number) => (
                         <tr key={v.id}>
+                          <td className={styles.serialCol}>{serialNumber(violationsPage, violationsLimit, i)}</td>
                           <td>{v.candidateName}</td>
                           <td>{v.email}</td>
                           <td>
@@ -1139,7 +1148,7 @@ function AdminDashboard() {
                   page={violationsPage}
                   limit={violationsLimit}
                   onPageChange={setViolationsPage}
-                  onLimitChange={setViolationsLimit}
+                  onLimitChange={(l) => { setViolationsLimit(l); setViolationsPage(0); }}
                   loading={violationsLoading}
                 />
               </>

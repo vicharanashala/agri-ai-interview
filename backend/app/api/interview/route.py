@@ -275,13 +275,18 @@ async def end_interview(interview_id: str, request: Optional[EndInterviewRequest
 
     # 3. Synchronously set phase to summary so dashboard reflects completion immediately
     try:
+        from bson import ObjectId
         db = get_sync_db()
         # Find the candidate ID from the session
         session = db.interview_sessions.find_one({"_id": interview_id})
         if session and session.get("candidate_id"):
+            cid = session["candidate_id"]
+            cand_variants = [cid]
+            if not isinstance(cid, ObjectId) and ObjectId.is_valid(str(cid)):
+                cand_variants.append(ObjectId(cid))
             db.candidates.update_one(
-                {"_id": session["candidate_id"]},
-                {"$set": {"current_phase": "summary"}}
+                {"_id": {"$in": cand_variants}, "current_phase": {"$in": ["onboarding", "interview"]}},
+                {"$set": {"current_phase": "summary", "updated_at": datetime.now(timezone.utc)}}
             )
     except Exception as e:
         logger.error(f"[end] failed to update candidate phase: {e}")
@@ -540,10 +545,14 @@ async def get_interview_evaluation(interview_id: str):
             db.interview_sessions.update_one({"_id": interview_id}, {"$set": update})
             
             if candidate_id:
+                from bson import ObjectId
                 new_phase = "foundation" if result == "PASS" else "summary"
+                cand_variants = [candidate_id]
+                if not isinstance(candidate_id, ObjectId) and ObjectId.is_valid(str(candidate_id)):
+                    cand_variants.append(ObjectId(candidate_id))
                 db.candidates.update_one(
-                    {"_id": candidate_id},
-                    {"$set": {"current_phase": new_phase}}
+                    {"_id": {"$in": cand_variants}},
+                    {"$set": {"current_phase": new_phase, "updated_at": datetime.now(timezone.utc)}}
                 )
 
             logger.info(f"[evaluation/{interview_id}] On-the-fly evaluation succeeded: score={score}, result={result}")

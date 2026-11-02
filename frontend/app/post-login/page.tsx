@@ -80,6 +80,15 @@ function PostLoginContent() {
         console.log('[post-login] candidate found:', candidate?.id, 'phase:', candidate?.currentPhase);
         const phase = candidate?.currentPhase;
 
+        // Restore foundation video completion flag from DB
+        const candAny = candidate as any;
+        if (candAny?.foundationVideoCompleted) {
+          localStorage.setItem('foundation_video_completed', 'true');
+        }
+        if (candAny?.foundationCourseCompleted) {
+          localStorage.setItem('foundationCourseCompleted', 'completed');
+        }
+
         // Step 2: Establish Redis session with backend.
         // First check if we already have a valid token before creating a new one.
         // This prevents overwriting valid sessions on page reloads.

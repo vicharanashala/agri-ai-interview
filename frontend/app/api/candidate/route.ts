@@ -67,8 +67,9 @@ export async function POST(request: NextRequest) {
     }
     if (token) {
       headers['Authorization'] = `Bearer ${token}`
-    } else if (email) {
-      // New user without candidate session yet — pass email for email-based auth fallback
+    }
+    if (email) {
+      // Always pass email from verified NextAuth session for fallback
       headers['X-User-Email'] = email
     }
 
@@ -93,19 +94,29 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions)
     const token = getCandidateToken(request)
-    if (!token) {
+    const email = session?.user?.email
+
+    if (!token && !email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const body = await request.json()
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Cookie': token ? `candidate_session=${token}` : '',
+    }
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+    if (email) {
+      headers['X-User-Email'] = email
+    }
+
     const res = await fetch(`${BACKEND_URL}/api/candidate`, {
       method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-        'Cookie': `candidate_session=${token}`,
-      },
+      headers,
       credentials: 'include',
       body: JSON.stringify(body),
     })

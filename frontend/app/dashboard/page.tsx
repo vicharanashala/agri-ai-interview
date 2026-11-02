@@ -317,6 +317,7 @@ export default function DashboardPage() {
         // 4. Reconstruct actual phase from DB phase + flags
         let actualPhase: Phase = dbPhaseNum;
 
+        if (hasPassed && actualPhase < 4) actualPhase = 4;
         if (fcDone  && actualPhase < 5) actualPhase = 5;
         if (modDone && actualPhase < 6) actualPhase = 6;
         if (docsSubmitted && actualPhase < 6) actualPhase = 6;
@@ -335,6 +336,10 @@ export default function DashboardPage() {
           localStorage.setItem('foundationCourseCompleted', 'completed');
         } else if (!lsFoundationCompleted) {
           localStorage.removeItem('foundationCourseCompleted');
+        }
+
+        if (candidate.foundationVideoCompleted) {
+          localStorage.setItem('foundation_video_completed', 'true');
         }
 
         if (candidate.moduleCompleted) {
@@ -588,7 +593,8 @@ export default function DashboardPage() {
     dbCelebratedPhasesRef.current = updatedCelebrated;
 
     // Persist to database so it survives across sessions, refreshes, and devices
-    syncPhaseToDb(currentPhase, { celebratedPhases: updatedCelebrated });
+    const phaseToSync = (hasPassed && currentPhase < 4) ? (4 as Phase) : currentPhase;
+    syncPhaseToDb(phaseToSync, { celebratedPhases: updatedCelebrated });
 
     if (milestoneId === 6) {
       // Hold center modal hidden until celebration banner finishes
@@ -643,7 +649,13 @@ export default function DashboardPage() {
           router.push('/summary');
           break;
         case 4:
-          router.push('/foundation-course');
+          if (foundationCompleted) {
+            router.push('/foundation-course');
+          } else if (typeof window !== 'undefined' && localStorage.getItem('foundation_video_completed') === 'true') {
+            router.push('/foundation-course');
+          } else {
+            router.push('/foundation-course/video');
+          }
           break;
         case 5:
           router.push('/module');

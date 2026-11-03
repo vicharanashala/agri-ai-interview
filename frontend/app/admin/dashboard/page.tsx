@@ -8,6 +8,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import LiveTab from "../../../components/admin/LiveTab";
 import EvaluationsTab from "../../../components/admin/EvaluationsTab";
 import OfferLetterTab from "../../../components/admin/OfferLetterTab";
+import DocumentsTab from "../../../components/admin/DocumentsTab";
 import CandidateDocumentActions from "../../../components/admin/CandidateDocumentActions";
 import CourseCompletionTab from "../../../components/admin/CourseCompletionTab";
 import ModuleCompletionTab from "../../../components/admin/ModuleCompletionTab";
@@ -71,12 +72,12 @@ interface Guidelines {
 }
 
 // Tabs
-type Tab = "live" | "candidates" | "analytics" | "evaluations" | "course-completion" | "module-completion" | "anti-cheat" | "settings" | "trash";
+type Tab = "live" | "candidates" | "analytics" | "evaluations" | "course-completion" | "module-completion" | "anti-cheat" | "documents" | "trash" | "settings";
 type SettingsTab = "guidelines" | "criteria" | "interview-config" | "anti-cheat" | "offer-letter";
 
 // Dashboard view state is mirrored in the URL (?tab=&q=&phase=&state=&district=&interview=&page=&limit=)
 // so returning from a candidate profile restores the same tab, filters and page.
-const TABS: Tab[] = ["live", "candidates", "analytics", "evaluations", "course-completion", "module-completion", "anti-cheat", "settings", "trash"];
+const TABS: Tab[] = ["live", "candidates", "analytics", "evaluations", "course-completion", "module-completion", "anti-cheat", "documents", "trash", "settings"];
 const PAGE_LIMITS = [10, 20, 50, 100];
 // Set when a profile is opened from the table, so the profile's back button can use browser history
 const PROFILE_OPENED_FROM_DASHBOARD_KEY = "admin_profile_opened_from_dashboard";
@@ -139,7 +140,6 @@ function AdminDashboard() {
   const [initialQuery] = useState(() => new URLSearchParams(searchParams.toString()));
   const [activeTab, setActiveTab] = useState<Tab>(() => {
     const tab = initialQuery.get("tab");
-    if (tab === "documents") return "candidates"; // former Documents tab: its actions are in All Candidates now
     return tab && TABS.includes(tab as Tab) ? (tab as Tab) : "live";
   });
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("guidelines");
@@ -287,6 +287,10 @@ function AdminDashboard() {
         calls.push(
           loadStats().catch(err => console.error("loadStats error:", err)),
           loadViolations().catch(err => console.error("loadViolations error:", err)),
+        );
+      } else if (target === "documents") {
+        calls.push(
+          loadStats().catch(err => console.error("loadStats error:", err)),
         );
       } else if (target === "settings") {
         calls.push(
@@ -831,6 +835,12 @@ function AdminDashboard() {
         >
           🛡️ Anti-Cheat
         </button>
+        <button
+          className={`${styles.tab} ${activeTab === "documents" ? styles.activeTab : ""}`}
+          onClick={() => setActiveTab("documents")}
+        >
+          📎 Documents
+        </button>
         <button className={`${styles.tab} ${activeTab === "trash" ? styles.activeTab : ""}`} onClick={() => setActiveTab("trash")}>🗑️ Trash</button>
         <button
           className={`${styles.tab} ${activeTab === "settings" ? styles.activeTab : ""}`}
@@ -1177,6 +1187,14 @@ function AdminDashboard() {
               </>
             )}
           </div>
+        )}
+
+        {/* Documents Tab */}
+        {activeTab === "documents" && (
+          <DocumentsTab
+            adminToken={getAdminToken()}
+            adminApiBase={ADMIN_API_BASE}
+          />
         )}
 
         {/* Settings Tab */}

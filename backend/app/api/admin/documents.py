@@ -42,14 +42,15 @@ class CandidateDocumentsResponse(BaseModel):
 def _get_candidate_with_docs(candidate_id: str) -> tuple:
     """Returns (candidate_doc, user_email). Raises HTTPException if not found."""
     db = get_sync_db()
-    cand = db.candidates.find_one({"_id": ObjectId(candidate_id)})
+    from app.api.admin.candidates import _get_id_variants
+    cand = db.candidates.find_one({"_id": {"$in": _get_id_variants(candidate_id)}})
     if not cand:
         raise HTTPException(status_code=404, detail="Candidate not found")
 
     user_email = None
     user_id = cand.get("user_id")
     if user_id:
-        user = db.users.find_one({"_id": user_id})
+        user = db.users.find_one({"_id": {"$in": _get_id_variants(user_id)}})
         if user:
             user_email = user.get("email")
 
@@ -97,7 +98,11 @@ async def download_documents_zip(
     cand, user_email = _get_candidate_with_docs(candidate_id)
 
     db = get_sync_db()
-    docs = list(db.candidate_documents.find({"candidate_id": candidate_id}))
+    from app.api.admin.candidates import _get_id_variants
+    id_variants = _get_id_variants(candidate_id)
+    if cand.get("_id"):
+        id_variants = list(set(id_variants + _get_id_variants(cand["_id"])))
+    docs = list(db.candidate_documents.find({"candidate_id": {"$in": id_variants}}))
 
     if not docs:
         raise HTTPException(status_code=404, detail="No documents found for this candidate")
@@ -106,6 +111,7 @@ async def download_documents_zip(
     storage = get_storage()
 
     buffer = io.BytesIO()
+    files_added = 0
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
         for doc in docs:
             storage_path = doc.get("storage_path", "")
@@ -115,7 +121,16 @@ async def download_documents_zip(
                 file_bytes = await storage.read(storage_path)
             except FileNotFoundError:
                 continue
-            zf.writestr(f"{doc.get('field_name', '')}/{doc.get('file_name', '')}", file_bytes)
+            field_name = doc.get("field_name") or "document"
+            file_name = doc.get("file_name") or f"{field_name}.pdf"
+            zf.writestr(f"{field_name}/{file_name}", file_bytes)
+            files_added += 1
+
+    if files_added == 0:
+        raise HTTPException(
+            status_code=404,
+            detail="Document records exist in the database, but the physical files were not found in storage. They may have been stored on an ephemeral container that was restarted, or deleted upon consent withdrawal."
+        )
 
     buffer.seek(0)
     zip_name = f"{cand.get('full_name') or candidate_id}_documents.zip"

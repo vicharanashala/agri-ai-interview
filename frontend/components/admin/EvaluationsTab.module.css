@@ -508,6 +508,11 @@
   }
 }
 
+/* The table scrolls sideways at these widths, so the badge can stay on one line */
+@media (max-width: 1024px) {
+  .levelBadge { white-space: nowrap; }
+}
+
 /* ─── Tablets and phones ───────────────────────────────────────────── */
 @media (max-width: 768px) {
   .container { padding: 4px 0; }

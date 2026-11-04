@@ -109,7 +109,7 @@
 }
 
 /* KPI header: State/District/date filters wrap under the title on narrower screens */
-.kpiHeaderRow {
+.chartHeaderSpace.kpiHeaderRow {
   flex-wrap: wrap;
   gap: 12px;
 }

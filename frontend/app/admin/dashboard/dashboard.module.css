@@ -1333,8 +1333,8 @@
 
 /* ─── Responsive: small laptops, tablets and phones ──────────────────────── */
 
-/* The tab bar stops fitting below ~1087px: it becomes a single sideways-scrolling strip */
-@media (max-width: 1086px) {
+/* The ten tabs stop fitting below ~1182px (a little margin for fonts): they become a single sideways-scrolling strip */
+@media (max-width: 1199px) {
   .tabs {
     overflow-x: auto;
     overscroll-behavior-x: contain;

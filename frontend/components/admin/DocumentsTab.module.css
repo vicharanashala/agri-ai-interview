@@ -360,3 +360,49 @@
   font-size: 13px;
   padding: 30px 20px;
 }
+
+/* ── Candidate Documents table ──────────────────────────────── */
+.searchField {
+  display: flex;
+  flex: 0 1 250px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.searchField input {
+  width: 100%;
+  min-width: 0;
+}
+
+.table th {
+  white-space: nowrap;
+}
+
+/* Keep the text columns readable when the table is squeezed; long emails wrap instead of widening it */
+.nameCell {
+  min-width: 140px;
+}
+
+.emailCell {
+  min-width: 180px;
+  overflow-wrap: anywhere;
+}
+
+.actionButtons {
+  display: flex;
+  gap: 8px;
+}
+
+/* Narrower screens: let the two buttons stack so the table stays narrow (same as All Candidates) */
+@media (max-width: 1200px) {
+  .actionButtons {
+    flex-wrap: wrap;
+  }
+}
+
+/* Phones: the search field takes its own full-width row under the title */
+@media (max-width: 480px) {
+  .searchField {
+    flex-basis: 100%;
+  }
+}

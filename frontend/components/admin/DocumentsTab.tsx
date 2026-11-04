@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import styles from './EvaluationsTab.module.css';
+import docStyles from './DocumentsTab.module.css';
 import PageSelector from "./PageSelector";
 import { isAbortError } from "../../lib/polling";
+import { serialNumber } from "@/lib/serial-number";
 
 const SEARCH_DEBOUNCE_MS = 300;
 
@@ -144,19 +146,18 @@ export default function DocumentsTab({ adminToken, adminApiBase: propApiBase }: 
       <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>
         Candidate Documents
       </h2>
-      <div style={{ display: 'flex', gap: '10px', maxWidth: '100%' }}>
+      <div className={docStyles.searchField}>
         <input
           type="text"
           placeholder="Search by name or email..."
+          aria-label="Search candidates by name or email"
           value={searchQuery}
           onChange={e => setSearchQuery(e.target.value)}
           style={{
             padding: '8px 12px',
             borderRadius: '6px',
             border: '1px solid #ddd',
-            fontSize: '14px',
-            width: '250px',
-            maxWidth: '100%'
+            fontSize: '14px'
           }}
         />
       </div>
@@ -164,9 +165,10 @@ export default function DocumentsTab({ adminToken, adminApiBase: propApiBase }: 
 
       {loading ? (
         <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+        <table className={docStyles.table} style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
             <thead>
               <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
+                <th style={{ padding: '8px 12px', textAlign: 'center', color: '#6b7280', fontWeight: 500, fontSize: 12, width: '1%', whiteSpace: 'nowrap' }}>S. No.</th>
                 <th style={{ padding: '8px 12px', textAlign: 'left', color: '#6b7280', fontWeight: 500, fontSize: 12 }}>Name</th>
                 <th style={{ padding: '8px 12px', textAlign: 'left', color: '#6b7280', fontWeight: 500, fontSize: 12 }}>Email</th>
                 <th style={{ padding: '8px 12px', textAlign: 'left', color: '#6b7280', fontWeight: 500, fontSize: 12 }}>Documents</th>
@@ -178,6 +180,7 @@ export default function DocumentsTab({ adminToken, adminApiBase: propApiBase }: 
             <tbody>
               {Array.from({ length: limit }).map((_, i) => (
                 <tr key={i} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                  <td style={{ padding: '12px' }}><div className={styles.skeletonBox} style={{ width: '20px', height: '16px', margin: '0 auto' }} /></td>
                   <td style={{ padding: '12px' }}><div className={styles.skeletonBox} style={{ width: '120px', height: '16px' }} /></td>
                   <td style={{ padding: '12px' }}><div className={styles.skeletonBox} style={{ width: '150px', height: '16px' }} /></td>
                   <td style={{ padding: '12px' }}><div className={styles.skeletonBox} style={{ width: '80px', height: '24px', borderRadius: '12px' }} /></td>
@@ -194,9 +197,10 @@ export default function DocumentsTab({ adminToken, adminApiBase: propApiBase }: 
       ) : (
         <>
         <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+        <table className={docStyles.table} style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
           <thead>
             <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
+              <th style={{ padding: '8px 12px', textAlign: 'center', color: '#6b7280', fontWeight: 500, fontSize: 12, width: '1%', whiteSpace: 'nowrap' }}>S. No.</th>
               <th style={{ padding: '8px 12px', textAlign: 'left', color: '#6b7280', fontWeight: 500, fontSize: 12 }}>Name</th>
               <th style={{ padding: '8px 12px', textAlign: 'left', color: '#6b7280', fontWeight: 500, fontSize: 12 }}>Email</th>
               <th style={{ padding: '8px 12px', textAlign: 'left', color: '#6b7280', fontWeight: 500, fontSize: 12 }}>Documents</th>
@@ -206,7 +210,7 @@ export default function DocumentsTab({ adminToken, adminApiBase: propApiBase }: 
             </tr>
           </thead>
           <tbody>
-            {candidates.map(c => {
+            {candidates.map((c, i) => {
               const isWithdrawn = Boolean(c.consentWithdrawn || c.consentStatus === 'withdrawn');
               const isGranted = Boolean((c.consentStatus === 'granted' || c.consentAccepted) && !isWithdrawn);
 
@@ -217,8 +221,9 @@ export default function DocumentsTab({ adminToken, adminApiBase: propApiBase }: 
                   onMouseEnter={e => (e.currentTarget.style.background = '#f9fafb')}
                   onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                 >
-                  <td style={{ padding: '10px 12px' }}>{c.fullName || '—'}</td>
-                  <td style={{ padding: '10px 12px', color: '#6b7280' }}>{c.email || '—'}</td>
+                  <td style={{ padding: '10px 12px', textAlign: 'center', color: '#6b7280', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{serialNumber(page, limit, i)}</td>
+                  <td className={docStyles.nameCell} style={{ padding: '10px 12px' }}>{c.fullName || '—'}</td>
+                  <td className={docStyles.emailCell} style={{ padding: '10px 12px', color: '#6b7280' }}>{c.email || '—'}</td>
                   <td style={{ padding: '10px 12px' }}>
                     <span style={{
                       color: c.documentsSubmitted ? '#16a34a' : '#d97706',
@@ -227,7 +232,7 @@ export default function DocumentsTab({ adminToken, adminApiBase: propApiBase }: 
                       {c.documentsSubmitted ? 'Yes' : 'No'}
                     </span>
                   </td>
-                  <td style={{ padding: '10px 12px' }}>
+                  <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
                     {isWithdrawn ? (
                       <span
                         title={c.consentWithdrawnAt ? `Withdrawn at: ${new Date(c.consentWithdrawnAt).toLocaleString()}` : 'Consent Withdrawn'}
@@ -290,7 +295,8 @@ export default function DocumentsTab({ adminToken, adminApiBase: propApiBase }: 
                           border: 'none',
                           cursor: downloading === c.id ? 'default' : 'pointer',
                           fontSize: 13,
-                          padding: 0,
+                          padding: '6px 0',
+                          whiteSpace: 'nowrap',
                           opacity: downloading === c.id ? 0.6 : 1,
                         }}
                       >
@@ -302,7 +308,7 @@ export default function DocumentsTab({ adminToken, adminApiBase: propApiBase }: 
                   </td>
                   <td style={{ padding: '10px 12px' }}>
                     {c.documentsSubmitted ? (
-                      <div style={{ display: 'flex', gap: '8px' }}>
+                      <div className={docStyles.actionButtons}>
                         <button
                           onClick={() => handleToggleSelected(c.id)}
                           style={{
@@ -315,6 +321,7 @@ export default function DocumentsTab({ adminToken, adminApiBase: propApiBase }: 
                             cursor: 'pointer',
                             fontSize: 13,
                             fontWeight: 500,
+                            whiteSpace: 'nowrap',
                           }}
                         >
                           {c.isSelected ? 'Unmark Selected' : 'Mark Selected'}
@@ -331,6 +338,7 @@ export default function DocumentsTab({ adminToken, adminApiBase: propApiBase }: 
                             cursor: 'pointer',
                             fontSize: 13,
                             fontWeight: 500,
+                            whiteSpace: 'nowrap',
                           }}
                         >
                           {c.isNotJoined ? 'Unmark Not Joined' : 'Mark Not Joined'}

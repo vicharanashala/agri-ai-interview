@@ -103,6 +103,8 @@ def setup_indexes():
     db.queue_entries.create_index("candidate_id")
     db.queue_entries.create_index("status")
 
+    db.candidate_feedback.create_index("candidate_id", unique=True)
+
     # TTL index on sessions (expires automatically)
     db.sessions.create_index("expires_at", expireAfterSeconds=0, background=True)
     db.sessions.create_index("token_hash", unique=True, background=True)

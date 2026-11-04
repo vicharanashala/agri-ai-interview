@@ -287,7 +287,7 @@ def _candidate_to_response(cand: dict, user_email: Optional[str]) -> CandidateRe
 # ── Candidates ─────────────────────────────────────────────────────────────────
 
 @router.get("/candidates")
-async def get_candidates(
+def get_candidates(
     phase: Optional[str] = Query(None),
     phases: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
@@ -341,24 +341,55 @@ async def get_candidates(
         else:
             query["$or"] = search_or
 
-    cursor = db.candidates.find(query).sort("created_at", -1)
-    all_candidates = list(cursor)
+    # _id breaks created_at ties so pages are stable across separate skip/limit queries
+    cursor = db.candidates.find(query, _CANDIDATE_LIST_PROJECTION).sort([("created_at", -1), ("_id", -1)])
+
+    if interviewStatus:
+        # The interview status is derived from sessions, so every match is built and filtered before paging
+        results = [
+            r for r in _build_candidate_rows(db, list(cursor))
+            if r.interviewStatus == interviewStatus
+        ]
+        return {"candidates": results[offset:offset + limit], "total": len(results)}
+
+    # Without an interview-status filter every match is returned, so Mongo can count and page directly
+    total = db.candidates.count_documents(query)
+    page = list(cursor.skip(offset).limit(limit))
+    return {"candidates": _build_candidate_rows(db, page), "total": total}
+
+
+# Candidate fields the list rows read; the rest of the document (education, resume data, …) is not loaded
+_CANDIDATE_LIST_PROJECTION = {
+    field: 1 for field in (
+        "full_name", "user_id", "phone", "state", "district", "current_role", "years_of_experience",
+        "farming_background", "primary_expertise", "current_phase", "created_at", "profile_completed_at",
+        "updated_at", "foundation_completed_at", "documents_submitted", "foundation_course_completed",
+        "foundation_course_status", "module_completed", "module_status", "consent_withdrawn",
+        "consent_accepted", "is_selected", "is_not_joined", "consent_timestamp", "consent_withdrawn_at",
+    )
+}
+
+
+def _build_candidate_rows(db, candidates: List[dict]) -> List[CandidateResponse]:
+    """List rows for these candidates, with emails, attempt counts and interview status looked up in bulk."""
+    if not candidates:
+        return []
 
     # Bulk fetch users
-    user_ids = [c.get("user_id") for c in all_candidates if c.get("user_id")]
-    users = list(db.users.find({"_id": {"$in": user_ids}}))
+    user_ids = [c.get("user_id") for c in candidates if c.get("user_id")]
+    users = list(db.users.find({"_id": {"$in": user_ids}}, {"email": 1}))
     user_map = {str(u["_id"]): u.get("email") for u in users}
 
     # Bulk fetch interview sessions
     cand_id_variants = []
-    for c in all_candidates:
+    for c in candidates:
         cand_id_variants.extend(_get_id_variants(c["_id"]))
-    
+
     sessions = list(db.interview_sessions.find({
         "candidate_id": {"$in": cand_id_variants},
         "status": "completed",
         "result": {"$in": ["PASS", "FAIL", "WITHDRAWN"]}
-    }))
+    }, {"candidate_id": 1, "result": 1, "started_at": 1}))
 
     # Group sessions by candidate_id
     sessions_by_cand = {}
@@ -370,11 +401,11 @@ async def get_candidates(
 
     # Bulk fetch re-eval requests
     session_ids = [str(sess["_id"]) for sess in sessions]
-    re_reqs = list(db.re_evaluation_requests.find({"interview_id": {"$in": session_ids}}))
+    re_reqs = list(db.re_evaluation_requests.find({"interview_id": {"$in": session_ids}}, {"interview_id": 1, "status": 1}))
     re_req_map = {req["interview_id"]: req for req in re_reqs}
 
     results = []
-    for cand in all_candidates:
+    for cand in candidates:
         cand_id_str = str(cand["_id"])
         user_email = None
         if cand.get("user_id"):
@@ -409,10 +440,6 @@ async def get_candidates(
                     c_interview_status = "requested_revaluation"
                 else:
                     c_interview_status = "fail"
-                    
-        # Apply interviewStatus filter early if possible
-        if interviewStatus and c_interview_status != interviewStatus:
-            continue
 
         foundation_completed = cand.get("foundation_course_completed", False)
         foundation_status = cand.get("foundation_course_status", "completed" if foundation_completed else "not_started")
@@ -483,14 +510,11 @@ async def get_candidates(
 
         results.append(response)
 
-    total = len(results)
-    paginated_results = results[offset : offset + limit]
-
-    return {"candidates": paginated_results, "total": total}
+    return results
 
 
 @router.get("/candidates/{candidate_id}")
-async def get_candidate(candidate_id: str, _admin=Depends(require_admin_auth)):
+def get_candidate(candidate_id: str, _admin=Depends(require_admin_auth)):
     db = get_sync_db()
     cand = db.candidates.find_one({"_id": {"$in": _get_id_variants(candidate_id)}})
     if not cand:
@@ -606,24 +630,26 @@ async def reset_candidate_cooldown(candidate_id: str, _admin=Depends(require_adm
 # ── Active Interviews ─────────────────────────────────────────────────────────
 
 @router.get("/interviews/active")
-async def get_active_interviews(_admin=Depends(require_admin_auth)):
+def get_active_interviews(_admin=Depends(require_admin_auth)):
     from bson import ObjectId
 
     db = get_sync_db()
+    # Polled every few seconds by the Live tab, so only the fields the response uses are loaded
     sessions = list(db.interview_sessions.find(
-        {"status": {"$in": ["active", "interviewing", "paused"]}}
+        {"status": {"$in": ["active", "interviewing", "paused"]}},
+        {"candidate_id": 1, "started_at": 1, "current_phase": 1, "interview_data": 1},
     ).sort("started_at", -1).limit(100))
 
     cand_ids = [s.get("candidate_id") for s in sessions if s.get("candidate_id")]
     cand_vars = []
     for cid in cand_ids: cand_vars.extend(_get_id_variants(cid))
-    candidates = list(db.candidates.find({"_id": {"$in": cand_vars}}))
+    candidates = list(db.candidates.find({"_id": {"$in": cand_vars}}, {"full_name": 1, "user_id": 1}))
     cand_map = {str(c["_id"]): c for c in candidates}
 
     user_ids = [c.get("user_id") for c in candidates if c.get("user_id")]
     user_vars = []
     for uid in user_ids: user_vars.extend(_get_id_variants(uid))
-    users = list(db.users.find({"_id": {"$in": user_vars}}))
+    users = list(db.users.find({"_id": {"$in": user_vars}}, {"name": 1}))
     user_map = {str(u["_id"]): u for u in users}
 
     interviews = []
@@ -793,6 +819,20 @@ async def reevaluate_interview(interview_id: str, _admin=Depends(require_admin_a
 # so their presence means the profile was submitted, whatever the candidate's current_phase is.
 _PROFILE_FIELDS = ("primary_expertise", "crops_grown", "current_role")
 
+# Candidate fields the funnel (_candidate_funnel, _funnel_kpi_candidates) and the effective-role helpers read;
+# loading only these keeps large fields (resume data, documents, …) out of every analytics request.
+# tests/test_admin_analytics.py checks this list against the fields those functions use.
+_FUNNEL_CANDIDATE_PROJECTION = {
+    field: 1 for field in (
+        *_PROFILE_FIELDS, "user_id", "state", "district", "created_at", "current_phase",
+        "foundation_course_status", "foundation_course_completed", "foundation_completed_at",
+        "module_status", "module_completed", "documents_submitted", "is_selected", "is_not_joined",
+        "eligible_role", "education", "years_of_experience",
+        "full_name", "name", "email", "phone", "profile_completed_at", "updated_at", "consent_timestamp",
+    )
+}
+_FUNNEL_USER_PROJECTION = {"email": 1, "created_at": 1, "name": 1}
+
 # A session is an interview attempt exactly when the attempt limit counts it (queue_manager.start_interview).
 _ATTEMPT_RESULTS = ["PASS", "FAIL", "WITHDRAWN"]
 
@@ -878,8 +918,8 @@ def _candidate_funnel(
     start_date/end_date filter on registration date (the person's earliest created_at), as the report does.
     """
     date_query = _created_at_range(start_date, end_date)
-    cands = list(db.candidates.find({"is_deleted": {"$ne": True}}).sort("created_at", -1))
-    users = list(db.users.find())
+    cands = list(db.candidates.find({"is_deleted": {"$ne": True}}, _FUNNEL_CANDIDATE_PROJECTION).sort("created_at", -1))
+    users = list(db.users.find({}, _FUNNEL_USER_PROJECTION))
 
     groups: Dict[str, List[dict]] = {}
     for c in cands:
@@ -1052,7 +1092,7 @@ def _funnel_kpi_candidates(
 # ── Dashboard Stats ────────────────────────────────────────────────────────────
 
 @router.get("/stats/overview")
-async def get_overview_stats(
+def get_overview_stats(
     state: str = Query(None),
     district: str = Query(None),
     start_date: str = Query(None),
@@ -1073,11 +1113,15 @@ async def get_overview_stats(
         cand_query["_id"] = {"$in": [c["_id"] for c in db.candidates.find(cand_query, role_proj) if _role_matches(role, c)]}
 
     total = db.candidates.count_documents(cand_query)
-    by_phase = {}
-    for phase in PHASES:
-        q = cand_query.copy()
-        q["current_phase"] = phase
-        by_phase[phase] = db.candidates.count_documents(q)
+    # One grouped count instead of a count per phase
+    phase_counts = {
+        row["_id"]: row["count"]
+        for row in db.candidates.aggregate([
+            {"$match": {**cand_query, "current_phase": {"$in": PHASES}}},
+            {"$group": {"_id": "$current_phase", "count": {"$sum": 1}}},
+        ])
+    }
+    by_phase = {phase: phase_counts.get(phase, 0) for phase in PHASES}
 
     if cand_query:
         cands = list(db.candidates.find(cand_query, {"_id": 1}))
@@ -1091,24 +1135,23 @@ async def get_overview_stats(
     else:
         sess_query_base = {}
 
-    active_query = sess_query_base.copy()
-    active_query["status"] = {"$in": ["active", "interviewing", "paused"]}
-    active_interviews = db.interview_sessions.count_documents(active_query)
+    # One grouped count over these candidates' sessions instead of four separate counts with the same id list
+    active_statuses = ["active", "interviewing", "paused"]
+    session_counts = list(db.interview_sessions.aggregate([
+        {"$match": {**sess_query_base, "status": {"$in": [*active_statuses, "completed"]}}},
+        {"$group": {"_id": {"status": "$status", "result": "$result"}, "count": {"$sum": 1}}},
+    ]))
 
-    completed_query = sess_query_base.copy()
-    completed_query["status"] = "completed"
-    completed_query["result"] = {"$in": ["PASS", "FAIL"]}
-    total_completed = db.interview_sessions.count_documents(completed_query)
+    def _count_sessions(statuses, results=None):
+        return sum(
+            row["count"] for row in session_counts
+            if row["_id"].get("status") in statuses and (results is None or row["_id"].get("result") in results)
+        )
 
-    pass_query = sess_query_base.copy()
-    pass_query["status"] = "completed"
-    pass_query["result"] = "PASS"
-    total_pass = db.interview_sessions.count_documents(pass_query)
-
-    fail_query = sess_query_base.copy()
-    fail_query["status"] = "completed"
-    fail_query["result"] = "FAIL"
-    total_fail = db.interview_sessions.count_documents(fail_query)
+    active_interviews = _count_sessions(active_statuses)
+    total_completed = _count_sessions(["completed"], ["PASS", "FAIL"])
+    total_pass = _count_sessions(["completed"], ["PASS"])
+    total_fail = _count_sessions(["completed"], ["FAIL"])
 
     selected_query = cand_query.copy()
     selected_query["is_selected"] = True
@@ -1128,7 +1171,7 @@ async def get_overview_stats(
 
 
 @router.get("/stats/states")
-async def get_state_stats(state: str = Query(None), _admin=Depends(require_admin_auth)):
+def get_state_stats(state: str = Query(None), _admin=Depends(require_admin_auth)):
     db = get_sync_db()
 
     # Aggregate candidates by state and phase
@@ -1149,18 +1192,27 @@ async def get_state_stats(state: str = Query(None), _admin=Depends(require_admin
         {"status": "completed", "result": {"$in": ["PASS", "FAIL"]}},
         {"candidate_id": 1, "result": 1},
     )
-    pf_map: dict = {}
+    # Candidates are looked up by ObjectId in one query (not one query per session); sessions whose
+    # candidate_id is not a valid ObjectId, or whose candidate is gone, are skipped as before
+    session_oids = []
     for sess in sessions:
         cid = sess.get("candidate_id")
         if not cid:
             continue
         try:
-            cand = db.candidates.find_one({"_id": ObjectId(cid)}, {"state": 1})
+            session_oids.append((sess, ObjectId(cid)))
         except Exception:
             continue
-        if not cand:
+    state_by_oid = {
+        c["_id"]: c.get("state")
+        for c in db.candidates.find({"_id": {"$in": list({oid for _, oid in session_oids})}}, {"state": 1})
+    }
+
+    pf_map: dict = {}
+    for sess, oid in session_oids:
+        if oid not in state_by_oid:
             continue
-        s = cand.get("state") or "Unknown"
+        s = state_by_oid[oid] or "Unknown"
         if s not in pf_map:
             pf_map[s] = {"PASS": 0, "FAIL": 0}
         pf_map[s][sess["result"]] += 1
@@ -1191,7 +1243,7 @@ async def get_state_stats(state: str = Query(None), _admin=Depends(require_admin
 # ── Anti-Cheat ─────────────────────────────────────────────────────────────────
 
 @router.get("/anti-cheat/violations")
-async def get_anti_cheat_violations(
+def get_anti_cheat_violations(
     limit: int = Query(10, ge=1, le=100000),
     offset: int = Query(0, ge=0),
     search: Optional[str] = Query(None),
@@ -1372,7 +1424,7 @@ def _eligibility_breakdown(candidate: dict) -> dict:
     return {"role": role, "internReason": None, "educationLimit": max_role, "experienceBand": raw_role}
 
 @router.get("/evaluations")
-async def get_all_evaluations(
+def get_all_evaluations(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0),
     result: str = Query(None),
@@ -1541,7 +1593,7 @@ async def get_all_evaluations(
 # ── Get all re-evaluation requests (admin view) ──────────────────────────────
 
 @router.get("/re-evaluations")
-async def get_all_re_evaluations(
+def get_all_re_evaluations(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0),
     search: str = Query(None),
@@ -1681,7 +1733,7 @@ async def get_all_re_evaluations(
 # ── Geo Stats ─────────────────────────────────────────────────────────────────
 
 @router.get("/geo/stats")
-async def get_geo_stats(_admin=Depends(require_admin_auth)):
+def get_geo_stats(_admin=Depends(require_admin_auth)):
     db = get_sync_db()
 
     # States summary — group by state and phase
@@ -1811,7 +1863,7 @@ async def get_geo_stats(_admin=Depends(require_admin_auth)):
 # ── Stats / Locations ─────────────────────────────────────────────────────────
 
 @router.get("/stats/locations")
-async def get_locations(state: str = Query(...), _admin=Depends(require_admin_auth)):
+def get_locations(state: str = Query(...), _admin=Depends(require_admin_auth)):
     db = get_sync_db()
     cursor = db.candidates.find(
         {"state": state},

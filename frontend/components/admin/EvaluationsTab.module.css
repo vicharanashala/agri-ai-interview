@@ -70,6 +70,8 @@
   overflow-x: auto;
   border: 1px solid #ddd;
   border-radius: 4px;
+  /* query container for .expandedInner's 100cqw */
+  container-type: inline-size;
 }
 
 .table {
@@ -280,6 +282,15 @@
 
 .expandedCell {
   padding: 0 !important;
+}
+
+/* The details stay as wide as the visible table area and pinned to its left edge, so on a
+   horizontally scrolled (narrow) table they are not pushed off-screen */
+.expandedInner {
+  position: sticky;
+  left: 0;
+  width: 100cqw;
+  box-sizing: border-box;
 }
 
 .expandedContent {
@@ -495,4 +506,33 @@
   100% {
     transform: translateX(100%);
   }
+}
+
+/* The table scrolls sideways at these widths, so the badge can stay on one line */
+@media (max-width: 1024px) {
+  .levelBadge { white-space: nowrap; }
+}
+
+/* ─── Tablets and phones ───────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .container { padding: 4px 0; }
+  .searchInput { flex: 1 1 220px; min-width: 0; }
+  .subTabs { margin-left: 0 !important; width: 100%; flex-wrap: wrap; }
+  .totalCount { margin-left: auto; }
+  .expandedContent { grid-template-columns: minmax(0, 1fr); padding: 16px; gap: 16px; }
+  .reEvalReason { padding: 12px 16px !important; }
+  .expandedActions { padding: 12px 16px 0 !important; flex-wrap: wrap; }
+}
+
+@media (max-width: 600px) {
+  .detailGrid { grid-template-columns: minmax(0, 1fr); }
+  .metricName { width: 100px; }
+}
+
+@media (max-width: 480px) {
+  .searchInput { flex-basis: 100%; }
+  .filterSelect,
+  .searchBtn { flex: 1 1 auto; }
+  .subTabBtn { flex: 1 1 auto; }
+  .totalCount { flex-basis: 100%; text-align: right; }
 }

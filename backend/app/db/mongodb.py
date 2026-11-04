@@ -108,3 +108,22 @@ def setup_indexes():
     db.sessions.create_index("token_hash", unique=True, background=True)
     db.sessions.create_index("candidate_id", background=True)
 
+    # Admin dashboard query patterns. Each is created separately so an existing index with the same keys
+    # but different options (e.g. created by hand) is logged instead of stopping startup.
+    admin_indexes = [
+        # Candidate lists sort newest first, with _id as the tie-breaker for stable pages
+        (db.candidates, [("created_at", DESCENDING), ("_id", DESCENDING)]),
+        # Anti-Cheat violations are listed newest first on every refresh
+        (db.anti_cheat_events, [("created_at", DESCENDING)]),
+        # Interview status / re-evaluation lookups by session id, and the newest-first re-evaluation list
+        (db.re_evaluation_requests, [("interview_id", ASCENDING)]),
+        (db.re_evaluation_requests, [("requested_at", DESCENDING)]),
+        # Every admin request looks up its session by token
+        (db.admin_sessions, [("token", ASCENDING)]),
+    ]
+    for collection, keys in admin_indexes:
+        try:
+            collection.create_index(keys, background=True)
+        except Exception as e:
+            logging.warning(f"Could not create index {keys} on {collection.name}: {e}")
+

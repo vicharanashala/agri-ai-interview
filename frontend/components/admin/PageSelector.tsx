@@ -40,7 +40,9 @@ export default function PageSelector({
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'flex-end',
-      gap: '16px',
+      // Wraps onto extra rows only when the controls do not fit (phones)
+      flexWrap: 'wrap',
+      gap: '8px 16px',
       padding: '12px 16px',
       borderTop: '1px solid #e5e7eb',
       backgroundColor: '#f9fafb',
@@ -75,7 +77,7 @@ export default function PageSelector({
         {total === 0 ? '0-0 of 0' : `${page * limit + 1}-${Math.min((page + 1) * limit, total)} of ${total}`}
       </div>
 
-      <div style={{ display: 'flex', gap: '4px' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: '4px' }}>
         <button
           onClick={() => onPageChange(page - 1)}
           disabled={page === 0 || loading}

@@ -109,7 +109,7 @@
 }
 
 /* KPI header: State/District/date filters wrap under the title on narrower screens */
-.kpiHeaderRow {
+.chartHeaderSpace.kpiHeaderRow {
   flex-wrap: wrap;
   gap: 12px;
 }
@@ -477,6 +477,7 @@
 .filters {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   font-size: 13px;
   color: #475569;
@@ -489,6 +490,7 @@
   font-size: 13px;
   color: #1e293b;
   outline: none;
+  max-width: 100%;
 }
 
 .tableWrapper {
@@ -540,12 +542,16 @@
   padding: 20px;
   border-radius: 8px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  /* lets the grid column shrink below the chart header's width on narrow screens */
+  min-width: 0;
 }
 
 .chartHeaderSpace {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
   margin-bottom: 15px;
 }
 
@@ -553,8 +559,10 @@
 
 .chartFilters {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   font-size: 12px;
+  max-width: 100%;
 }
 .chartSelect {
   padding: 4px;
@@ -563,6 +571,7 @@
   background: #f8fafc;
   color: #334155;
   outline: none;
+  max-width: 100%;
 }
 .filterInfo { color: #64748b; font-weight: 600; }
 
@@ -659,4 +668,86 @@
   100% {
     transform: translateX(100%);
   }
+}
+
+/* KPI details modal */
+.kpiModalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.kpiModal {
+  background: white;
+  border-radius: 8px;
+  padding: 24px;
+  width: 95%;
+  max-width: 1200px;
+  max-height: 85vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.kpiModalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.kpiModalFilters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.kpiModalFilters select {
+  padding: 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  max-width: 100%;
+}
+
+/* Wide attempt columns scroll inside the modal instead of being cut off */
+.kpiModalTableWrap {
+  overflow-x: auto;
+}
+
+/* ─── Tablets and phones ──────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .dashboardContainer { padding: 12px; min-height: 0; }
+  .kpiContainer,
+  .distributionContainer,
+  .chartCard,
+  .top10Container { padding: 14px; }
+  .chartsGrid { gap: 14px; }
+  .kpiModal { padding: 16px; width: 100%; max-height: 92vh; box-sizing: border-box; }
+  .kpiModalOverlay { padding: 12px; }
+  .kpiModalFilters { gap: 8px; }
+  .kpiModalFilters select { flex: 1 1 160px; }
+}
+
+@media (max-width: 480px) {
+  .dashboardContainer { padding: 0; background: transparent; }
+  .kpiContainer,
+  .distributionContainer,
+  .chartCard,
+  .top10Container { padding: 12px; box-shadow: none; border: 1px solid #e2e8f0; }
+  .kpiCard { min-height: 96px; }
+  .kpiValue { font-size: 22px; }
+  .kpiModalOverlay { padding: 8px; }
+  .kpiModal { padding: 12px; }
+  .filters { width: 100%; min-width: 0; }
+  .filters label { flex-basis: 100%; margin-bottom: -6px; }
+  /* long state names would otherwise keep a select wider than the screen */
+  .filters select,
+  .chartSelect,
+  .kpiFilters input[type="date"] { flex: 1 1 auto; min-width: 0; width: 100%; }
+  .chartFilters { width: 100%; }
 }

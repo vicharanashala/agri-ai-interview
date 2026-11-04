@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import styles from './EvaluationsTab.module.css';
 
 interface CandidateRow {
@@ -21,6 +21,8 @@ interface Props {
 import PageSelector from "./PageSelector";
 import { serialNumber } from "@/lib/serial-number";
 
+const SEARCH_DEBOUNCE_MS = 300;
+
 export default function CourseCompletionTab({ adminToken, adminApiBase, onRefreshCandidates }: Props) {
   const [candidates, setCandidates] = useState<CandidateRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,6 +30,9 @@ export default function CourseCompletionTab({ adminToken, adminApiBase, onRefres
   const [page, setPage] = useState(0);
   const [limit, setLimit] = useState(10);
   const [searchQuery, setSearchQuery] = useState('');
+  // The search the request uses; follows searchQuery after a typing pause
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const requestIdRef = useRef(0);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
   const [confirmModal, setConfirmModal] = useState<{ open: boolean; candidateId: string; candidateName: string } | null>(null);
 
@@ -39,7 +44,15 @@ export default function CourseCompletionTab({ adminToken, adminApiBase, onRefres
     return fetch(`${adminApiBase}${url}`, { ...opts, headers, credentials: 'include' });
   }, [adminToken, adminApiBase]);
 
+  useEffect(() => {
+    if (searchQuery === debouncedSearch) return;
+    const timer = setTimeout(() => { setDebouncedSearch(searchQuery); setPage(0); }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [searchQuery, debouncedSearch]);
+
   const loadCandidates = useCallback(async () => {
+    // Responses for an older page or search are ignored if they finish after a newer request
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     try {
       const params = new URLSearchParams({ 
@@ -47,9 +60,9 @@ export default function CourseCompletionTab({ adminToken, adminApiBase, onRefres
         limit: String(limit), 
         offset: String(page * limit) 
       });
-      if (searchQuery) params.append('search', searchQuery);
+      if (debouncedSearch) params.append('search', debouncedSearch);
       const res = await withAuth(`/api/admin/candidates?${params}`);
-      if (res.ok) {
+      if (res.ok && requestId === requestIdRef.current) {
         const data = await res.json();
         setCandidates(data.candidates || []);
         setTotal(data.total || 0);
@@ -57,9 +70,9 @@ export default function CourseCompletionTab({ adminToken, adminApiBase, onRefres
     } catch (e) {
       console.error('Failed to load candidates for course completion:', e);
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
-  }, [withAuth, page, limit, searchQuery]);
+  }, [withAuth, page, limit, debouncedSearch]);
 
   useEffect(() => {
     loadCandidates();
@@ -112,30 +125,31 @@ export default function CourseCompletionTab({ adminToken, adminApiBase, onRefres
   };
 
   return (
-    <div style={{ padding: '24px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+    <div style={{ padding: 'clamp(4px, 3vw, 24px)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '20px' }}>
       <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#111827' }}>
         Foundation Course Completion Status
       </h2>
-      <div style={{ display: 'flex', gap: '10px' }}>
+      <div style={{ display: 'flex', gap: '10px', maxWidth: '100%' }}>
         <input 
           type="text" 
           placeholder="Search by name or email..." 
           value={searchQuery}
-          onChange={e => { setSearchQuery(e.target.value); setPage(0); }}
+          onChange={e => setSearchQuery(e.target.value)}
           style={{
             padding: '8px 12px',
             borderRadius: '6px',
             border: '1px solid #ddd',
             fontSize: '14px',
-            width: '250px'
+            width: '250px',
+            maxWidth: '100%'
           }}
         />
       </div>
     </div>
 
       {loading ? (
-          <div style={{ background: 'white', borderRadius: '8px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+          <div style={{ background: 'white', borderRadius: '8px', border: '1px solid #e5e7eb', overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
               <thead>
                 <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
@@ -165,7 +179,7 @@ export default function CourseCompletionTab({ adminToken, adminApiBase, onRefres
         </div>
       ) : (
         <>
-        <div style={{ background: 'white', borderRadius: '8px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+        <div style={{ background: 'white', borderRadius: '8px', border: '1px solid #e5e7eb', overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
             <thead>
               <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>

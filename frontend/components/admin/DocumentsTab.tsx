@@ -3,6 +3,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import styles from './EvaluationsTab.module.css';
 import PageSelector from "./PageSelector";
+import { isAbortError } from "../../lib/polling";
+
+const SEARCH_DEBOUNCE_MS = 300;
 
 interface CandidateRow {
   id: string;
@@ -34,6 +37,8 @@ export default function DocumentsTab({ adminToken, adminApiBase: propApiBase }: 
   const [page, setPage] = useState(0);
   const [limit, setLimit] = useState(10);
   const [searchQuery, setSearchQuery] = useState('');
+  // The search the request uses; follows searchQuery after a typing pause
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [downloading, setDownloading] = useState<string | null>(null);
 
   const withAuth = useCallback((url: string, opts: RequestInit = {}): Promise<Response> => {
@@ -51,7 +56,7 @@ export default function DocumentsTab({ adminToken, adminApiBase: propApiBase }: 
         method: "POST",
       });
       if (!res.ok) throw new Error("Failed to update candidate status");
-      
+
       // Update local state directly for instant feedback
       setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, isSelected: !c.isSelected } : c));
     } catch (err) {
@@ -66,7 +71,7 @@ export default function DocumentsTab({ adminToken, adminApiBase: propApiBase }: 
         method: "POST",
       });
       if (!res.ok) throw new Error("Failed to update candidate status");
-      
+
       setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, isNotJoined: !c.isNotJoined } : c));
     } catch (err) {
       console.error(err);
@@ -100,54 +105,65 @@ export default function DocumentsTab({ adminToken, adminApiBase: propApiBase }: 
   }, [withAuth]);
 
   useEffect(() => {
+    if (searchQuery === debouncedSearch) return;
+    const timer = setTimeout(() => { setDebouncedSearch(searchQuery); setPage(0); }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [searchQuery, debouncedSearch]);
+
+  useEffect(() => {
+    // A newer page or search aborts this request, so a slow older response never replaces newer rows
+    const controller = new AbortController();
     const load = async () => {
       setLoading(true);
       try {
-        const params = new URLSearchParams({ 
+        const params = new URLSearchParams({
           phases: 'documents,offer,signing,joining',
-          limit: String(limit), 
-          offset: String(page * limit) 
+          limit: String(limit),
+          offset: String(page * limit)
         });
-        if (searchQuery) params.append('search', searchQuery);
-        const res = await withAuth(`/api/admin/candidates?${params}`);
+        if (debouncedSearch) params.append('search', debouncedSearch);
+        const res = await withAuth(`/api/admin/candidates?${params}`, { signal: controller.signal });
         if (res.ok) {
           const data = await res.json();
           setCandidates(data.candidates || []);
           setTotal(data.total || 0);
         }
       } catch (e) {
-        console.error(e);
+        if (!isAbortError(e)) console.error(e);
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     };
     load();
-  }, [withAuth, page, limit, searchQuery]);
+    return () => controller.abort();
+  }, [withAuth, page, limit, debouncedSearch]);
 
   return (
-    <div style={{ padding: '24px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+    <div style={{ padding: 'clamp(4px, 3vw, 24px)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '20px' }}>
       <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>
         Candidate Documents
       </h2>
-      <div style={{ display: 'flex', gap: '10px' }}>
-        <input 
-          type="text" 
-          placeholder="Search by name or email..." 
+      <div style={{ display: 'flex', gap: '10px', maxWidth: '100%' }}>
+        <input
+          type="text"
+          placeholder="Search by name or email..."
           value={searchQuery}
-          onChange={e => { setSearchQuery(e.target.value); setPage(0); }}
+          onChange={e => setSearchQuery(e.target.value)}
           style={{
             padding: '8px 12px',
             borderRadius: '6px',
             border: '1px solid #ddd',
             fontSize: '14px',
-            width: '250px'
+            width: '250px',
+            maxWidth: '100%'
           }}
         />
       </div>
     </div>
 
       {loading ? (
+        <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
             <thead>
               <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
@@ -172,10 +188,12 @@ export default function DocumentsTab({ adminToken, adminApiBase: propApiBase }: 
               ))}
             </tbody>
         </table>
+        </div>
       ) : candidates.length === 0 ? (
         <div>No candidates found</div>
       ) : (
         <>
+        <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
           <thead>
             <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
@@ -285,7 +303,7 @@ export default function DocumentsTab({ adminToken, adminApiBase: propApiBase }: 
                   <td style={{ padding: '10px 12px' }}>
                     {c.documentsSubmitted ? (
                       <div style={{ display: 'flex', gap: '8px' }}>
-                        <button 
+                        <button
                           onClick={() => handleToggleSelected(c.id)}
                           style={{
                             padding: '6px 12px',
@@ -301,7 +319,7 @@ export default function DocumentsTab({ adminToken, adminApiBase: propApiBase }: 
                         >
                           {c.isSelected ? 'Unmark Selected' : 'Mark Selected'}
                         </button>
-                        <button 
+                        <button
                           onClick={() => handleToggleNotJoined(c.id)}
                           style={{
                             padding: '6px 12px',
@@ -327,6 +345,7 @@ export default function DocumentsTab({ adminToken, adminApiBase: propApiBase }: 
             })}
           </tbody>
         </table>
+        </div>
         <PageSelector
           total={total}
           page={page}

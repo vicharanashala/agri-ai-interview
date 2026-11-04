@@ -118,7 +118,8 @@
 /* ─── Field grid ───────────────────────────────────────────────────── */
 .fieldGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  /* min(): a single column narrower than 280px on phones */
+  grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
   gap: 14px;
 }
 
@@ -294,6 +295,20 @@
   padding-top: 4px;
   border-top: 1px solid #ccc;
   padding-top: 16px;
+}
+
+/* ─── Tablets and phones ────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .container { padding: 16px 0; }
+  .section { padding: 16px; }
+  .headerActions { flex-wrap: wrap; }
+}
+
+@media (max-width: 480px) {
+  .section { padding: 12px; }
+  .headerActions,
+  .headerActions > button { flex: 1 1 auto; }
+  .footer > button { width: 100%; }
 }
 
 /* ─── Scrollbar styling ─────────────────────────────────────────────── */

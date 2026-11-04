@@ -19,6 +19,7 @@ from app.db.mongodb import get_sync_db
 from app.api.candidate.route import _get_candidate_id_from_request
 from bson import ObjectId
 from app.core.config import settings
+from app.services import document_checks as doc_checks
 
 router = APIRouter(prefix="/api/candidate", tags=["candidate-documents"])
 
@@ -353,30 +354,6 @@ Use these detected_document_type values where applicable: aadhaar_front, aadhaar
 """.strip()
 
 
-def _build_school_level_prompt(page_count: int) -> str:
-    return f"""
-Classify the school marksheet level using only text visibly present in the supplied document.
-Number of supplied pages/images: {page_count}
-
-This is an independent classification. You are not told which upload field the user selected.
-
-Classification rules:
-- class_10: explicit evidence such as Class 10, 10th, Class X, Standard X, SSC, SSLC, Matriculation, Secondary School Examination, Secondary School Leaving Certificate, or an equivalent board examination clearly denoting grade 10.
-- class_12: explicit evidence such as Class 12, 12th, Class XII, Standard XII, HSC, Higher Secondary, Senior Secondary, Senior School Certificate Examination, Intermediate, PUC/PU II, or an equivalent board examination clearly denoting grade 12.
-- other: visibly a different education level or not a school marksheet.
-- unknown: a marksheet may be visible, but its level cannot be established from readable evidence.
-
-Do not infer the level from the candidate's age, examination year, subject names, marks, layout, or filename. Do not guess. The evidence must copy a short visible phrase from the document exactly, without paraphrasing. Pay special attention to the difference between the Roman numerals X and XII and between Secondary School Examination and Senior School Certificate Examination. Inspect all supplied pages collectively.
-
-Return ONLY one JSON object:
-{{
-  "document_level": "class_10 | class_12 | other | unknown",
-  "explicit_level_evidence": ["short visible phrase"],
-  "confidence": "high | medium | low"
-}}
-""".strip()
-
-
 def _extract_json_object(ai_text: str) -> dict:
     first_brace = ai_text.find("{")
     last_brace = ai_text.rfind("}")
@@ -396,82 +373,6 @@ def _parse_ai_response(ai_text: str) -> dict:
     if not isinstance(result, dict) or not isinstance(result.get("checks"), dict):
         raise DocumentValidationUnavailable("Vision service returned an incomplete result.")
     return result
-
-
-def _infer_school_level_from_evidence(evidence: Any) -> str:
-    if not isinstance(evidence, list):
-        return "unknown"
-    text = " ".join(item for item in evidence if isinstance(item, str)).casefold()
-    text = re.sub(r"[-_/]+", " ", text)
-    text = re.sub(r"\s+", " ", text).strip()
-    if not text:
-        return "unknown"
-
-    class_12_patterns = (
-        r"\bclass\s*(?:12|xii)\b",
-        r"\bstandard\s*(?:12|xii)\b",
-        r"\b12th\b",
-        r"\bsenior\s+(?:secondary|school\s+certificate)\b",
-        r"\bhigher\s+secondary\b",
-        r"\bhsc\b",
-        r"\bintermediate\s+(?:examination|certificate)?\b",
-        r"\b(?:pre\s+university|puc|pu\s*ii)\b",
-        r"\ball\s+india\s+senior\s+school\s+certificate\b",
-    )
-    class_10_patterns = (
-        r"\bclass\s*(?:10|x)\b",
-        r"\bstandard\s*(?:10|x)\b",
-        r"\b10th\b",
-        r"\bsslc\b",
-        r"\bssc\b",
-        r"\bmatric(?:ulation)?\b",
-        r"(?<!higher )(?<!senior )\bsecondary\s+school\s+leaving\s+certificate\b",
-        r"(?<!senior )\bsecondary\s+school\s+(?:examination|certificate)\b",
-        r"\ball\s+india\s+secondary\s+school\s+examination\b",
-    )
-    has_class_12 = any(re.search(pattern, text) for pattern in class_12_patterns)
-    has_class_10 = any(re.search(pattern, text) for pattern in class_10_patterns)
-    if has_class_12 == has_class_10:
-        return "unknown"
-    return "class_12" if has_class_12 else "class_10"
-
-
-def _evaluate_school_level(field_name: str, result: dict) -> tuple[bool, str]:
-    expected_level = {
-        "marksheet_10": "class_10",
-        "marksheet_12": "class_12",
-    }[field_name]
-    detected_level = result.get("document_level")
-    evidence = result.get("explicit_level_evidence")
-    confidence = result.get("confidence")
-
-    if detected_level not in {"class_10", "class_12", "other", "unknown"}:
-        raise DocumentValidationUnavailable("Vision service returned an invalid school-level classification.")
-    if detected_level != expected_level:
-        expected_label = "Class 10" if expected_level == "class_10" else "Class 12"
-        detected_label = {
-            "class_10": "Class 10",
-            "class_12": "Class 12",
-            "other": "a different education level",
-            "unknown": "an unclear education level",
-        }[detected_level]
-        return False, f"This appears to be {detected_label}, not {expected_label}."
-    if confidence not in {"high", "medium"}:
-        return False, "The marksheet level could not be verified with enough confidence."
-    if not isinstance(evidence, list) or not any(isinstance(item, str) and item.strip() for item in evidence):
-        return False, "No explicit Class 10/Class 12 evidence was visible on the marksheet."
-    evidence_level = _infer_school_level_from_evidence(evidence)
-    print(
-        "[DocumentValidation] school-level "
-        f"field={field_name} model={detected_level} evidence={evidence_level} confidence={confidence}"
-    )
-    if evidence_level != expected_level:
-        if evidence_level in {"class_10", "class_12"}:
-            evidence_label = "Class 10" if evidence_level == "class_10" else "Class 12"
-            expected_label = "Class 10" if expected_level == "class_10" else "Class 12"
-            return False, f"Visible examination text indicates {evidence_label}, not {expected_label}."
-        return False, "The marksheet does not contain unambiguous Class 10/Class 12 examination text."
-    return True, "The school marksheet level matches the selected field."
 
 
 def _evaluate_ai_result(field_name: str, result: dict) -> tuple[bool, str]:
@@ -608,19 +509,48 @@ async def _call_vision(content: List[dict], max_tokens: int) -> str:
     return ai_text
 
 
-async def _run_ai_validation(file_bytes: bytes, filename: str, field_name: str) -> tuple[bool, str]:
+def _get_applicant_name(candidate_id: str) -> Optional[str]:
+    db = get_sync_db()
+    try:
+        cand = db.candidates.find_one({"_id": ObjectId(candidate_id)})
+    except Exception:
+        cand = db.candidates.find_one({"_id": candidate_id})
+    if not cand:
+        return None
+    name = (cand.get("full_name") or "").strip()
+    if name:
+        return name
+    user_id = cand.get("user_id")
+    if user_id:
+        user = db.users.find_one({"_id": user_id})
+        if not user and ObjectId.is_valid(str(user_id)):
+            user = db.users.find_one({"_id": ObjectId(str(user_id))})
+        if user and (user.get("name") or "").strip():
+            return user["name"].strip()
+    return None
+
+
+async def _run_ai_validation(
+    file_bytes: bytes, filename: str, field_name: str, applicant_name: Optional[str] = None
+) -> tuple[bool, str]:
     vision_images = _prepare_vision_images(file_bytes, filename, field_name)
 
-    if field_name in {"marksheet_10", "marksheet_12"}:
-        level_content = _vision_content(_build_school_level_prompt(len(vision_images)), vision_images)
-        level_text = await _call_vision(level_content, max_tokens=300)
-        level_valid, level_reason = _evaluate_school_level(field_name, _extract_json_object(level_text))
-        if not level_valid:
-            return False, level_reason
+    if field_name in doc_checks.EDUCATION_LEVELS:
+        content = _vision_content(doc_checks.EXTRACTION_PROMPT, vision_images)
+        extraction = _extract_json_object(await _call_vision(content, max_tokens=700))
+        is_valid, reason = doc_checks.evaluate_education(field_name, extraction)
+        return is_valid, reason or ""
 
     content = _vision_content(_build_prompt(field_name, len(vision_images)), vision_images)
     ai_text = await _call_vision(content, max_tokens=1000)
-    return _evaluate_ai_result(field_name, _parse_ai_response(ai_text))
+    is_valid, reason = _evaluate_ai_result(field_name, _parse_ai_response(ai_text))
+
+    if is_valid and field_name in doc_checks.SINGLE_SIDE_FIELDS:
+        content = _vision_content(doc_checks.EXTRACTION_PROMPT, vision_images)
+        extraction = _extract_json_object(await _call_vision(content, max_tokens=700))
+        is_valid, extra_reason = doc_checks.evaluate_identity(field_name, extraction, applicant_name)
+        reason = extra_reason or reason
+    return is_valid, reason
 
 
 @router.post("/validate-single")
@@ -645,7 +575,9 @@ async def validate_single_document(
                 "validation_token": _issue_validation_token(candidate_id, field_name, file_bytes),
             }
 
-        is_valid, reason = await _run_ai_validation(file_bytes, file.filename or "", field_name)
+        is_valid, reason = await _run_ai_validation(
+            file_bytes, file.filename or "", field_name, _get_applicant_name(candidate_id)
+        )
     except HTTPException as exc:
         return {"success": False, "reason": exc.detail}
     except DocumentValidationUnavailable as exc:

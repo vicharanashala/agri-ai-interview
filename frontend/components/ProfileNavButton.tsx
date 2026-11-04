@@ -1,9 +1,11 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import styles from './ProfileNavButton.module.css';
+import FeedbackModal, { FEEDBACK_SUBMITTED_EVENT } from '@/components/FeedbackModal';
 
 interface Props {
   className?: string;
@@ -25,6 +27,8 @@ export default function ProfileNavButton({
   const [currentPhase, setCurrentPhase] = useState('onboarding');
   const [documentsSubmitted, setDocumentsSubmitted] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [feedbackPending, setFeedbackPending] = useState(false);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
 
   useEffect(() => {
     const loadInfo = async () => {
@@ -45,6 +49,21 @@ export default function ProfileNavButton({
               localStorage.setItem('onboardingCompleted', 'true');
             }
           }
+
+          // Feedback option is offered only after document submission, until feedback is stored
+          if (data?.documentsSubmitted) {
+            const fbRes = await fetch('/api/candidate/feedback', {
+              credentials: 'include',
+              cache: 'no-store',
+              headers: {
+                Authorization: `Bearer ${sessionStorage.getItem('candidate_session_token') || ''}`,
+              },
+            });
+            if (fbRes.ok) {
+              const fbData = await fbRes.json();
+              setFeedbackPending(!fbData.submitted);
+            }
+          }
         }
       } catch {
         // Ignore
@@ -53,6 +72,17 @@ export default function ProfileNavButton({
 
     loadInfo();
   }, [forceShow]);
+
+  // Hide the Feedback option as soon as feedback is submitted from any modal on the page
+  useEffect(() => {
+    const handleSubmitted = () => setFeedbackPending(false);
+    window.addEventListener(FEEDBACK_SUBMITTED_EVENT, handleSubmitted);
+    return () => window.removeEventListener(FEEDBACK_SUBMITTED_EVENT, handleSubmitted);
+  }, []);
+
+  const handleFeedbackFinish = React.useCallback(() => {
+    setShowFeedbackModal(false);
+  }, []);
 
   // Click outside to close dropdown
   useEffect(() => {
@@ -260,6 +290,30 @@ export default function ProfileNavButton({
                 </svg>
               </button>
 
+              {documentsSubmitted && feedbackPending && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsOpen(false);
+                    setShowFeedbackModal(true);
+                  }}
+                  className={styles.menuItem}
+                >
+                  <svg
+                    className={styles.itemSvg}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.75"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M12 2.5l2.94 5.96 6.56.95-4.75 4.63 1.12 6.54L12 17.5l-5.87 3.08 1.12-6.54L2.5 9.41l6.56-.95L12 2.5z" />
+                  </svg>
+                  <span className={styles.menuItemLabel}>Feedback</span>
+                </button>
+              )}
+
               <div className={styles.menuDivider} />
 
               <button
@@ -289,6 +343,9 @@ export default function ProfileNavButton({
           </div>
         )}
       </div>
+
+      {/* Portal to <body> so the fixed overlay is not clipped by navbar backdrop-filter */}
+      {showFeedbackModal && createPortal(<FeedbackModal onFinish={handleFeedbackFinish} />, document.body)}
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { signOut } from 'next-auth/react';
 import styles from './page.module.css';
 import DashboardSkeleton from './DashboardSkeleton';
 import HowToUseModal from '@/components/HowToUseModal';
+import FeedbackModal, { FEEDBACK_SUBMITTED_EVENT } from '@/components/FeedbackModal';
 import CandidateNavbar from '@/components/CandidateNavbar';
 import confetti from 'canvas-confetti';
 import { syncPhaseToDb } from '@/lib/phaseSync';
@@ -238,6 +239,8 @@ export default function DashboardPage() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [showVideoModal, setShowVideoModal] = useState(false);
   const [attempts, setAttempts] = useState<Attempt[]>([]);
+  // Feedback modal gate shown before the Journey Complete modal: 'checking' → 'show' | 'done'
+  const [feedbackStep, setFeedbackStep] = useState<'checking' | 'show' | 'done'>('checking');
   const router = useRouter();
 
   useEffect(() => {
@@ -605,6 +608,48 @@ export default function DashboardPage() {
     triggerCelebrationConfetti();
     setCelebrationPhase(highestCompletedMilestone.name);
   }, [isLoading, currentPhase, documentsSubmitted, foundationCompleted, moduleCompleted, hasPassed, attempts.length]);
+
+  // ── Feedback modal gate (only after documents are submitted) ──────────────
+  // Pending status always comes from the backend; skipping (X) is never persisted,
+  // so the modal reappears on refresh / re-login until feedback is submitted.
+  useEffect(() => {
+    if (isLoading || !documentsSubmitted) return;
+
+    let cancelled = false;
+    const checkFeedbackStatus = async () => {
+      try {
+        const res = await fetch('/api/candidate/feedback', {
+          credentials: 'include',
+          cache: 'no-store',
+          headers: {
+            Authorization: `Bearer ${sessionStorage.getItem('candidate_session_token') || ''}`,
+          },
+        });
+        const data = res.ok ? await res.json() : {};
+        if (!cancelled) setFeedbackStep(data.submitted ? 'done' : 'show');
+      } catch {
+        // Status unknown — still offer feedback; the backend rejects duplicates
+        if (!cancelled) setFeedbackStep('show');
+      }
+    };
+    checkFeedbackStatus();
+    return () => { cancelled = true; };
+  }, [isLoading, documentsSubmitted]);
+
+  // Feedback submitted from elsewhere (e.g. the profile menu) — skip the automatic modal.
+  // While the automatic modal is open it finishes itself, so its success message stays visible.
+  useEffect(() => {
+    const handleSubmitted = () => setFeedbackStep((prev) => (prev === 'show' ? prev : 'done'));
+    window.addEventListener(FEEDBACK_SUBMITTED_EVENT, handleSubmitted);
+    return () => window.removeEventListener(FEEDBACK_SUBMITTED_EVENT, handleSubmitted);
+  }, []);
+
+  const handleFeedbackFinish = React.useCallback(() => {
+    setFeedbackStep('done');
+  }, []);
+
+  const isJourneyCompleteReady =
+    documentsSubmitted && !celebrationPhase && !isExitingCelebration && hasCompletedDocsCelebration;
 
   const handlePhaseClick = async (phase: PhaseInfo) => {
     // Once documents and all journey steps are completed, candidate does not need to click any phases
@@ -1225,8 +1270,13 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Centered Completion Banner Modal (shown when documents submitted & congrats banner has finished) */}
-      {documentsSubmitted && !celebrationPhase && !isExitingCelebration && hasCompletedDocsCelebration && (
+      {/* Feedback Modal (shown once documents are submitted, before the Journey Complete modal) */}
+      {isJourneyCompleteReady && feedbackStep === 'show' && (
+        <FeedbackModal onFinish={handleFeedbackFinish} />
+      )}
+
+      {/* Centered Completion Banner Modal (shown when documents submitted, congrats banner and feedback step have finished) */}
+      {isJourneyCompleteReady && feedbackStep === 'done' && (
         <div className={styles.completionOverlay} aria-modal="true" role="dialog">
           <div className={styles.completionDialog} onClick={(e) => e.stopPropagation()}>
             <div className={styles.completionHeader}>

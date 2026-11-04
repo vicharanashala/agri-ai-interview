@@ -19,6 +19,7 @@ from app.api.candidate.attempts import router as candidate_attempts_router
 from app.api.candidate.foundation_course import router as foundation_course_router
 from app.api.candidate.question_collection import router as qc_router
 from app.api.candidate.re_evaluation import router as candidate_re_evaluation_router
+from app.api.candidate.feedback import router as candidate_feedback_router
 from app.api.anti_cheat import router as anti_cheat_router
 from app.api import interview, joining_details, offer
 from app.api.interview.queue import router as interview_queue_router
@@ -131,4 +132,5 @@ app.include_router(candidate_attempts_router)
 app.include_router(foundation_course_router)
 app.include_router(qc_router)
 app.include_router(candidate_re_evaluation_router)
+app.include_router(candidate_feedback_router)
 app.include_router(anti_cheat_router)

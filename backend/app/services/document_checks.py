@@ -43,7 +43,8 @@ Guidance:
   "Higher Secondary Certificate", HSC, Senior Secondary, Class XII, Intermediate => "12".
   Bachelor's degree documents => "graduation". Master's / post-graduate documents => "postgraduation".
 - sides_visible: "both" when one image shows the front AND the back of the same card.
-- holder_name is the holder only, not a parent or institution. Copy surname-first names as printed.
+- holder_name is the holder only, never a parent, spouse or institution. A name after C/O, D/O, S/O or W/O is a relative, not the holder:
+  on the back of an Aadhaar card holder_name must be null. Copy surname-first names as printed.
 """
 
 _LEVEL_PATTERNS = [
@@ -151,13 +152,13 @@ def evaluate_identity(field_name: str, extraction: Dict[str, Any], applicant_nam
         if str(extraction.get("sides_visible") or "").lower() == "both" or _count(extraction) >= 2:
             return False, "This image shows more than one card or side. Please upload only the requested side."
 
-    if applicant_name and _tokens(applicant_name):
+    # Only the front carries the holder's name; a back side prints a relative (C/O, D/O, S/O, W/O).
+    if field_name in NAME_CHECKED_FIELDS and applicant_name and _tokens(applicant_name):
         doc_name = extraction.get("holder_name")
-        if _tokens(doc_name):
-            if not names_match(applicant_name, doc_name):
-                return False, (f"The name on this document ({str(doc_name).strip()}) does not match "
-                               f"your registered name ({applicant_name.strip()}).")
-        elif field_name in NAME_CHECKED_FIELDS:
+        if not _tokens(doc_name):
             return False, ("Could not read the name on this document. "
                            "Please upload a clearer image so it can be matched with your profile.")
+        if not names_match(applicant_name, doc_name):
+            return False, (f"The name on this document ({str(doc_name).strip()}) does not match "
+                           f"your registered name ({applicant_name.strip()}).")
     return True, None

@@ -122,6 +122,8 @@ def setup_indexes():
         (db.re_evaluation_requests, [("requested_at", DESCENDING)]),
         # Every admin request looks up its session by token
         (db.admin_sessions, [("token", ASCENDING)]),
+        # Admin feedbacks list sorts newest first
+        (db.candidate_feedback, [("submitted_at", DESCENDING)]),
     ]
     for collection, keys in admin_indexes:
         try:

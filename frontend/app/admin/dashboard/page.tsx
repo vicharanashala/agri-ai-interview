@@ -15,6 +15,7 @@ import CourseCompletionTab from "../../../components/admin/CourseCompletionTab";
 import ModuleCompletionTab from "../../../components/admin/ModuleCompletionTab";
 import PageSelector from "../../../components/admin/PageSelector";
 import AnalyticsTab from "../../../components/admin/AnalyticsTab";
+import FeedbacksTab from "../../../components/admin/FeedbacksTab";
 
 // Types
 interface Candidate {
@@ -73,12 +74,12 @@ interface Guidelines {
 }
 
 // Tabs
-type Tab = "live" | "candidates" | "analytics" | "evaluations" | "course-completion" | "module-completion" | "anti-cheat" | "documents" | "trash" | "settings";
+type Tab = "live" | "candidates" | "analytics" | "evaluations" | "course-completion" | "module-completion" | "anti-cheat" | "documents" | "feedbacks" | "trash" | "settings";
 type SettingsTab = "guidelines" | "criteria" | "interview-config" | "anti-cheat" | "offer-letter";
 
 // Dashboard view state is mirrored in the URL (?tab=&q=&phase=&state=&district=&interview=&page=&limit=)
 // so returning from a candidate profile restores the same tab, filters and page.
-const TABS: Tab[] = ["live", "candidates", "analytics", "evaluations", "course-completion", "module-completion", "anti-cheat", "documents", "trash", "settings"];
+const TABS: Tab[] = ["live", "candidates", "analytics", "evaluations", "course-completion", "module-completion", "anti-cheat", "documents", "feedbacks", "trash", "settings"];
 const PAGE_LIMITS = [10, 20, 50, 100];
 const POLL_INTERVAL_MS = 5000;
 const ANTI_CHEAT_POLL_INTERVAL_MS = 30_000;
@@ -763,6 +764,28 @@ function AdminDashboard() {
           <span className={styles.adminName}>Welcome, {adminData?.name || "Admin"}</span>
         </div>
         <div className={styles.headerRight}>
+          <button
+            type="button"
+            className={`${styles.settingsIconBtn} ${activeTab === "settings" ? styles.settingsIconBtnActive : ""}`}
+            onClick={() => setActiveTab("settings")}
+            title="Settings"
+            aria-label="Settings"
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+          </button>
           <button onClick={handleLogout} className={styles.logoutBtn}>Logout</button>
         </div>
       </header>
@@ -819,13 +842,13 @@ function AdminDashboard() {
         >
           📎 Documents
         </button>
-        <button className={`${styles.tab} ${activeTab === "trash" ? styles.activeTab : ""}`} onClick={() => setActiveTab("trash")}>🗑️ Trash</button>
         <button
-          className={`${styles.tab} ${activeTab === "settings" ? styles.activeTab : ""}`}
-          onClick={() => setActiveTab("settings")}
+          className={`${styles.tab} ${activeTab === "feedbacks" ? styles.activeTab : ""}`}
+          onClick={() => setActiveTab("feedbacks")}
         >
-          ⚙️ Settings
+          💬 Feedbacks
         </button>
+        <button className={`${styles.tab} ${activeTab === "trash" ? styles.activeTab : ""}`} onClick={() => setActiveTab("trash")}>🗑️ Trash</button>
       </div>
 
       {/* Content */}
@@ -1188,6 +1211,14 @@ function AdminDashboard() {
         {/* Documents Tab */}
         {activeTab === "documents" && (
           <DocumentsTab
+            adminToken={getAdminToken()}
+            adminApiBase={ADMIN_API_BASE}
+          />
+        )}
+
+        {/* Feedbacks Tab */}
+        {activeTab === "feedbacks" && (
+          <FeedbacksTab
             adminToken={getAdminToken()}
             adminApiBase={ADMIN_API_BASE}
           />

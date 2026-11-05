@@ -43,7 +43,42 @@
 
 .headerRight {
   display: flex;
+  align-items: center;
   gap: 12px;
+}
+
+.settingsIconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 35px;
+  height: 35px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+  color: #4b5563;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.settingsIconBtn:hover {
+  background: #f3f4f6;
+  color: #111827;
+  border-color: #d1d5db;
+}
+
+.settingsIconBtnActive {
+  background: #08CB00;
+  color: #ffffff;
+  border-color: #08CB00;
+  box-shadow: 0 1px 3px rgba(8, 203, 0, 0.25);
+}
+
+.settingsIconBtnActive:hover {
+  background: #059669;
+  color: #ffffff;
+  border-color: #059669;
 }
 
 .logoutBtn {

@@ -688,4 +688,40 @@
   }
 }
 
+/* Header: the buttons take their own row once they no longer fit beside the logos */
+@media (max-width: 820px) {
+  .topNavbar {
+    height: auto;
+  }
 
+  .navbarContent {
+    flex-wrap: wrap;
+    row-gap: 10px;
+    padding: 10px 16px;
+  }
+
+  .headerButtons {
+    width: 100%;
+    gap: 8px;
+  }
+
+  .raiseTicketBtn,
+  .faqHelpBtn,
+  .signOutBtn {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 44px;
+    padding: 6px 8px;
+    font-size: 13px;
+    text-align: center;
+    justify-content: center;
+    white-space: normal;
+  }
+}
+
+/* Landscape phones: a sticky two-row header would take too much of the screen */
+@media (max-height: 500px) {
+  .topNavbar {
+    position: static;
+  }
+}

@@ -58,6 +58,33 @@ export async function toggleCandidateFlag(adminFetch: AdminFetch, candidateId: s
   return value;
 }
 
+/** Confirmation copy for marking a candidate; unmarking does not ask for confirmation. */
+export const candidateFlagConfirmation: Record<CandidateFlag, { title: string; label: string; explanation: string }> = {
+  selected: {
+    title: "Mark Selected",
+    label: "Selected",
+    explanation: "This records the candidate as Selected in admin reports. You can reverse it later with Unmark Selected.",
+  },
+  notJoined: {
+    title: "Mark Not Joined",
+    label: "Not Joined",
+    explanation:
+      "This records that the candidate did not join. They will be reported as Not Joined, even if they are marked Selected. You can reverse it later with Unmark Not Joined.",
+  },
+};
+
+/**
+ * Success text for a confirmed mark, from the value the backend stored. Marking toggles, so `false` means
+ * the flag was already set (e.g. by another admin since this table loaded) and this request cleared it.
+ */
+export function candidateFlagMarkedMessage(flag: CandidateFlag, value: boolean, fullName: string | null | undefined): string {
+  const name = fullName?.trim() || "This candidate";
+  const { label } = candidateFlagConfirmation[flag];
+  return value
+    ? `${name} marked as ${label}.`
+    : `${name} is no longer marked as ${label}: the status had already been set, so this request cleared it.`;
+}
+
 /** All of a candidate's uploaded documents as one ZIP (existing admin endpoint). */
 export async function fetchDocumentsZip(adminFetch: AdminFetch, candidateId: string): Promise<Blob> {
   const res = await adminFetch(candidateActionPaths.documentsZip(candidateId));

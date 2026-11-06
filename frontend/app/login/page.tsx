@@ -346,6 +346,9 @@ function LoginPageInner() {
           className={styles.rightPaneBg}
           aria-hidden="true"
         />
+        <div className={styles.stackedBrand}>
+          <BrandLogos variant="login" />
+        </div>
         <div className={styles.loginBox}>
           {/* Lock icon header */}
           <div className={styles.lockIconHeader}>

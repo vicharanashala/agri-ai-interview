@@ -858,6 +858,7 @@
   justify-content: center;
   z-index: 10000;
   padding: 20px;
+  overflow-y: auto;
 }
 
 .closingPageCard {
@@ -866,6 +867,7 @@
   padding: 60px 48px;
   max-width: 560px;
   width: 100%;
+  margin: auto; /* centred, but scrolls from its top edge when taller than the screen */
   box-shadow: 0 20px 25px -5px rgba(0,0,0,0.05), 0 10px 10px -5px rgba(0,0,0,0.04), 0 0 1px 0 rgba(0,0,0,0.1);
   text-align: center;
   animation: fadeIn 0.5s ease-out;
@@ -958,5 +960,292 @@
   .guidelines {
     padding: 10px;
   }
+  .closingPageCard {
+    padding: 32px 20px;
+    border-radius: 18px;
+  }
+  .closingPageIcon {
+    width: 72px;
+    height: 72px;
+    margin-bottom: 20px;
+    font-size: 34px;
+  }
+  .closingPageTitle {
+    font-size: 28px;
+    margin-bottom: 12px;
+  }
+  .closingPageSubtitle {
+    font-size: 17px;
+    margin-bottom: 12px;
+  }
+  .closingPageDesc {
+    font-size: 15px;
+    margin-bottom: 24px;
+  }
+  .closingPageButtons {
+    gap: 12px;
+  }
+  .closingPageSummaryBtn,
+  .closingPageDashboardBtn {
+    padding: 14px 16px;
+  }
 }
 
+/* Landscape phones */
+@media (max-height: 500px) {
+  .closingPageCard {
+    padding: 24px 20px;
+  }
+  .closingPageIcon {
+    width: 56px;
+    height: 56px;
+    margin-bottom: 12px;
+    font-size: 28px;
+  }
+  .closingPageTitle {
+    font-size: 24px;
+  }
+}
+
+/* ── Phones, tablets and touch screens ──
+   --interview-vh / --interview-vv-top come from useVisualViewportVars: the area left visible by the
+   on-screen keyboard and browser bars. Desktop never sets them, and none of this applies there. */
+@media (max-width: 1023px), (pointer: coarse) {
+  .chatContainer {
+    position: fixed;
+    top: var(--interview-vv-top, 0);
+    left: 0;
+    right: 0;
+    height: var(--interview-vh, 100dvh);
+    box-shadow: none;
+  }
+
+  .header {
+    align-items: center;
+    padding: 10px max(14px, env(safe-area-inset-right)) 10px max(14px, env(safe-area-inset-left));
+    flex-shrink: 0;
+  }
+
+  .headerLeft {
+    min-width: 0;
+  }
+
+  .title {
+    font-size: 18px;
+  }
+
+  .stats {
+    flex-wrap: wrap;
+    gap: 4px 10px;
+  }
+
+  .endButton {
+    flex-shrink: 0;
+    min-height: 44px;
+    margin-left: 10px;
+    padding: 8px 12px;
+    white-space: nowrap;
+  }
+
+  .messages {
+    min-height: 0;
+    padding: 14px max(14px, env(safe-area-inset-right)) 14px max(14px, env(safe-area-inset-left));
+    overscroll-behavior: contain;
+  }
+
+  .messageContent,
+  .evaluationCard {
+    max-width: 92%;
+    overflow-wrap: anywhere;
+  }
+
+  .inputForm {
+    gap: 8px;
+    padding: 8px max(14px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+  }
+
+  .input {
+    min-width: 0;
+    padding: 10px 12px;
+    font-size: 16px; /* iOS zooms the page into inputs under 16px */
+  }
+
+  .button {
+    min-height: 44px;
+    padding: 10px 16px;
+  }
+
+  .quickStats {
+    gap: 16px;
+    padding: 6px max(14px, env(safe-area-inset-right)) 6px max(14px, env(safe-area-inset-left));
+  }
+
+  .quickStatItem {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 6px;
+  }
+
+  .quickStatValue {
+    font-size: 14px;
+  }
+
+  .dismissError {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .goToSummaryButton {
+    min-height: 44px;
+  }
+
+  /* Dialogs stay in the visible area above the keyboard, and scroll if they do not fit */
+  .confirmOverlay,
+  .loadingOverlay,
+  .closingOverlay {
+    top: var(--interview-vv-top, 0);
+    bottom: auto;
+    height: var(--interview-vh, 100dvh);
+    padding: 16px;
+    overflow-y: auto;
+  }
+
+  .confirmDialog,
+  .loadingContent,
+  .closingContent {
+    margin: auto;
+  }
+
+  .confirmYesButton,
+  .confirmNoButton {
+    flex: 1;
+    min-height: 44px;
+    padding: 10px 16px;
+  }
+
+  /* Guidelines: keep Begin Interview on screen while the rules scroll */
+  .instructionBody {
+    padding: 12px max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  }
+
+  .beginButton {
+    position: sticky;
+    bottom: 8px;
+    z-index: 1;
+    display: block;
+    width: 100%;
+    min-height: 48px;
+    box-shadow: 0 0 0 8px #ffffff;
+  }
+
+  .antiCheatSubtitle,
+  .antiCheatNote {
+    font-size: 13px;
+  }
+
+  .antiCheatList li {
+    font-size: 13px;
+  }
+
+  .guidelines li {
+    font-size: 14px;
+  }
+
+  .completedButton {
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 480px) {
+  .confirmDialog {
+    width: 100%;
+    padding: 24px 20px;
+  }
+
+  .loadingContent,
+  .closingContent {
+    padding: 28px 20px;
+  }
+
+  .completedScreen {
+    padding: 12px;
+  }
+
+  .completedCard {
+    padding: 32px 20px;
+  }
+
+  .completedIcon,
+  .startingIcon {
+    width: 72px;
+    height: 72px;
+    font-size: 34px;
+  }
+
+  .completedTitle {
+    font-size: 26px;
+  }
+
+  .completedSubtitle {
+    font-size: 17px;
+  }
+
+  .completedDescription {
+    font-size: 15px;
+  }
+
+  .completedButton {
+    padding: 14px 20px;
+    font-size: 16px;
+  }
+}
+
+/* Landscape, or portrait with the keyboard open: give the conversation the space */
+:global(html[data-interview-viewport='short']) .title,
+:global(html[data-interview-viewport='tiny']) .title {
+  font-size: 15px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+:global(html[data-interview-viewport='short']) .header {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+:global(html[data-interview-viewport='short']) .messages,
+:global(html[data-interview-viewport='tiny']) .messages {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+:global(html[data-interview-viewport='short']) .inputForm,
+:global(html[data-interview-viewport='tiny']) .inputForm {
+  padding-top: 4px;
+  padding-bottom: max(4px, env(safe-area-inset-bottom));
+}
+
+:global(html[data-interview-viewport='short']) .input,
+:global(html[data-interview-viewport='tiny']) .input {
+  height: 44px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+/* Landscape phone with the keyboard open: too short for fixed sections, so the whole panel scrolls.
+   Everything stays available, with the answer box pinned above the keyboard. */
+:global(html[data-interview-viewport='tiny']) .chatContainer {
+  overflow-y: auto;
+}
+
+:global(html[data-interview-viewport='tiny']) .messages {
+  flex: none;
+  overflow: visible;
+}
+
+:global(html[data-interview-viewport='tiny']) .inputForm {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+}

@@ -572,3 +572,29 @@
   background: rgba(59, 130, 246, 0.14);
   border-color: rgba(59, 130, 246, 0.4);
 }
+
+/* Header: the buttons drop below the logos only when they do not fit beside them */
+@media (max-width: 520px) {
+  .navbarContent {
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+
+  .headerButtons {
+    margin-left: auto;
+  }
+}
+
+@media (max-width: 768px), (pointer: coarse) {
+  .raiseTicketBtn,
+  .faqHelpBtn {
+    min-height: 44px;
+  }
+}
+
+/* Landscape phones: a sticky two-row header would take too much of the screen */
+@media (max-height: 500px) {
+  .topNavbar {
+    position: static;
+  }
+}

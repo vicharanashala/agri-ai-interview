@@ -130,6 +130,13 @@
   display: flex;
   align-items: center;
   gap: 20px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.heroDetails {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .avatar {
@@ -159,8 +166,9 @@
   color: #64748b;
   margin: 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 2px 8px;
 }
 
 .heroBadges {
@@ -493,6 +501,7 @@
   align-items: center;
   justify-content: center;
   padding: 20px;
+  overflow-y: auto;
 }
 
 .modalCard {
@@ -500,6 +509,7 @@
   border-radius: 20px;
   max-width: 500px;
   width: 100%;
+  margin: auto; /* centred, but scrolls from its top edge when taller than the screen */
   padding: 28px;
   display: flex;
   flex-direction: column;
@@ -1134,4 +1144,36 @@
   align-items: center;
   gap: 10px;
   flex-shrink: 0;
+}
+
+@media (max-width: 480px) {
+  .modalOverlay {
+    padding: 12px;
+  }
+
+  .modalCard {
+    padding: 20px;
+  }
+
+  .heroLeft {
+    gap: 14px;
+  }
+
+  .heroDetails h1 {
+    font-size: 20px;
+  }
+
+  .avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 16px;
+    font-size: 22px;
+  }
+}
+
+@media (max-width: 768px), (pointer: coarse) {
+  .modalCancelBtn,
+  .modalConfirmBtn {
+    min-height: 44px;
+  }
 }

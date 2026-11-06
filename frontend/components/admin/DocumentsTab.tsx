@@ -6,6 +6,7 @@ import docStyles from './DocumentsTab.module.css';
 import PageSelector from "./PageSelector";
 import { isAbortError } from "../../lib/polling";
 import { serialNumber } from "@/lib/serial-number";
+import { useMarkConfirmation } from "./CandidateDocumentActions";
 
 const SEARCH_DEBOUNCE_MS = 300;
 
@@ -27,12 +28,13 @@ interface CandidateRow {
 interface Props {
   adminToken: string | null;
   adminApiBase?: string;
+  onMarked: (message: string) => void;
 }
 
 // Pass candidates = offer phase or beyond, or documents phase (mid-pipeline doc collection)
 const PASS_PHASES = ['documents', 'offer', 'signing', 'joining'];
 
-export default function DocumentsTab({ adminToken, adminApiBase: propApiBase }: Props) {
+export default function DocumentsTab({ adminToken, adminApiBase: propApiBase, onMarked }: Props) {
   const [candidates, setCandidates] = useState<CandidateRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
@@ -51,6 +53,13 @@ export default function DocumentsTab({ adminToken, adminApiBase: propApiBase }: 
     const base = propApiBase || process.env.NEXT_PUBLIC_ADMIN_API_URL || '';
     return fetch(`${base}${url}`, { ...opts, headers, credentials: 'include' });
   }, [adminToken, propApiBase]);
+
+  const markConfirmation = useMarkConfirmation({
+    adminFetch: withAuth,
+    onUpdated: (candidateId, patch) =>
+      setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, ...patch } : c)),
+    onMarked,
+  });
 
   const handleToggleSelected = async (candidateId: string) => {
     try {
@@ -310,7 +319,7 @@ export default function DocumentsTab({ adminToken, adminApiBase: propApiBase }: 
                     {c.documentsSubmitted ? (
                       <div className={docStyles.actionButtons}>
                         <button
-                          onClick={() => handleToggleSelected(c.id)}
+                          onClick={() => c.isSelected ? handleToggleSelected(c.id) : markConfirmation.request(c, 'selected')}
                           style={{
                             padding: '6px 12px',
                             background: c.isSelected ? '#d1fae5' : '#dbeafe',
@@ -327,7 +336,7 @@ export default function DocumentsTab({ adminToken, adminApiBase: propApiBase }: 
                           {c.isSelected ? 'Unmark Selected' : 'Mark Selected'}
                         </button>
                         <button
-                          onClick={() => handleToggleNotJoined(c.id)}
+                          onClick={() => c.isNotJoined ? handleToggleNotJoined(c.id) : markConfirmation.request(c, 'notJoined')}
                           style={{
                             padding: '6px 12px',
                             background: c.isNotJoined ? '#fee2e2' : '#f3f4f6',
@@ -364,6 +373,7 @@ export default function DocumentsTab({ adminToken, adminApiBase: propApiBase }: 
         />
       </>
       )}
+      {markConfirmation.modal}
     </div>
   );
 }

@@ -108,6 +108,17 @@ button.inertButton {
 }
 
 /* Match ProfileNavButton's responsive behaviour */
+@media (max-width: 768px), (pointer: coarse) {
+  .faqPill,
+  .avatarPill {
+    min-height: 44px;
+  }
+  .avatarPill {
+    min-width: 44px;
+    justify-content: center;
+  }
+}
+
 @media (max-width: 640px) {
   .avatarName {
     display: none;
@@ -116,6 +127,6 @@ button.inertButton {
 
 @media (max-width: 380px) {
   .faqPill {
-    width: 40px;
+    width: 44px;
   }
 }

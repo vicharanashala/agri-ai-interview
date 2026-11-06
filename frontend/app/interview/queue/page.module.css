@@ -20,9 +20,12 @@
 }
 
 .logo {
-  height: 40px;
+  height: 36px;
   width: auto;
   object-fit: contain;
+  padding: 4px 8px;
+  background: #ffffff; /* the dark logo text needs a light backing on this dark page */
+  border-radius: 8px;
 }
 
 .brandSub {
@@ -343,4 +346,52 @@
 @keyframes pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.4; transform: scale(0.85); }
+}
+
+/* Phones, tablets and touch screens */
+@media (max-width: 1023px), (pointer: coarse) {
+  .page {
+    min-height: 100dvh;
+    padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  }
+
+  .topBar {
+    position: static;
+    width: 100%;
+    max-width: 520px;
+    margin-bottom: 16px;
+    align-items: flex-start;
+  }
+
+  .card {
+    margin-top: 0;
+  }
+
+  .button {
+    min-height: 44px;
+    max-width: 100%;
+  }
+
+  .backLink {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    margin-top: 8px;
+    padding: 0 8px;
+  }
+
+  .infoRow {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 480px) {
+  .card {
+    padding: 24px 20px;
+  }
+
+  .button {
+    min-width: 0;
+    width: 100%;
+  }
 }

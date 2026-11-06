@@ -138,7 +138,7 @@ export default function FeedbackModal({ onFinish }: FeedbackModalProps) {
               className={styles.textarea}
               rows={4}
               maxLength={MAX_TEXT_LENGTH}
-              placeholder="Share your experience, any issues you faced, or suggestions for improvement (optional)"
+              placeholder="Share your Anveshan journey with us."
               value={comments}
               onChange={(e) => setComments(e.target.value)}
               disabled={submitting}

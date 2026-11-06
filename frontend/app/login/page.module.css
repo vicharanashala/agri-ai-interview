@@ -727,3 +727,30 @@
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
   }
 }
+
+/* Logos shown above the form when the panes stack, since the form then comes before the left pane */
+.stackedBrand {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .rightPane {
+    order: -1;
+    flex-direction: column;
+    gap: 16px;
+    padding: 20px 16px 32px;
+  }
+
+  .stackedBrand {
+    display: block;
+  }
+
+  .topBar {
+    display: none;
+  }
+
+  .leftPane {
+    border-bottom: none;
+    border-top: 1px solid #e2e8f0;
+  }
+}

@@ -765,7 +765,7 @@ export default function QueuePage() {
     <div className={styles.page}>
       {/* Top bar */}
       <div className={styles.topBar}>
-        <img src="/logo.svg" alt="Logo" className={styles.logo} />
+        <img src="/annam-logo.png" alt="ANNAM.AI" className={styles.logo} />
         <p className={styles.brandSub}>Interview Queue</p>
       </div>
 

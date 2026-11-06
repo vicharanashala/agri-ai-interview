@@ -2026,3 +2026,35 @@
     font-size: 13px;
   }
 }
+
+/* Below tablet width: 3x2 grid, so all six steps are visible without sideways scrolling.
+   Grid columns are step, connector, step, connector, step; the connector between steps 3 and 4
+   (6th child) is hidden because those steps are on different rows. */
+@media (max-width: 767px) {
+  .stepperWrapper {
+    overflow: visible;
+  }
+  .stepperRow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(12px, 32px) minmax(0, 1fr) minmax(12px, 32px) minmax(0, 1fr);
+    justify-items: center;
+    align-items: start;
+    row-gap: 20px;
+    min-width: 0;
+    width: 100%;
+    padding: 16px 8px 8px;
+  }
+  .stepNode {
+    width: 100%;
+  }
+  .stepConnector {
+    justify-self: stretch;
+    min-width: 0;
+  }
+  .stepperRow > .stepConnector:nth-child(6) {
+    display: none;
+  }
+  .stepTitle {
+    font-size: 12px;
+  }
+}

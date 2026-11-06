@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react';
 import styles from './page.module.css';
 import { syncPhaseToDb } from '@/lib/phaseSync';
 import { useAntiCheat, type ViolationType } from '@/hooks/useAntiCheat';
+import { useVisualViewportVars } from '@/hooks/useVisualViewportVars';
 import { interceptAuthFetch, authFetch } from '@/lib/auth-fetch';
 import AntiCheatOverlay from '@/components/AntiCheatOverlay';
 import CandidateNavbar from '@/components/CandidateNavbar';
@@ -204,6 +205,15 @@ export default function InterviewPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Keep the latest message in view when the keyboard opens or the screen rotates
+  useVisualViewportVars(() => {
+    const list = messagesEndRef.current?.parentElement;
+    if (!list) return;
+    list.scrollTop = list.scrollHeight;
+    // On the shortest screens the whole panel scrolls instead of the message list
+    if (list.parentElement) list.parentElement.scrollTop = list.parentElement.scrollHeight;
+  });
 
   // Intercept fetch to log all interview API calls (debug)
   useEffect(() => {

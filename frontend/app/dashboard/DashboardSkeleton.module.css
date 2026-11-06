@@ -96,6 +96,10 @@
     flex: 1 1 auto;
     min-width: 0;
   }
+  .stepCircle {
+    width: 52px;
+    height: 52px;
+  }
 }
 
 @media (max-width: 380px) {

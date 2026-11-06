@@ -97,11 +97,11 @@
   color: #059669;
 }
 
-/* Dropdown Menu Card - Aligned left:0 to open rightwards */
+/* Dropdown Menu Card - Aligned right:0 to open leftwards, so it stays on screen at every width */
 .dropdownMenu {
   position: absolute;
   top: calc(100% + 8px);
-  left: 0;
+  right: 0;
   width: 250px;
   background: #ffffff;
   border: 1px solid #e2e8f0;
@@ -230,13 +230,24 @@
   color: #b91c1c;
 }
 
+/* Comfortable touch targets on phones, tablets and any touch screen */
+@media (max-width: 768px), (pointer: coarse) {
+  .faqHeaderBtn,
+  .avatarTrigger,
+  .menuItem {
+    min-height: 44px;
+  }
+  .avatarTrigger {
+    min-width: 44px;
+    justify-content: center;
+  }
+}
+
 @media (max-width: 640px) {
   .avatarName {
     display: none;
   }
   .dropdownMenu {
-    left: auto;
-    right: 0;
     width: 240px;
   }
 }
@@ -269,12 +280,17 @@
 }
 
 @media (max-width: 380px) {
+  .headerNavGroup {
+    gap: 4px;
+  }
   .faqHeaderBtn span {
     display: none;
   }
   .faqHeaderBtn {
     padding: 6px;
     border-radius: 50%;
+    min-width: 44px;
+    justify-content: center;
   }
 }
 

@@ -161,6 +161,7 @@ function AdminDashboard() {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; candidateId: string } | null>(null);
   const [deletingCandidate, setDeletingCandidate] = useState(false);
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<string | null>(null);
+  const [candidateMarkedNotice, setCandidateMarkedNotice] = useState<string | null>(null);
   const [editingGuideline, setEditingGuideline] = useState<string | null>(null);
   const [guidelineContent, setGuidelineContent] = useState("");
   const [editingCriteria, setEditingCriteria] = useState<string | null>(null);
@@ -471,6 +472,12 @@ function AdminDashboard() {
     }
     router.push(href);
   };
+
+  useEffect(() => {
+    if (!candidateMarkedNotice) return;
+    const timer = setTimeout(() => setCandidateMarkedNotice(null), 5000);
+    return () => clearTimeout(timer);
+  }, [candidateMarkedNotice]);
 
   useEffect(() => {
     const handleClick = () => setContextMenu(null);
@@ -1045,6 +1052,7 @@ function AdminDashboard() {
                               onUpdated={(patch) =>
                                 setCandidates((prev) => prev.map((c) => (c.id === candidate.id ? { ...c, ...patch } : c)))
                               }
+                              onMarked={setCandidateMarkedNotice}
                             />
                           </td>
                         </tr>
@@ -1213,6 +1221,7 @@ function AdminDashboard() {
           <DocumentsTab
             adminToken={getAdminToken()}
             adminApiBase={ADMIN_API_BASE}
+            onMarked={setCandidateMarkedNotice}
           />
         )}
 
@@ -1682,6 +1691,29 @@ function AdminDashboard() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {candidateMarkedNotice && (
+        <div
+          role="status"
+          style={{
+            position: "fixed",
+            right: "16px",
+            bottom: "16px",
+            maxWidth: "min(420px, calc(100vw - 32px))",
+            padding: "12px 16px",
+            borderRadius: "8px",
+            background: "#d1fae5",
+            border: "1px solid #6ee7b7",
+            color: "#065f46",
+            fontSize: "14px",
+            lineHeight: "1.5",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+            zIndex: 10001
+          }}
+        >
+          {candidateMarkedNotice}
         </div>
       )}
     </div>

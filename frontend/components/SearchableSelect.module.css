@@ -140,3 +140,10 @@
   flex-shrink: 0;
   color: #22c55e;
 }
+
+/* iOS zooms the page into inputs under 16px */
+@media (max-width: 768px) {
+  .searchInput {
+    font-size: 16px;
+  }
+}

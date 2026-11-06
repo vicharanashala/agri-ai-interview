@@ -189,6 +189,9 @@ function ResetPasswordInner() {
           className={styles.rightPaneBg}
           aria-hidden="true"
         />
+        <div className={styles.stackedBrand}>
+          <BrandLogos variant="login" />
+        </div>
         <div className={styles.loginBox}>
           <div className={styles.lockIconHeader}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

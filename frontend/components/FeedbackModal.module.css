@@ -13,6 +13,7 @@
   z-index: 1000;
   padding: 16px;
   box-sizing: border-box;
+  overflow-y: auto;
   animation: overlayFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -207,4 +208,16 @@
   font-size: 14px;
   color: #64748b;
   margin-bottom: 20px;
+}
+
+/* Auto margins keep the dialog centred, but let it scroll from its top edge when taller than the screen */
+.dialog {
+  margin: auto;
+}
+
+/* iOS zooms the page into inputs under 16px */
+@media (max-width: 768px) {
+  .textarea {
+    font-size: 16px;
+  }
 }

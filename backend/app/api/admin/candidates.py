@@ -634,16 +634,43 @@ def get_active_interviews(_admin=Depends(require_admin_auth)):
     from bson import ObjectId
 
     db = get_sync_db()
-    # Polled every few seconds by the Live tab, so only the fields the response uses are loaded
+    now = datetime.now(timezone.utc)
+    active_cutoff = now - timedelta(minutes=5)
+    stale_cleanup_cutoff = now - timedelta(minutes=15)
+
+    # 1. Auto-expire sessions left active with no activity for >15 minutes
+    try:
+        db.interview_sessions.update_many(
+            {
+                "status": {"$in": ["active", "interviewing"]},
+                "$or": [
+                    {"updated_at": {"$lt": stale_cleanup_cutoff}},
+                    {"updated_at": None, "started_at": {"$lt": stale_cleanup_cutoff}},
+                    {"updated_at": {"$exists": False}, "started_at": {"$lt": stale_cleanup_cutoff}},
+                ]
+            },
+            {"$set": {"status": "abandoned", "end_reason": "stale_timeout", "updated_at": now}}
+        )
+    except Exception:
+        pass
+
+    # 2. Only return sessions with activity in the last 5 minutes (currently attending)
     sessions = list(db.interview_sessions.find(
-        {"status": {"$in": ["active", "interviewing", "paused"]}},
-        {"candidate_id": 1, "started_at": 1, "current_phase": 1, "interview_data": 1},
+        {
+            "status": {"$in": ["active", "interviewing"]},
+            "$or": [
+                {"updated_at": {"$gte": active_cutoff}},
+                {"updated_at": None, "started_at": {"$gte": active_cutoff}},
+                {"updated_at": {"$exists": False}, "started_at": {"$gte": active_cutoff}},
+            ]
+        },
+        {"candidate_id": 1, "started_at": 1, "updated_at": 1, "current_phase": 1, "interview_data": 1},
     ).sort("started_at", -1).limit(100))
 
     cand_ids = [s.get("candidate_id") for s in sessions if s.get("candidate_id")]
     cand_vars = []
     for cid in cand_ids: cand_vars.extend(_get_id_variants(cid))
-    candidates = list(db.candidates.find({"_id": {"$in": cand_vars}}, {"full_name": 1, "user_id": 1}))
+    candidates = list(db.candidates.find({"_id": {"$in": cand_vars}}, {"full_name": 1, "user_id": 1, "state": 1, "district": 1}))
     cand_map = {str(c["_id"]): c for c in candidates}
 
     user_ids = [c.get("user_id") for c in candidates if c.get("user_id")]
@@ -687,7 +714,10 @@ def get_active_interviews(_admin=Depends(require_admin_auth)):
             "id": s["_id"],
             "candidateId": s.get("candidate_id", ""),
             "candidateName": candidate_name,
+            "candidateState": candidate.get("state") or "",
+            "candidateDistrict": candidate.get("district") or "",
             "startedAt": s.get("started_at", ""),
+            "updatedAt": s.get("updated_at", ""),
             "messagesCount": len(messages),
             "messages": messages[-50:] if len(messages) > 50 else messages,
             "currentPhase": s.get("current_phase", "interview"),

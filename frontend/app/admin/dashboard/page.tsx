@@ -56,6 +56,8 @@ interface ActiveInterview {
   messagesCount: number;
   messages: { role: string; content: string; timestamp: string }[];
   currentPhase: string;
+  candidateState?: string;
+  candidateDistrict?: string;
 }
 
 interface EvaluationCriteria {
@@ -866,6 +868,12 @@ function AdminDashboard() {
             interviews={activeInterviews}
             selectedId={selectedInterview}
             onSelect={setSelectedInterview}
+            adminToken={getAdminToken()}
+            adminApiBase={ADMIN_API_BASE}
+            onNavigateToCandidates={(stateName) => {
+              if (stateName) setStateFilter(stateName);
+              setActiveTab("candidates");
+            }}
           />
         )}
 

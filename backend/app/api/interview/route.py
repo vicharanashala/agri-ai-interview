@@ -28,6 +28,11 @@ class StartInterviewRequest(BaseModel):
     candidate_id: Optional[str] = None
 
 
+class HeartbeatRequest(BaseModel):
+    interview_id: str
+    candidate_id: Optional[str] = None
+
+
 class EndInterviewRequest(BaseModel):
     end_reason: Optional[str] = None
 
@@ -569,3 +574,15 @@ async def get_interview_evaluation(interview_id: str):
 
     # Fallback if evaluation cannot be completed
     return {"status": "error", "result": "FAIL", "overall_score": 0, "evaluation": None}
+
+
+@router.post("/heartbeat")
+async def interview_heartbeat(payload: HeartbeatRequest):
+    """Keep-alive ping from candidate browser during an active interview."""
+    db = get_sync_db()
+    now = datetime.now(timezone.utc)
+    res = db.interview_sessions.update_one(
+        {"_id": payload.interview_id, "status": {"$in": ["active", "interviewing"]}},
+        {"$set": {"updated_at": now, "last_heartbeat": now}}
+    )
+    return {"status": "ok", "recorded": res.modified_count > 0}

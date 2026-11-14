@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, Request
 
 from app.services.vibe_client import get_course_completions, is_email_in_completions
 from app.core.session import get_session_store, _hash_token
+from app.core.candidate_status import ensure_candidate_id_not_deleted
 from bson import ObjectId
 
 router = APIRouter(prefix="/api/candidate", tags=["candidate"])
@@ -33,6 +34,9 @@ def _get_candidate_id_from_request(request: Request) -> str:
     candidate_id = session.get("candidate_id")
     if not candidate_id:
         raise HTTPException(status_code=401, detail="Invalid session")
+
+    from app.db.mongodb import get_sync_db
+    ensure_candidate_id_not_deleted(get_sync_db(), candidate_id)
     return candidate_id
 
 

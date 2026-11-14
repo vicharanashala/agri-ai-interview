@@ -13,6 +13,12 @@ import json
 import hashlib
 
 from app.core.session import get_session_store, _SESSION_KEY_PREFIX, _hash_token, _make_token, _session_key
+from app.core.candidate_status import (
+    STATE_DELETED,
+    account_deactivated_exception,
+    ensure_candidate_id_not_deleted,
+    resolve_candidate_account,
+)
 
 router = APIRouter(prefix="/api/candidate", tags=["candidate-session"])
 _SESSION_TTL = 30 * 24 * 60 * 60  # 30 days in seconds
@@ -70,17 +76,11 @@ async def create_session(request: Request, response: Response):
     if user.get("isdeleted") or user.get("is_deleted"):
         raise HTTPException(status_code=403, detail="Account is deactivated")
 
-    # user_id is stored as string in candidates, so convert consistently
-    user_id_str = str(user["_id"])
-    candidate = db.candidates.find_one({
-        "user_id": {"$in": [user_id_str, user["_id"]]},
-        "$or": [{"isdeleted": {"$ne": True}}, {"is_deleted": {"$ne": True}}]
-    })
+    # Candidates in the Admin Trash Bin never get a session
+    state, candidate = resolve_candidate_account(db, user=user)
+    if state == STATE_DELETED:
+        raise account_deactivated_exception()
     if not candidate:
-        candidate = db.candidates.find_one({
-            "user_id": {"$in": [user_id_str, user["_id"]]},
-        })
-    if not candidate or candidate.get("isdeleted") or candidate.get("is_deleted"):
         raise HTTPException(status_code=401, detail="Invalid session establishment")
 
     user_id = str(user["_id"])
@@ -146,6 +146,9 @@ async def verify_session(request: Request):
 
     if not session:
         raise HTTPException(status_code=401, detail="Session expired or invalid")
+
+    from app.db.mongodb import get_sync_db
+    ensure_candidate_id_not_deleted(get_sync_db(), session.get("candidate_id"))
 
     return {
         "valid": True,

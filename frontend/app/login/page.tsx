@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import styles from './page.module.css';
 import OtpModal from '@/components/OtpModal/OtpModal';
 import BrandLogos from '@/components/BrandLogos';
+import { ACCOUNT_DEACTIVATED_CODE, ACCOUNT_DEACTIVATED_MESSAGE, ACCOUNT_DEACTIVATED_REASON } from '@/lib/account-status';
 
 // ── Registration step machine ────────────────────────────────────────────────
 // step 1: email  →  step 2: otp  →  step 3: name+password
@@ -20,8 +21,14 @@ export default function LoginPage() {
 }
 
 function LoginPageInner() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const isIdleTimeout = searchParams.get('reason') === 'idle';
+  // Set after a forced sign-out because the account is in the Admin Trash Bin
+  const isAccountDeactivated = searchParams.get('reason') === ACCOUNT_DEACTIVATED_REASON;
+
   // ── View toggle: 'signin' | 'register' | 'forgot_password' ────────────────
-  const [view, setView] = useState<'signin' | 'register' | 'forgot_password'>('register');
+  const [view, setView] = useState<'signin' | 'register' | 'forgot_password'>(isAccountDeactivated ? 'signin' : 'register');
 
   // ── Forgot Password state ────────────────────────────────────
   const [forgotEmail, setForgotEmail] = useState('');
@@ -32,7 +39,7 @@ function LoginPageInner() {
   // ── Sign-in state ────────────────────────────────────────────
   const [signInEmail, setSignInEmail] = useState('');
   const [signInPassword, setSignInPassword] = useState('');
-  const [signInError, setSignInError] = useState('');
+  const [signInError, setSignInError] = useState(isAccountDeactivated ? ACCOUNT_DEACTIVATED_MESSAGE : '');
   const [signInLoading, setSignInLoading] = useState(false);
   const [showSignInPassword, setShowSignInPassword] = useState(false);
 
@@ -47,10 +54,6 @@ function LoginPageInner() {
 
   // ── OTP modal ────────────────────────────────────────────────
   const [otpOpen, setOtpOpen] = useState(false);
-
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const isIdleTimeout = searchParams.get('reason') === 'idle';
 
   // ── Step 1: Send OTP ─────────────────────────────────────────
   const handleSendOtp = async (e: React.FormEvent) => {
@@ -141,6 +144,13 @@ function LoginPageInner() {
         redirect: false,
       });
 
+      if (result?.error === ACCOUNT_DEACTIVATED_CODE) {
+        setRegError(ACCOUNT_DEACTIVATED_MESSAGE);
+        setRegStep(1);
+        setRegLoading(false);
+        return;
+      }
+
       if (result?.error) {
         setRegError('Account created but sign-in failed. Please sign in manually.');
         setRegStep(1);
@@ -176,9 +186,11 @@ function LoginPageInner() {
 
       if (result?.error) {
         const errorMsg =
-          result.error === 'CredentialsSignin'
-            ? 'Invalid email or password'
-            : result.error;
+          result.error === ACCOUNT_DEACTIVATED_CODE
+            ? ACCOUNT_DEACTIVATED_MESSAGE
+            : result.error === 'CredentialsSignin'
+              ? 'Invalid email or password'
+              : result.error;
         setSignInError(errorMsg);
         setSignInLoading(false);
         return;

@@ -8,6 +8,9 @@ import DeclarationSkeleton from '@/app/declaration/DeclarationSkeleton';
 import OnboardingSkeleton from '@/app/onboarding/OnboardingSkeleton';
 import InterviewGuidelinesSkeleton from '@/app/interview/InterviewGuidelinesSkeleton';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { handleAccountDeactivated, isAccountDeactivatedResponse } from '@/lib/account-status';
+
+class AccountDeactivatedError extends Error {}
 
 // Skeleton that resembles the page this hand-off is about to open
 function skeletonFor(destination: string) {
@@ -35,6 +38,7 @@ function PostLoginContent() {
   };
 
   // ── Helper: create a fresh backend session ───────────────────────────────────
+  // Throws AccountDeactivatedError when the candidate is in the Admin Trash Bin.
   async function _createBackendSession(candidateId: string, email: string) {
     try {
       const res = await fetch('/api/candidate/session', {
@@ -43,6 +47,7 @@ function PostLoginContent() {
         credentials: 'include',
         body: JSON.stringify({ candidate_id: candidateId, email }),
       });
+      if (await isAccountDeactivatedResponse(res)) throw new AccountDeactivatedError();
       const data = await res.json();
       console.log('[post-login] session response:', res.status, 'token?', !!data.token);
       if (data.token) {
@@ -53,6 +58,7 @@ function PostLoginContent() {
         console.warn('[post-login] No token in session response:', JSON.stringify(data));
       }
     } catch (e) {
+      if (e instanceof AccountDeactivatedError) throw e;
       console.warn('[post-login] Failed to create backend session', e);
     }
   }
@@ -71,9 +77,10 @@ function PostLoginContent() {
     console.log('[post-login] Fetching /api/candidate...');
     // Step 1: Fetch candidate record to know phase AND to pass to session creation
     fetch('/api/candidate', { credentials: 'include', cache: 'no-store' })
-      .then((res) => {
+      .then(async (res) => {
         console.log('[post-login] /api/candidate status:', res.status);
         if (res.ok) return res.json();
+        if (await isAccountDeactivatedResponse(res)) throw new AccountDeactivatedError();
         throw new Error('No candidate');
       })
       .then(async (candidate: { id?: string; currentPhase?: string; declarationAccepted?: boolean }) => {
@@ -103,6 +110,7 @@ function PostLoginContent() {
                 headers: { Authorization: `Bearer ${existingToken}` },
               });
 
+              if (await isAccountDeactivatedResponse(verifyRes)) throw new AccountDeactivatedError();
               if (verifyRes.ok) {
                 const verifyData = await verifyRes.json();
                 console.log('[post-login] Existing token valid, candidate_id:', verifyData.candidate_id);
@@ -113,6 +121,7 @@ function PostLoginContent() {
                 throw new Error('Token expired');
               }
             } catch (verifyErr) {
+              if (verifyErr instanceof AccountDeactivatedError) throw verifyErr;
               // Token missing, invalid, or verify failed — create fresh session
               console.log('[post-login] Will create new session:', verifyErr);
               await _createBackendSession(candidate.id, session.user.email);
@@ -141,6 +150,12 @@ function PostLoginContent() {
         }
       })
       .catch((err) => {
+        if (err instanceof AccountDeactivatedError) {
+          // Admin Trash Bin: stop here, sign out and show the message on /login
+          console.log('[post-login] Account deactivated — signing out');
+          handleAccountDeactivated();
+          return;
+        }
         console.log('[post-login] /api/candidate failed, redirecting to /onboarding', err);
         // No candidate record yet — send to onboarding (no session needed yet)
         goTo('/onboarding');

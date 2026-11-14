@@ -5,6 +5,8 @@ from fastapi import HTTPException, Request, Depends
 import hashlib
 
 from app.core.session import get_session_store, _hash_token
+from app.core.candidate_status import ensure_candidate_id_not_deleted
+from app.db.mongodb import get_sync_db
 
 # ── Public paths ───────────────────────────────────────────────────────────────
 
@@ -83,5 +85,8 @@ async def get_candidate_session(request: Request) -> dict:
             status_code=401,
             detail="Session expired — please log in again",
         )
+
+    # An existing session gives no access while the candidate is in the Admin Trash Bin
+    ensure_candidate_id_not_deleted(get_sync_db(), session.get("candidate_id"))
 
     return session

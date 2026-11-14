@@ -4,6 +4,7 @@ Candidate interview attempts + cooldown endpoint.
 from fastapi import APIRouter, HTTPException, Request, Query
 from app.db.mongodb import get_sync_db
 from app.core.session import session_store, _hash_token
+from app.core.candidate_status import ensure_candidate_id_not_deleted, resolve_candidate_account
 from datetime import datetime, timezone, timedelta
 
 router = APIRouter(prefix="/api/candidate", tags=["candidate-attempts"])
@@ -14,7 +15,8 @@ def _candidate_by_email(db, email: str):
     user = db.users.find_one({"email": email})
     if not user:
         return None, None
-    candidate = db.candidates.find_one({"user_id": str(user["_id"])})
+    # Prefers an active record; a deleted one is returned only when no active record exists
+    _, candidate = resolve_candidate_account(db, user=user)
     return candidate, user.get("email")
 
 
@@ -51,6 +53,9 @@ async def get_attempts(request: Request, email: str = Query(default=None)):
 
     if not candidate_id:
         raise HTTPException(status_code=401, detail="Authentication required")
+
+    # Neither the session nor the email fallback gives access to a candidate in the Trash Bin
+    ensure_candidate_id_not_deleted(db, candidate_id)
 
     candidate_role = None
     if candidate_id:

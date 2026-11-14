@@ -9,6 +9,7 @@ from bson import ObjectId
 
 from app.core.config import settings
 from app.core.session import get_session_store, _hash_token
+from app.core.candidate_status import ensure_candidate_id_not_deleted
 
 router = APIRouter(prefix="/api/candidate/question-collection", tags=["candidate", "question-collection"])
 
@@ -26,6 +27,9 @@ def _get_candidate_id_from_request(request: Request) -> str:
     candidate_id = session.get("candidate_id")
     if not candidate_id:
         raise HTTPException(status_code=401, detail="Invalid session")
+
+    from app.db.mongodb import get_sync_db
+    ensure_candidate_id_not_deleted(get_sync_db(), candidate_id)
     return candidate_id
 
 def _get_candidate_mobile_from_db(candidate_id: str) -> str:

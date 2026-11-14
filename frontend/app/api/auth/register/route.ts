@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
+import { ACCOUNT_DEACTIVATED_CODE, ACCOUNT_DEACTIVATED_MESSAGE, isAccountDeactivatedBody } from '@/lib/account-status'
 
 const BACKEND_URL = process.env.BACKEND_URL
 
@@ -31,6 +32,13 @@ export async function POST(request: NextRequest) {
     const data = await res.json()
 
     if (!res.ok) {
+      // Candidate in the Admin Trash Bin: send the message text, never the raw detail object
+      if (isAccountDeactivatedBody(data)) {
+        return NextResponse.json(
+          { error: ACCOUNT_DEACTIVATED_MESSAGE, code: ACCOUNT_DEACTIVATED_CODE },
+          { status: res.status }
+        )
+      }
       return NextResponse.json({ error: data.detail ?? data.error ?? 'Registration failed' }, { status: res.status })
     }
 

@@ -167,12 +167,8 @@ export function useAntiCheat({
       document.addEventListener(event, recordActivity, { passive: true })
     })
 
-    // Idle detection — check every 5 seconds
-    idleTimerRef.current = setInterval(() => {
-      if (Date.now() - lastActivityTime.current >= idleThresholdMs) {
-        checkAndRecord('idle')
-      }
-    }, 5_000)
+    // Idle detection disabled — individual per-question timers (120s / 30s) handle question pacing.
+    // Sitting still to think without typing for 10-15 seconds should not trigger anti-cheat offenses.
 
     // Multi-monitor detection — poll screen position every 2 seconds
     const pollScreen = setInterval(() => {

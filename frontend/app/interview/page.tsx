@@ -78,7 +78,6 @@ export default function InterviewPage() {
   const [closingInterviewId, setClosingInterviewId] = useState<string | null>(null);
   const [candidateId, setCandidateId] = useState<string>('');
   const [idleThresholdMs, setIdleThresholdMs] = useState<number>(15_000);
-  const [timeRemainingSeconds, setTimeRemainingSeconds] = useState<number>(-1);
   const [startTimeMs, setStartTimeMs] = useState<number | null>(null);
 
   // Structured Assessment (13 Core + 12 Rapid-Fire Questions = 25 Total)
@@ -191,21 +190,6 @@ export default function InterviewPage() {
       setStartTimeMs(Date.now());
     }
   }, [interviewId, showInstructions]);
-
-  // Timer: compute remaining time from startTimeMs every second (whole seconds only)
-  useEffect(() => {
-    if (!startTimeMs || showInstructions) return;
-
-    const MAX_DURATION_SECONDS = 30 * 60; // 30 minutes — synced to backend default
-
-    const tick = () => {
-      const elapsed = Math.floor((Date.now() - startTimeMs) / 1000);
-      setTimeRemainingSeconds(Math.max(0, MAX_DURATION_SECONDS - elapsed));
-    };
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [startTimeMs, showInstructions]);
 
   // Auto-focus input whenever a new AI question arrives
   useEffect(() => {
@@ -1126,20 +1110,6 @@ export default function InterviewPage() {
             </div>
           )}
 
-          {/* Live time-remaining badge */}
-          {timeRemainingSeconds >= 0 && !showInstructions && (
-            <div style={{
-              display: 'flex',
-              justifyContent: 'flex-end',
-              padding: '4px 16px 0',
-              fontSize: '13px',
-              color: timeRemainingSeconds < 60 ? '#dc2626' : '#6b7280',
-              fontFamily: 'monospace',
-            }}>
-              ⏱ {Math.floor(timeRemainingSeconds / 60)}:{String(timeRemainingSeconds % 60).padStart(2, '0')} remaining
-            </div>
-          )}
-
           {/* Structured Assessment Question Header & Timer Banner */}
           {!showInstructions && !isComplete && (
             <>
@@ -1194,12 +1164,12 @@ export default function InterviewPage() {
 
               return (
                 <div key={index} className={`${styles.message} ${roleClass}`}>
+                  <div className={styles.messageContent}>{contentText}</div>
                   {message.imageUrl && (
                     <div className={styles.questionImageWrapper}>
                       <img src={message.imageUrl} alt="Visual Identification Specimen" className={styles.questionImage} />
                     </div>
                   )}
-                  <div className={styles.messageContent}>{contentText}</div>
                 {message.evaluation && (
                   <div className={styles.evaluationCard}>
                     <div className={styles.score} style={{ color: getScoreColor(message.evaluation.score) }}>
@@ -1289,19 +1259,6 @@ export default function InterviewPage() {
                   </span>
                 )}
               </div>
-              {(() => {
-                const latestQ = [...messages].reverse().find(m => m.role === 'ai')?.content;
-                return latestQ ? (
-                  <div className={styles.rapidFireQuestionBox}>
-                    <p className={styles.rapidFireQuestionText}>{latestQ}</p>
-                  </div>
-                ) : null;
-              })()}
-              {currentImageUrl && (
-                <div className={styles.rapidFireImageWrapper}>
-                  <img src={currentImageUrl} alt="Visual Identification Specimen" className={styles.rapidFireImage} />
-                </div>
-              )}
               <div className={styles.optionsGrid}>
                 {currentOptions.map((opt, idx) => {
                   const letter = String.fromCharCode(65 + idx);

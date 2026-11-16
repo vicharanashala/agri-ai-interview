@@ -505,7 +505,7 @@ IMAGE_QUESTION_BANK: Dict[int, List[Dict[str, Any]]] = {
         {
             "id": "img_att1_01",
             "topic": "nutrient_deficiencies",
-            "question": "Examine the leaf specimen shown in the image above. Which nutrient deficiency is primarily indicated by this distinct interveinal chlorosis with dark green veins on young foliage?",
+            "question": "Examine the leaf specimen shown in the image below. Which nutrient deficiency is primarily indicated by this distinct interveinal chlorosis with dark green veins on young foliage?",
             "options": [
                 "A) Iron (Fe) chlorosis",
                 "B) Nitrogen (N) deficiency",
@@ -519,7 +519,7 @@ IMAGE_QUESTION_BANK: Dict[int, List[Dict[str, Any]]] = {
         {
             "id": "img_att1_02",
             "topic": "pest_and_disease_management",
-            "question": "Identify the agricultural pest and characteristic fruit damage shown in the specimen photo above:",
+            "question": "Identify the agricultural pest and characteristic fruit damage shown in the specimen photo below:",
             "options": [
                 "A) Tomato Fruit Borer (Helicoverpa armigera)",
                 "B) Cotton Whitefly (Bemisia tabaci)",
@@ -533,7 +533,7 @@ IMAGE_QUESTION_BANK: Dict[int, List[Dict[str, Any]]] = {
         {
             "id": "img_att1_03",
             "topic": "pest_and_disease_management",
-            "question": "The concentric 'target-board' necrotic leaf spots shown in the specimen are a diagnostic foliar symptom of which crop disease?",
+            "question": "The concentric 'target-board' necrotic leaf spots shown in the specimen below are a diagnostic foliar symptom of which crop disease?",
             "options": [
                 "A) Early Blight (Alternaria solani)",
                 "B) Bacterial Wilt (Ralstonia solanacearum)",
@@ -549,7 +549,7 @@ IMAGE_QUESTION_BANK: Dict[int, List[Dict[str, Any]]] = {
         {
             "id": "img_att2_01",
             "topic": "pest_and_disease_management",
-            "question": "Examine the maize whorl damage and larva shown in the image above. Which invasive pest is responsible for this ragged feeding and sawdust-like frass?",
+            "question": "Examine the maize whorl damage and larva shown in the image below. Which invasive pest is responsible for this ragged feeding and sawdust-like frass?",
             "options": [
                 "A) Fall Armyworm (Spodoptera frugiperda)",
                 "B) Pink Stem Borer (Sesamia inferens)",
@@ -563,7 +563,7 @@ IMAGE_QUESTION_BANK: Dict[int, List[Dict[str, Any]]] = {
         {
             "id": "img_att2_02",
             "topic": "pest_and_disease_management",
-            "question": "The white, talcum powder-like fungal patches covering the upper leaf surface in the specimen are characteristic of which fungal disease?",
+            "question": "The white, talcum powder-like fungal patches covering the upper leaf surface in the specimen below are characteristic of which fungal disease?",
             "options": [
                 "A) Powdery Mildew (Erysiphe / Oidium spp.)",
                 "B) Downy Mildew (Pseudoperonospora cubensis)",
@@ -577,7 +577,7 @@ IMAGE_QUESTION_BANK: Dict[int, List[Dict[str, Any]]] = {
         {
             "id": "img_att2_03",
             "topic": "nutrient_deficiencies",
-            "question": "Examine the foliar chlorosis pattern in the specimen. Which essential nutrient deficiency exhibits this classic V-shaped yellowing starting from the leaf tip along the midrib?",
+            "question": "Examine the foliar chlorosis pattern in the specimen below. Which essential nutrient deficiency exhibits this classic V-shaped yellowing starting from the leaf tip along the midrib?",
             "options": [
                 "A) Nitrogen (N) deficiency",
                 "B) Magnesium (Mg) deficiency",
@@ -593,7 +593,7 @@ IMAGE_QUESTION_BANK: Dict[int, List[Dict[str, Any]]] = {
         {
             "id": "img_att3_01",
             "topic": "pest_and_disease_management",
-            "question": "In the rice hill specimen shown above, what is the agronomic symptom and causative pest of the withered, dry central apical shoot ('Dead Heart')?",
+            "question": "In the rice hill specimen shown below, what is the agronomic symptom and causative pest of the withered, dry central apical shoot ('Dead Heart')?",
             "options": [
                 "A) Yellow Stem Borer (Scirpophaga incertulas) causing Dead Heart",
                 "B) Rice Gall Midge (Orseolia oryzae) causing Silver Shoot",
@@ -607,7 +607,7 @@ IMAGE_QUESTION_BANK: Dict[int, List[Dict[str, Any]]] = {
         {
             "id": "img_att3_02",
             "topic": "pest_and_disease_management",
-            "question": "The spindle-shaped lesions with reddish-brown borders and greyish centers shown on the rice leaf are diagnostic symptoms of which major disease?",
+            "question": "The spindle-shaped lesions with reddish-brown borders and greyish centers shown on the rice leaf below are diagnostic symptoms of which major disease?",
             "options": [
                 "A) Rice Blast (Magnaporthe oryzae / Pyricularia oryzae)",
                 "B) Sheath Blight (Rhizoctonia solani)",
@@ -621,7 +621,7 @@ IMAGE_QUESTION_BANK: Dict[int, List[Dict[str, Any]]] = {
         {
             "id": "img_att3_03",
             "topic": "nutrient_deficiencies",
-            "question": "Examine the leaf margins in the specimen. Which nutrient deficiency characteristically manifests as marginal chlorosis followed by scorched, firing edges along older leaf margins?",
+            "question": "Examine the leaf margins in the specimen below. Which nutrient deficiency characteristically manifests as marginal chlorosis followed by scorched, firing edges along older leaf margins?",
             "options": [
                 "A) Potassium (K) deficiency",
                 "B) Calcium (Ca) blossom-end rot",

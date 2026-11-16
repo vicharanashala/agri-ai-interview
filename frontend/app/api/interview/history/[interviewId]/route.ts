@@ -1,0 +1,26 @@
+import { NextRequest, NextResponse } from 'next/server';
+
+const API_BASE_URL = process.env.BACKEND_URL;
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ interviewId: string }> }
+) {
+  try {
+    const { interviewId } = await params;
+    const authHeader = request.headers.get('Authorization');
+    const headers: Record<string, string> = {};
+    if (authHeader) headers['Authorization'] = authHeader;
+
+    const response = await fetch(`${API_BASE_URL}/api/interview/history/${interviewId}`, {
+      method: 'GET',
+      headers,
+    });
+
+    const data = await response.json();
+    return NextResponse.json(data, { status: response.status });
+  } catch (error) {
+    console.error('Error proxying history to backend:', error);
+    return NextResponse.json({ error: 'Backend unavailable' }, { status: 500 });
+  }
+}

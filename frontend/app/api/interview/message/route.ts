@@ -5,7 +5,14 @@ const API_URL = process.env.BACKEND_URL;
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const interviewId = body.interviewId;
+    const interviewId = body.interviewId || body.interview_id;
+    
+    if (!interviewId) {
+      return NextResponse.json(
+        { error: 'Missing interview ID' },
+        { status: 400 }
+      );
+    }
     
     const authHeader = request.headers.get('Authorization');
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };

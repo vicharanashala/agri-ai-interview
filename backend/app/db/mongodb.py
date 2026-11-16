@@ -18,7 +18,7 @@ _async_db = None
 def get_async_client() -> AsyncIOMotorClient:
     global _async_client
     if _async_client is None:
-        _async_client = AsyncIOMotorClient(settings.MONGO_URI)
+        _async_client = AsyncIOMotorClient(settings.MONGO_URI, serverSelectionTimeoutMS=1000)
     return _async_client
 
 
@@ -38,7 +38,7 @@ _sync_db = None
 def get_sync_client() -> MongoClient:
     global _sync_client
     if _sync_client is None:
-        _sync_client = MongoClient(settings.MONGO_URI)
+        _sync_client = MongoClient(settings.MONGO_URI, serverSelectionTimeoutMS=1000)
     return _sync_client
 
 

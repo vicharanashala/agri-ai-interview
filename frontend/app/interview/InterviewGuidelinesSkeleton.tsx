@@ -8,9 +8,9 @@ import styles from './InterviewGuidelinesSkeleton.module.css';
 // shimmer bones, so the card wraps and sizes exactly like the page that
 // replaces it at every width. Keep the copy in sync with page.tsx.
 const GUIDELINES = [
-  'This is an AI powered chat interview.',
-  'The interview will adapt based on your responses and evaluate accordingly.',
-  'Try to answer the questions in depth to get better results.',
+  'Part 1: 13 Core Questions from agriculture topics (2 minutes each).',
+  'Part 2: 12 Rapid-Fire Questions with four-option multiple choices, including visual image identification (30 seconds each).',
+  'Visible countdown timers automatically advance to the next question when time expires.',
 ];
 
 const RULES: [string, string, string][] = [

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import styles from './page.module.css';
 import { syncPhaseToDb } from '@/lib/phaseSync';
-import { useAntiCheat, type ViolationType } from '@/hooks/useAntiCheat';
+import { useAntiCheat, type ViolationType, type ViolationLogDetails } from '@/hooks/useAntiCheat';
 import { useVisualViewportVars } from '@/hooks/useVisualViewportVars';
 import { interceptAuthFetch, authFetch } from '@/lib/auth-fetch';
 import AntiCheatOverlay from '@/components/AntiCheatOverlay';
@@ -13,6 +13,12 @@ import CandidateNavbar from '@/components/CandidateNavbar';
 
 interface Message {
   role: 'ai' | 'user';
+  phase?: 'core' | 'rapid_fire';
+  options?: string[];
+  questionNumber?: number;
+  totalQuestions?: number;
+  topic?: string;
+  imageUrl?: string | null;
   content: string;
   evaluation?: {
     score: number;
@@ -75,9 +81,34 @@ export default function InterviewPage() {
   const [timeRemainingSeconds, setTimeRemainingSeconds] = useState<number>(-1);
   const [startTimeMs, setStartTimeMs] = useState<number | null>(null);
 
+  // Structured Assessment (13 Core + 12 Rapid-Fire Questions = 25 Total)
+  const [currentPhase, setCurrentPhase] = useState<'core' | 'rapid_fire'>('core');
+  const [currentQuestionNumber, setCurrentQuestionNumber] = useState<number>(1);
+  const [totalQuestions, setTotalQuestions] = useState<number>(25);
+  const [currentTopic, setCurrentTopic] = useState<string | null>('agricultural_concepts');
+  const [currentOptions, setCurrentOptions] = useState<string[] | null>(null);
+  const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(null);
+  const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  const [rapidFireTimeoutsCount, setRapidFireTimeoutsCount] = useState<number>(0);
+  const [questionTimeLimit, setQuestionTimeLimit] = useState<number>(120);
+  const [questionTimeRemaining, setQuestionTimeRemaining] = useState<number>(120);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const isSubmittingRef = useRef(false);
+
+  // Question countdown timer refs
+  const questionStartMsRef = useRef<number>(Date.now());
+  const questionTimeLimitRef = useRef<number>(questionTimeLimit);
+  const hasTimedOutRef = useRef<boolean>(false);
+  const latestInputRef = useRef(input);
+  const latestSelectedOptionRef = useRef(selectedOption);
+  const latestPhaseRef = useRef(currentPhase);
+
+  latestInputRef.current = input;
+  latestSelectedOptionRef.current = selectedOption;
+  latestPhaseRef.current = currentPhase;
+  questionTimeLimitRef.current = questionTimeLimit;
 
   // Anti-cheat: warning callback
   const handleCheatViolation = useCallback((type: ViolationType, count: number) => {
@@ -97,7 +128,7 @@ export default function InterviewPage() {
   }, [interviewId, router])
 
   // Anti-cheat: log violation to backend (fire-and-forget)
-  const handleCheatLog = useCallback((type: ViolationType) => {
+  const handleCheatLog = useCallback((type: ViolationType, details?: ViolationLogDetails) => {
     authFetch('/api/anti-cheat/log', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -106,17 +137,17 @@ export default function InterviewPage() {
         interviewId: interviewId || null,
         eventType: type,
         severity: 'warning',
-        message: null,
-        metadata: null,
+        message: details?.message ?? null,
+        metadata: details?.metadata ? JSON.stringify(details.metadata) : null,
       }),
     }).catch(() => {})  // silently ignore errors — don't affect interview
   }, [interviewId, candidateId])
 
-  const { reset: resetAntiCheat } = useAntiCheat({
+  const { reset: resetAntiCheat, recordViolation } = useAntiCheat({
     onViolation: handleCheatViolation,
     onTerminate: handleCheatTerminate,
     onLogEvent: handleCheatLog,
-    enabled: !showInstructions && !isComplete,
+    enabled: !showInstructions && !isComplete && !isInterviewCompleted && !showClosingPage && !showStarting && !showResumePrompt && !isReconnecting,
     idleThresholdMs,
   })
 
@@ -125,6 +156,22 @@ export default function InterviewPage() {
     const restore = interceptAuthFetch()
     return restore
   }, [])
+
+  // Restore stored interview session and start time from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('currentInterview');
+      if (stored) {
+        const { interviewId: storedId, startedAt } = JSON.parse(stored);
+        if (storedId) {
+          setInterviewId((prev) => prev || storedId);
+        }
+        if (startedAt) {
+          setStartTimeMs((prev) => prev || new Date(startedAt).getTime());
+        }
+      }
+    } catch { /* ignore */ }
+  }, []);
 
   // Capture interview start time when interview begins
   useEffect(() => {
@@ -352,6 +399,14 @@ export default function InterviewPage() {
       });
       const queueData = await queueRes.json();
 
+      if (!queueRes.ok || !queueData || queueData.error) {
+        setShowStarting(false);
+        setShowInstructions(true);
+        const errMsg = queueData?.error || queueData?.detail || queueData?.message || 'Failed to start interview. Please try again.';
+        setError(errMsg);
+        return;
+      }
+
       if (queueData.result === 'no_slot') {
         setShowStarting(false);
         setShowInstructions(true);
@@ -378,27 +433,68 @@ export default function InterviewPage() {
 
       if (queueData.result === 'already_active') {
         setInterviewId(queueData.interview_id);
+        if (queueData.interview_id) {
+          localStorage.setItem('currentInterview', JSON.stringify({
+            interviewId: queueData.interview_id,
+            startedAt: new Date().toISOString(),
+          }));
+        }
         setShowStarting(false);
         setShowInstructions(false);
+
+        const restoredPhase = (queueData.phase || 'core') as 'core' | 'rapid_fire';
+        const restoredLimit = queueData.time_limit_seconds || queueData.timeLimitSeconds || 120;
+        const restoredQNum = queueData.question_number || queueData.questionNumber || 1;
+        const restoredTotal = queueData.total_questions || queueData.totalQuestions || 25;
+        const restoredOpts = queueData.options || null;
+        const restoredTop = queueData.topic || 'agricultural_concepts';
+        const restoredImg = queueData.image_url || queueData.imageUrl || null;
+
+        setCurrentPhase(restoredPhase);
+        setQuestionTimeLimit(restoredLimit);
+        setQuestionTimeRemaining(restoredLimit);
+        setCurrentQuestionNumber(restoredQNum);
+        setTotalQuestions(restoredTotal);
+        setCurrentOptions(restoredOpts);
+        setCurrentImageUrl(restoredImg);
+        setCurrentTopic(restoredTop);
+        setSelectedOption(null);
+
         try {
           const histRes = await authFetch(`/api/interview/history/${queueData.interview_id}`);
           if (histRes.ok) {
             const histData = await histRes.json();
             if (histData.history?.length > 0) {
               const restored: Message[] = histData.history.map(
-                (m: { role: string; content: string }) => ({
-                  role: m.role as 'ai' | 'user',
-                  content: m.content,
+                (m: { role: string; content: string; phase?: string; options?: string[]; topic?: string; image_url?: string; imageUrl?: string }) => ({
+                  role: (m.role === 'assistant' || m.role === 'ai') ? 'ai' : 'user',
+                  content: m.content || 'Please provide your answer to this question.',
+                  phase: (m.phase as any) || restoredPhase,
+                  options: m.options || null,
+                  topic: m.topic || restoredTop,
+                  imageUrl: m.image_url || m.imageUrl || null,
                 })
               );
               setMessages(restored);
-            } else {
-              setMessages([{ role: 'ai', content: 'Welcome back! Please continue from where you left off.' }]);
+              return;
             }
           }
-        } catch {
-          setMessages([{ role: 'ai', content: 'Welcome back! Please continue from where you left off.' }]);
-        }
+        } catch { /* fallback below */ }
+
+        const fallbackQ =
+          queueData.first_question ||
+          queueData.question ||
+          'Hello, welcome to your interview assessment. Please describe your agricultural background and experience with soil and crop management.';
+        setMessages([{
+          role: 'ai',
+          content: fallbackQ,
+          phase: restoredPhase,
+          options: restoredOpts,
+          questionNumber: restoredQNum,
+          totalQuestions: restoredTotal,
+          topic: restoredTop,
+          imageUrl: restoredImg,
+        }]);
         return;
       }
 
@@ -409,7 +505,40 @@ export default function InterviewPage() {
         interviewId: queueData.interview_id,
         startedAt: new Date().toISOString(),
       }));
-      setMessages([{ role: 'ai', content: queueData.first_question }]);
+      const initialPhase = (queueData.phase || 'core') as 'core' | 'rapid_fire';
+      const initialLimit = queueData.time_limit_seconds || queueData.timeLimitSeconds || 120;
+      const initialQNum = queueData.question_number || queueData.questionNumber || 1;
+      const initialTotal = queueData.total_questions || queueData.totalQuestions || 25;
+      const initialOpts = queueData.options || null;
+      const initialTop = queueData.topic || 'agricultural_concepts';
+      const initialImg = queueData.image_url || queueData.imageUrl || null;
+
+      setCurrentPhase(initialPhase);
+      setQuestionTimeLimit(initialLimit);
+      setQuestionTimeRemaining(initialLimit);
+      setCurrentQuestionNumber(initialQNum);
+      setTotalQuestions(initialTotal);
+      setCurrentOptions(initialOpts);
+      setCurrentImageUrl(initialImg);
+      setCurrentTopic(initialTop);
+      setSelectedOption(null);
+      setRapidFireTimeoutsCount(0);
+
+      const firstQuestionText =
+        (queueData.first_question && queueData.first_question.trim()) ||
+        (queueData.question && queueData.question.trim()) ||
+        'Hello, welcome to your interview assessment. Please describe your agricultural background and experience with soil and crop management.';
+
+      setMessages([{
+        role: 'ai',
+        content: firstQuestionText,
+        phase: initialPhase,
+        options: initialOpts,
+        questionNumber: initialQNum,
+        totalQuestions: initialTotal,
+        topic: initialTop,
+        imageUrl: initialImg,
+      }]);
       setShowInstructions(false);
     } catch (error) {
       console.error('Failed to start interview:', error);
@@ -428,12 +557,22 @@ export default function InterviewPage() {
   // ── End interview helper (instant, no waiting) ────────────────────────
   // Calls /end and immediately shows the closing page.
   const endInterviewAndClose = async (effectiveInterviewId: string, endReason: string) => {
-    // Fire-and-forget — /end now returns instantly and triggers background eval
-    authFetch(`/api/interview/end/${effectiveInterviewId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ end_reason: endReason }),
-    }).catch(() => { /* non-fatal — backend will still process */ });
+    // Clear stale evaluation/score data from previous attempts so summary never displays old scores
+    localStorage.removeItem('interviewResult');
+    localStorage.removeItem('interviewScore');
+    localStorage.removeItem('interviewEvaluation');
+    sessionStorage.removeItem('interviewResult');
+    sessionStorage.removeItem('interviewScore');
+    sessionStorage.removeItem('interviewEvaluation');
+
+    // Notify backend
+    try {
+      await authFetch(`/api/interview/end/${effectiveInterviewId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ end_reason: endReason }),
+      });
+    } catch { /* non-fatal — backend will still process */ }
 
     // Mark completion flags so summary page knows to poll
     sessionStorage.setItem('interviewCompleted', 'true');
@@ -452,7 +591,7 @@ export default function InterviewPage() {
     setShowClosingPage(true);
   };
 
-  const handleSubmit = async (e?: React.FormEvent) => {
+  const handleSubmit = async (e?: React.FormEvent, overrideAnswer?: string) => {
     // Prevent double submission
     if (isSubmittingRef.current || isLoading) {
       return;
@@ -462,18 +601,34 @@ export default function InterviewPage() {
       e.preventDefault();
     }
     
-    if (!input.trim()) {
+    const userMessage = (overrideAnswer !== undefined ? overrideAnswer : input).trim();
+    if (!userMessage) {
       return;
     }
     
-    if (!interviewId) {
-      console.error('Interview not started');
+    let effectiveInterviewId = interviewId;
+    if (!effectiveInterviewId) {
+      try {
+        const stored = localStorage.getItem('currentInterview');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed.interviewId) {
+            effectiveInterviewId = parsed.interviewId;
+            setInterviewId(parsed.interviewId);
+          }
+        }
+      } catch {}
+    }
+
+    if (!effectiveInterviewId) {
+      console.error('Interview not started - no active interview session found');
+      setError('Interview session not active. Please refresh the page to restart or resume.');
       return;
     }
 
     isSubmittingRef.current = true;
     
-    const userMessage = input;
+    setSelectedOption(null);
     setInput('');
     setIsLoading(true);
     setShowEvaluation(false);
@@ -486,7 +641,8 @@ export default function InterviewPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          interviewId: interviewId,
+          interviewId: effectiveInterviewId,
+          interview_id: effectiveInterviewId,
           message: userMessage
         }),
       });
@@ -537,9 +693,47 @@ export default function InterviewPage() {
         setMessages(prev => [...prev, { role: 'ai', content: data.response }]);
         setShowEvaluation(true);
 
+        // Clear stale cached results before navigating to summary
+        localStorage.removeItem('interviewResult');
+        localStorage.removeItem('interviewScore');
+        localStorage.removeItem('interviewEvaluation');
+        sessionStorage.removeItem('interviewResult');
+        sessionStorage.removeItem('interviewScore');
+        sessionStorage.removeItem('interviewEvaluation');
+        if (effectiveInterviewId) {
+          sessionStorage.setItem('closingInterviewId', effectiveInterviewId);
+          localStorage.setItem('closingInterviewId', effectiveInterviewId);
+        }
+        sessionStorage.setItem('interviewJustCompleted', 'true');
+        localStorage.setItem('interviewJustCompleted', 'true');
+
         setTimeout(() => { router.push('/summary'); }, 20000);
       } else {
+        const nextPhase = (data.phase || 'core') as 'core' | 'rapid_fire';
+        const nextLimit = data.time_limit_seconds || data.timeLimitSeconds || (nextPhase === 'core' ? 120 : 30);
+        const nextQNum = data.question_number || data.questionNumber || (currentQuestionNumber + 1);
+        const nextTotal = data.total_questions || data.totalQuestions || 25;
+        const nextOpts = data.options || null;
+        const nextTop = data.topic || null;
+        const nextImg = data.image_url || data.imageUrl || null;
+
+        setCurrentPhase(nextPhase);
+        setQuestionTimeLimit(nextLimit);
+        setQuestionTimeRemaining(nextLimit);
+        setCurrentQuestionNumber(nextQNum);
+        setTotalQuestions(nextTotal);
+        setCurrentOptions(nextOpts);
+        setCurrentImageUrl(nextImg);
+        setCurrentTopic(nextTop);
+        setSelectedOption(null);
+
         setMessages(prev => [...prev, { 
+          phase: nextPhase,
+          options: nextOpts,
+          questionNumber: nextQNum,
+          totalQuestions: nextTotal,
+          topic: nextTop,
+          imageUrl: nextImg,
           role: 'ai', 
           content: data.response,
           evaluation: data.evaluation
@@ -566,6 +760,72 @@ export default function InterviewPage() {
       isSubmittingRef.current = false;
     }
   };
+
+  const handleQuestionTimeout = useCallback(() => {
+    if (isSubmittingRef.current || isLoading || isComplete) return;
+    if (hasTimedOutRef.current) return;
+    hasTimedOutRef.current = true;
+
+    const phase = latestPhaseRef.current;
+    const opt = latestSelectedOptionRef.current;
+    const currInput = latestInputRef.current;
+
+    if (phase === 'rapid_fire') {
+      if (opt) {
+        handleSubmit(undefined, opt);
+      } else {
+        const newTimeouts = rapidFireTimeoutsCount + 1;
+        setRapidFireTimeoutsCount(newTimeouts);
+
+        // Anti-cheating trigger: If a candidate allows 5 rapid-fire questions to expire without choosing an answer, record warning
+        if (newTimeouts === 5) {
+          recordViolation('rapid_fire_timeout', {
+            message: 'Candidate allowed 5 rapid-fire questions to expire without choosing an answer.',
+            metadata: { timeoutsCount: newTimeouts },
+          });
+        }
+
+        handleSubmit(undefined, '[Time expired - No answer selected]');
+      }
+    } else {
+      if (currInput && currInput.trim()) {
+        handleSubmit(undefined, currInput.trim());
+      } else {
+        handleSubmit(undefined, '[Time expired - No answer provided]');
+      }
+    }
+  }, [rapidFireTimeoutsCount, recordViolation, isLoading, isComplete]);
+
+  const handleQuestionTimeoutRef = useRef(handleQuestionTimeout);
+  handleQuestionTimeoutRef.current = handleQuestionTimeout;
+
+  // Reset question timer start timestamp when question advances or starts
+  useEffect(() => {
+    questionStartMsRef.current = Date.now();
+    hasTimedOutRef.current = false;
+    setQuestionTimeRemaining(questionTimeLimit);
+  }, [currentQuestionNumber, currentPhase, questionTimeLimit]);
+
+  // Per-question visible countdown timer (120s for core, 30s for rapid-fire)
+  useEffect(() => {
+    if (showInstructions || isComplete || isInterviewCompleted || showClosingPage || isLoading) {
+      return;
+    }
+
+    const tick = () => {
+      const elapsed = Math.floor((Date.now() - questionStartMsRef.current) / 1000);
+      const remaining = Math.max(0, questionTimeLimitRef.current - elapsed);
+      setQuestionTimeRemaining(remaining);
+
+      if (remaining <= 0 && !hasTimedOutRef.current) {
+        handleQuestionTimeoutRef.current();
+      }
+    };
+
+    tick();
+    const timer = setInterval(tick, 500);
+    return () => clearInterval(timer);
+  }, [showInstructions, isComplete, isInterviewCompleted, showClosingPage, isLoading, currentQuestionNumber]);
 
   const getScoreColor = (score: number) => {
     if (score >= 80) return '#22c55e';
@@ -732,9 +992,9 @@ export default function InterviewPage() {
 
             <div className={styles.guidelines}>
               <ul>
-                <li>This is an AI powered chat interview.</li>
-                <li>The interview will adapt based on your responses and evaluate accordingly.</li>
-                <li>Try to answer the questions in depth to get better results.</li>
+                <li><strong>Part 1: 13 Core Questions</strong> — 1 greeting question followed by 12 technical questions (2 minutes per question).</li>
+                <li><strong>Part 2: 12 Rapid-Fire Questions</strong> — Four-option multiple-choice questions (30 seconds per question).</li>
+                <li><strong>Auto-Advance Timers</strong> — Visible countdown timers automatically advance to the next question when time expires.</li>
               </ul>
 
               <h3 className={styles.antiCheatTitle}>⚠️ Anti-Cheating Rules</h3>
@@ -747,7 +1007,9 @@ export default function InterviewPage() {
                 <li>🚫 <strong>Right-Click</strong> — Right-click context menu is disabled</li>
                 <li>🚫 <strong>Text Selection</strong> — Selecting text on the page is not allowed</li>
                 <li>🚫 <strong>Multi-Monitor</strong> — Moving the browser to another display is not allowed</li>
-                <li>⏳ <strong>Idle Timeout</strong> — If no activity is detected for 10 seconds, a warning will be triggered</li>
+                <li>🚫 <strong>Idle Timeout</strong> — If no activity is detected for 10 seconds, a warning will be triggered</li>
+                <li>🚫 <strong>Unusual Text Replacement</strong> — Typing filler text and rapidly deleting large amounts to replace it may trigger a warning</li>
+                <li>🚫 <strong>Rapid-Fire Timeouts</strong> — Allowing 5 rapid-fire questions to expire without choosing an answer records an anti-cheat warning</li>
               </ul>
               <p className={styles.antiCheatNote}>
                 🔒 All violations are logged and reported to the review team. Please stay focused throughout the interview.
@@ -878,10 +1140,66 @@ export default function InterviewPage() {
             </div>
           )}
 
+          {/* Structured Assessment Question Header & Timer Banner */}
+          {!showInstructions && !isComplete && (
+            <>
+              <div className={styles.questionHeaderBar}>
+                <div className={styles.questionMeta}>
+                  <span className={currentPhase === 'core' ? styles.phaseBadgeCore : styles.phaseBadgeRapid}>
+                    {currentPhase === 'core' ? 'Part 1: Core Question' : 'Part 2: Rapid-Fire MCQ'}
+                  </span>
+                  <span style={{ fontWeight: 600, fontSize: '13px', color: '#1e293b' }}>
+                    Question {currentQuestionNumber} of {totalQuestions}
+                  </span>
+                </div>
+                <div className={styles.questionTimerContainer}>
+                  <div className={`${styles.questionTimerBadge} ${
+                    questionTimeRemaining / questionTimeLimit > 0.4
+                      ? styles.timerGreen
+                      : questionTimeRemaining / questionTimeLimit > 0.15
+                      ? styles.timerYellow
+                      : styles.timerRed
+                  }`}>
+                    <span>⏱</span>
+                    <span>
+                      {Math.floor(questionTimeRemaining / 60)}:
+                      {String(questionTimeRemaining % 60).padStart(2, '0')}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className={styles.timerProgressBar}>
+                <div
+                  className={styles.timerProgressFill}
+                  style={{
+                    width: `${Math.max(0, Math.min(100, (questionTimeRemaining / questionTimeLimit) * 100))}%`,
+                    backgroundColor:
+                      questionTimeRemaining / questionTimeLimit > 0.4
+                        ? '#16a34a'
+                        : questionTimeRemaining / questionTimeLimit > 0.15
+                        ? '#ca8a04'
+                        : '#dc2626',
+                  }}
+                />
+              </div>
+            </>
+          )}
+
           <div className={styles.messages}>
-            {messages.map((message, index) => (
-              <div key={index} className={`${styles.message} ${styles[message.role]}`}>
-                <div className={styles.messageContent}>{message.content}</div>
+            {messages.map((message, index) => {
+              const roleClass = message.role === 'user' ? styles.user : styles.ai;
+              const contentText = (message.content && message.content.trim())
+                ? message.content
+                : (message.role === 'user' ? '(No response provided)' : 'Hello, welcome to your interview assessment. Please describe your agricultural background and practical experience.');
+
+              return (
+                <div key={index} className={`${styles.message} ${roleClass}`}>
+                  {message.imageUrl && (
+                    <div className={styles.questionImageWrapper}>
+                      <img src={message.imageUrl} alt="Visual Identification Specimen" className={styles.questionImage} />
+                    </div>
+                  )}
+                  <div className={styles.messageContent}>{contentText}</div>
                 {message.evaluation && (
                   <div className={styles.evaluationCard}>
                     <div className={styles.score} style={{ color: getScoreColor(message.evaluation.score) }}>
@@ -913,7 +1231,8 @@ export default function InterviewPage() {
                   </div>
                 )}
               </div>
-            ))}
+            );
+          })}
             {isLoading && (
               <div className={`${styles.message} ${styles.ai}`}>
                 <div className={styles.messageContent}>Thinking...</div>
@@ -960,7 +1279,72 @@ export default function InterviewPage() {
             </div>
           )}
 
-          {!isComplete && (
+          {!isComplete && currentPhase === 'rapid_fire' && currentOptions && currentOptions.length === 4 ? (
+            <div className={styles.rapidFireContainer}>
+              <div className={styles.rapidFireHint}>
+                <span>⚡ Rapid-Fire MCQ: Select ONE option (30s limit)</span>
+                {rapidFireTimeoutsCount > 0 && (
+                  <span className={styles.timeoutWarningBadge}>
+                    ⚠️ Unanswered timeouts: {rapidFireTimeoutsCount}/5
+                  </span>
+                )}
+              </div>
+              {(() => {
+                const latestQ = [...messages].reverse().find(m => m.role === 'ai')?.content;
+                return latestQ ? (
+                  <div className={styles.rapidFireQuestionBox}>
+                    <p className={styles.rapidFireQuestionText}>{latestQ}</p>
+                  </div>
+                ) : null;
+              })()}
+              {currentImageUrl && (
+                <div className={styles.rapidFireImageWrapper}>
+                  <img src={currentImageUrl} alt="Visual Identification Specimen" className={styles.rapidFireImage} />
+                </div>
+              )}
+              <div className={styles.optionsGrid}>
+                {currentOptions.map((opt, idx) => {
+                  const letter = String.fromCharCode(65 + idx);
+                  const displayText = opt.startsWith(`${letter})`) || opt.startsWith(`${letter}.`) 
+                    ? opt.substring(2).trim() 
+                    : opt;
+                  const isSelected = selectedOption === opt;
+
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      className={`${styles.optionCard} ${isSelected ? styles.optionCardSelected : ''}`}
+                      onClick={() => setSelectedOption(opt)}
+                      disabled={isLoading}
+                    >
+                      <span className={`${styles.optionLetter} ${isSelected ? styles.optionLetterSelected : ''}`}>
+                        {letter}
+                      </span>
+                      <span className={styles.optionText}>{displayText}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className={styles.rapidFireActions}>
+                <span style={{ fontSize: '13px', color: '#64748b' }}>
+                  {selectedOption ? `Selected: Option ${selectedOption.substring(0, 1)}` : 'Click an option to select'}
+                </span>
+                <button
+                  type="button"
+                  className={styles.rapidFireSubmitBtn}
+                  disabled={!selectedOption || isLoading}
+                  onClick={() => {
+                    if (selectedOption) {
+                      handleSubmit(undefined, selectedOption);
+                    }
+                  }}
+                >
+                  {isLoading ? 'Submitting...' : 'Submit Answer'}
+                </button>
+              </div>
+            </div>
+          ) : !isComplete && (
             <form onSubmit={handleSubmit} className={styles.inputForm}>
               <textarea
                 ref={inputRef}
@@ -978,7 +1362,7 @@ export default function InterviewPage() {
                     requestAnimationFrame(() => el.setSelectionRange(selectionStart + 1, selectionStart + 1));
                     return;
                   }
-                  if (input.trim() && !isLoading && interviewId) {
+                  if (input.trim() && !isLoading) {
                     handleSubmit(e as unknown as React.FormEvent);
                   }
                 }}

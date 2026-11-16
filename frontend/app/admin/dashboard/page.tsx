@@ -1183,7 +1183,7 @@ function AdminDashboard() {
                           <td>{v.candidateName}</td>
                           <td>{v.email}</td>
                           <td>
-                            <span className={styles.violationBadge}>
+                            <span className={styles.violationBadge} title={v.message || undefined}>
                               {v.eventType.replace(/_/g, " ")}
                             </span>
                           </td>

@@ -101,7 +101,7 @@ export default function LiveTab({ interviews, selectedId, onSelect }: LiveTabPro
             onClick={() => setActiveView("map")}
             type="button"
           >
-            <span>🗺️</span>
+            <span>📍</span>
             <span>Live Map</span>
           </button>
         </div>

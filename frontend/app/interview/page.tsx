@@ -305,22 +305,6 @@ export default function InterviewPage() {
     return () => clearInterval(interval);
   }, [interviewId, isComplete, showInstructions, candidateId]);
 
-  // Signal disconnect if candidate unexpectedly unloads or closes the window
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      if (interviewId && !isComplete && !showInstructions) {
-        try {
-          navigator.sendBeacon?.(
-            '/api/interview/pause',
-            JSON.stringify({ candidate_id: candidateId, interview_id: interviewId })
-          );
-        } catch {}
-      }
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [interviewId, isComplete, showInstructions, candidateId]);
-
   // 6.4 — Handle resume from a paused interview state
   const handleResumeInterview = async () => {
     setIsResuming(true);

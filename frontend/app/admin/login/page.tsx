@@ -65,7 +65,7 @@ export default function AdminLoginPage() {
       {/* Top bar with logo */}
       <header className={styles.topBar}>
         <img
-          src="/login/annam-logo-white.png"
+          src="/annam-logo.png"
           alt="ANNAM.AI"
           className={styles.logo}
         />

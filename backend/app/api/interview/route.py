@@ -1,7 +1,8 @@
 """
 Interview API Endpoints — MongoDB.
 """
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from bson import ObjectId
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from pydantic import BaseModel, Field
 from typing import Dict, Any, List, Optional
 import uuid
@@ -15,6 +16,7 @@ from app.workflows.interview_workflow import interview_workflow
 from app.services.queue_manager import slot_manager
 from app.services.settings_service import get_evaluation_settings
 from app.db.mongodb import get_sync_db
+from app.middleware.candidate_auth import get_candidate_session
 
 logger = logging.getLogger(__name__)
 
@@ -576,13 +578,30 @@ async def get_interview_evaluation(interview_id: str):
     return {"status": "error", "result": "FAIL", "overall_score": 0, "evaluation": None}
 
 
+def _candidate_id_variants(candidate_id: Any) -> List[Any]:
+    """The candidate id as stored in either form (string or ObjectId)."""
+    variants: List[Any] = [candidate_id, str(candidate_id)]
+    if ObjectId.is_valid(str(candidate_id)):
+        variants.append(ObjectId(str(candidate_id)))
+    return variants
+
+
 @router.post("/heartbeat")
-async def interview_heartbeat(payload: HeartbeatRequest):
+async def interview_heartbeat(payload: HeartbeatRequest, session: dict = Depends(get_candidate_session)):
     """Keep-alive ping from candidate browser during an active interview."""
+    # Only the logged-in candidate's own session is touched; the candidate_id in the body is not trusted
+    session_candidate_id = (session or {}).get("candidate_id")
+    if not session_candidate_id:
+        return {"status": "ok", "recorded": False}
+
     db = get_sync_db()
     now = datetime.now(timezone.utc)
     res = db.interview_sessions.update_one(
-        {"_id": payload.interview_id, "status": {"$in": ["active", "interviewing"]}},
+        {
+            "_id": payload.interview_id,
+            "candidate_id": {"$in": _candidate_id_variants(session_candidate_id)},
+            "status": {"$in": ["active", "interviewing"]},
+        },
         {"$set": {"updated_at": now, "last_heartbeat": now}}
     )
     return {"status": "ok", "recorded": res.modified_count > 0}

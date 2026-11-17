@@ -1,8 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import styles from "./LiveTab.module.css";
-import IndiaCoverageMap from "./IndiaCoverageMap";
+
+// Leaflet needs browser APIs, so the map is only loaded on the client
+const LiveInterviewMap = dynamic(() => import("./LiveInterviewMap"), {
+  ssr: false,
+  loading: () => <div className={styles.empty}><p>Loading map…</p></div>,
+});
 
 interface Message {
   role: "assistant" | "user" | string;
@@ -20,15 +26,13 @@ export interface LiveInterview {
   currentPhase: string;
   candidateState?: string;
   candidateDistrict?: string;
+  status?: string;
 }
 
 interface LiveTabProps {
   interviews: LiveInterview[];
   selectedId: string | null;
   onSelect: (id: string) => void;
-  adminToken?: string | null;
-  adminApiBase?: string;
-  onNavigateToCandidates?: (stateName?: string) => void;
 }
 
 const PHASE_LABELS: Record<string, string> = {
@@ -40,15 +44,13 @@ const PHASE_LABELS: Record<string, string> = {
   joining: "Joining",
 };
 
-export default function LiveTab({
-  interviews,
-  selectedId,
-  onSelect,
-  adminToken,
-  adminApiBase,
-  onNavigateToCandidates,
-}: LiveTabProps) {
+export default function LiveTab({ interviews, selectedId, onSelect }: LiveTabProps) {
   const [activeView, setActiveView] = useState<"chats" | "map">("chats");
+
+  const openChat = (interviewId: string) => {
+    onSelect(interviewId);
+    setActiveView("chats");
+  };
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const prevMessagesCountRef = useRef<number>(0);
 
@@ -100,8 +102,7 @@ export default function LiveTab({
             type="button"
           >
             <span>🗺️</span>
-            <span>India Coverage Map</span>
-            <span className={styles.btnBadgeOsm}>OpenStreetMap</span>
+            <span>Live Map</span>
           </button>
         </div>
 
@@ -109,25 +110,18 @@ export default function LiveTab({
           {interviews.length > 0 ? (
             <div className={styles.liveIndicator}>
               <span className={styles.pulseDot}></span>
-              <span>{interviews.length} active candidate{interviews.length === 1 ? "" : "s"} interviewing</span>
+              <span>{interviews.length} live interview{interviews.length === 1 ? "" : "s"}</span>
             </div>
           ) : (
             <span style={{ fontSize: "12px", color: "#6b7280" }}>
-              Active within last 5 minutes (auto-synced)
+              No live interviews right now
             </span>
           )}
         </div>
       </div>
 
-      {/* ─── View 1: India Coverage Map (OpenStreetMap) ─── */}
-      {activeView === "map" && (
-        <IndiaCoverageMap
-          adminToken={adminToken}
-          adminApiBase={adminApiBase}
-          interviews={interviews}
-          onNavigateToCandidates={onNavigateToCandidates}
-        />
-      )}
+      {/* ─── View 1: Live map (registered state of candidates in live sessions) ─── */}
+      {activeView === "map" && <LiveInterviewMap interviews={interviews} onOpenChat={openChat} />}
 
       {/* ─── View 2: Live Chats ─── */}
       {activeView === "chats" && (
@@ -136,16 +130,13 @@ export default function LiveTab({
             <div className={styles.empty}>
               <div className={styles.emptyIcon}>🎙️</div>
               <h3>No Live Interviews Currently</h3>
-              <p>
-                Candidates actively attending an interview in the last 5 minutes will show up here
-                in real time with live message streaming.
-              </p>
+              <p>Candidates in an ongoing interview will appear here in real time.</p>
               <button
                 className={styles.emptyActionBtn}
                 onClick={() => setActiveView("map")}
                 type="button"
               >
-                🗺️ Explore India Coverage Map →
+                🗺️ Open Live Map →
               </button>
             </div>
           ) : (
@@ -173,7 +164,7 @@ export default function LiveTab({
                         {PHASE_LABELS[iv.currentPhase] || iv.currentPhase}
                       </div>
                       {iv.candidateState && (
-                        <div style={{ fontSize: "11px", color: "#9ca3af", marginBottom: "4px" }}>
+                        <div style={{ fontSize: "11px", color: "#9ca3af", marginBottom: "4px" }} title="Registered location">
                           📍 {iv.candidateDistrict ? `${iv.candidateDistrict}, ` : ""}{iv.candidateState}
                         </div>
                       )}
@@ -206,7 +197,7 @@ export default function LiveTab({
                           {PHASE_LABELS[selected.currentPhase] || selected.currentPhase}
                         </span>
                         {selected.candidateState && (
-                          <span style={{ marginLeft: "8px", fontSize: "12px", color: "rgba(255,255,255,0.7)" }}>
+                          <span style={{ marginLeft: "8px", fontSize: "12px", color: "rgba(255,255,255,0.7)" }} title="Registered location">
                             📍 {selected.candidateDistrict ? `${selected.candidateDistrict}, ` : ""}{selected.candidateState}
                           </span>
                         )}

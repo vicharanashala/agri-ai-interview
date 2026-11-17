@@ -1,0 +1,135 @@
+{
+  "_about": "Hand-checked mapping from a district name in frontend/data/india-states-districts.ts to the name of the SAME district in the boundary data (geohacker/india district file, GADM NAME_2, or an Ajrasakha District.json patch). Only spelling/transliteration variants, an alternative name of the same district, or an official rename of the same district. Never a parent, a district that has since been split, or a different district. Used by scripts/build_india_districts_geojson.py, which fails if a target boundary does not exist in that state.",
+  "aliases": {
+    "Andhra Pradesh": {
+      "Sri Potti Sriramulu Nellore": "Nellore"
+    },
+    "Assam": {
+      "Dhubri": "Dhuburi",
+      "Morigaon": "Marigaon",
+      "Dima Hasao": "North Cachar Hills"
+    },
+    "Bihar": {
+      "East Champaran": "Purba Champaran",
+      "West Champaran": "Pashchim Champaran",
+      "Kaimur": "Bhabua"
+    },
+    "Chhattisgarh": {
+      "Kabirdham": "Kawardha"
+    },
+    "Gujarat": {
+      "Ahmedabad": "Ahmadabad",
+      "Kutch": "Kachchh",
+      "Mehsana": "Mahesana",
+      "Panchmahal": "Panch Mahals",
+      "Dang": "The Dangs"
+    },
+    "Haryana": {
+      "Gurugram": "Gurgaon",
+      "Sonipat": "Sonepat"
+    },
+    "Himachal Pradesh": {
+      "Lahaul and Spiti": "Lahul and Spiti"
+    },
+    "Jammu and Kashmir": {
+      "Anantnag": "Anantnag (Kashmir South)",
+      "Baramulla": "Baramula (Kashmir North)",
+      "Budgam": "Bagdam",
+      "Poonch": "Punch",
+      "Rajouri": "Rajauri"
+    },
+    "Jharkhand": {
+      "East Singhbhum": "Purba Singhbhum",
+      "West Singhbhum": "Pashchim Singhbhum",
+      "Hazaribagh": "Hazaribag",
+      "Seraikela Kharsawan": "Saraikela Kharsawan"
+    },
+    "Karnataka": {
+      "Dakshina Kannada": "Dakshin Kannad",
+      "Uttara Kannada": "Uttar Kannand",
+      "Vijayapura": "Bijapur",
+      "Kalaburagi": "Gulbarga"
+    },
+    "Kerala": {
+      "Pathanamthitta": "Pattanamtitta"
+    },
+    "Madhya Pradesh": {
+      "Khandwa": "East Nimar",
+      "Khargone": "West Nimar"
+    },
+    "Maharashtra": {
+      "Beed": "Bid",
+      "Buldhana": "Buldana",
+      "Gadchiroli": "Garhchiroli",
+      "Raigad": "Raigarh"
+    },
+    "Manipur": {
+      "Imphal East": "East Imphal",
+      "Imphal West": "West Imphal"
+    },
+    "Odisha": {
+      "Balangir": "Bolangir",
+      "Balasore": "Baleshwar",
+      "Bargarh": "Baragarh"
+    },
+    "Puducherry": {
+      "Karikal": "Karaikal"
+    },
+    "Punjab": {
+      "Ferozepur": "Firozpur",
+      "Mohali": "Sahibzada Ajit Singh Nagar",
+      "SAS Nagar": "Sahibzada Ajit Singh Nagar"
+    },
+    "Rajasthan": {
+      "Dholpur": "Dhaulpur",
+      "Jalore": "Jalor",
+      "Jhunjhunu": "Jhunjhunun",
+      "Sri Ganganagar": "Ganganagar"
+    },
+    "Sikkim": {
+      "East Sikkim": "East"
+    },
+    "Tamil Nadu": {
+      "Kanchipuram": "Kancheepuram",
+      "Kanyakumari": "Kanniyakumari",
+      "Tiruvallur": "Thiruvallur",
+      "Tiruvarur": "Thiruvarur",
+      "Tirunelveli": "Tirunelveli Kattabo"
+    },
+    "Telangana": {
+      "Rangareddy": "Rangareddi",
+      "Mahabubnagar": "Mahbubnagar"
+    },
+    "Uttar Pradesh": {
+      "Budaun": "Badaun",
+      "Amroha": "Jyotiba Phule Nagar",
+      "Bhadohi": "Sant Ravi Das Nagar",
+      "Prayagraj": "Allahabad"
+    },
+    "West Bengal": {
+      "Cooch Behar": "Kochbihar",
+      "Darjeeling": "Darjiling",
+      "Hooghly": "Hugli",
+      "Howrah": "Haora",
+      "Malda": "Maldah",
+      "Purulia": "Puruliya",
+      "Paschim Medinipur": "West Midnapore"
+    }
+  },
+  "excluded": {
+    "Mumbai, Mumbai Suburban -> Greater Bombay (Maharashtra)": "one boundary covers two districts",
+    "Paschim Bardhaman, Purab Bardhaman -> Barddhaman (West Bengal)": "district split in 2017; boundary is the old parent",
+    "Warangal Rural, Warangal Urban -> Warangal (Telangana)": "district split; boundary is the old parent",
+    "East Jaintia Hills, West Jaintia Hills -> Jaintia Hills (Meghalaya)": "district split in 2012; boundary is the old parent",
+    "Gangtok -> East (Sikkim)": "2021 Gangtok district is only part of the old East district",
+    "Dibang Valley -> Upper Dibang Valley (Arunachal Pradesh)": "not confirmed to be the same district",
+    "Diu -> Junagadh (Dadra and Nagar Haveli and Daman and Diu)": "source label is a different place name; not confirmed",
+    "Dadra, Nagar Haveli, Silvassa (Dadra and Nagar Haveli and Daman and Diu)": "not districts",
+    "Agatti, Amini, Andrott, Bitra, Chetlat, Kiltan, Minicoy (Lakshadweep)": "islands, not districts; Lakshadweep is one district",
+    "Central/East/New/North/North East/North West/South/South East/South West/West Delhi, Shahdara (Delhi)": "boundary data has one Delhi polygon",
+    "Karwar, Hubli-Dharwad (Karnataka)": "not districts",
+    "Kamareddy (listed under Karnataka), Bidar (listed under Maharashtra), Narmada (listed under Madhya Pradesh)": "district of another state in the onboarding list",
+    "Telangana town/constituency entries (Badangpet, Balkonda, Bodhan, Gajwel, Patancheru, ...)": "not districts",
+    "Districts created after the boundary data (Telangana 2016, Andhra Pradesh 2022, and others)": "no boundary exists in the data"
+  }
+}

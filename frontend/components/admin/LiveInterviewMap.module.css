@@ -1,0 +1,456 @@
+/* ─── Live Map: map on the left, Live Candidates panel on the right ─── */
+.container {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 12px;
+}
+
+/* Isolated so Leaflet's high z-index panes stay below dashboard menus and modals */
+.mapPane {
+  position: relative;
+  isolation: isolate;
+  height: calc(100vh - 300px);
+  min-height: 480px;
+  background: #e6eef5;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.map {
+  position: absolute;
+  inset: 0;
+  font-family: inherit;
+}
+
+/* Pale sea tone behind the white state shapes (overrides Leaflet's grey container background) */
+.map:global(.leaflet-container) {
+  background: #e6eef5;
+}
+
+/* ─── Markers and labels (Leaflet divIcons) ─────────────────────────── */
+.markerWrap,
+.labelWrap {
+  background: transparent;
+  border: none;
+}
+
+/* Live candidate: small solid green dot, a little larger than an online-status dot */
+.dot {
+  display: inline-block;
+  box-sizing: border-box;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #16a34a;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 1px rgba(21, 128, 61, 0.35), 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+.markerWrap .dot {
+  margin: 2px;
+  cursor: pointer;
+  transition: transform 0.12s ease;
+}
+
+.markerWrap .dot:hover,
+.dotSelected {
+  transform: scale(1.3);
+}
+
+/* Text sits centred just below its point */
+.stateLabel,
+.districtLabel {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, 7px);
+  white-space: nowrap;
+  pointer-events: none;
+  text-shadow: 0 0 2px #ffffff, 0 0 3px #ffffff, 0 0 4px #ffffff;
+}
+
+.stateLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.districtLabel {
+  font-size: 10px;
+  font-weight: 500;
+  color: #475569;
+}
+
+/* ─── Map overlays ──────────────────────────────────────────────────── */
+.topBar {
+  position: absolute;
+  top: 12px;
+  left: 56px; /* clear of the zoom buttons */
+  right: 12px;
+  z-index: 1000;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.topBar > * {
+  pointer-events: auto;
+}
+
+.backBtn {
+  padding: 6px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.backBtn:hover {
+  background: #f9fafb;
+}
+
+.crumb {
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  font-size: 13px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.notice {
+  position: absolute;
+  bottom: 44px;
+  right: 12px;
+  z-index: 1000;
+  max-width: 280px;
+  padding: 6px 10px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #92400e;
+}
+
+/* Map credits: a small info button; the panel opens above it */
+.credits {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: calc(100% - 20px);
+}
+
+.creditsBtn {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid #d1d5db;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  font: italic 700 11px/18px Georgia, serif;
+  color: #6b7280;
+  cursor: pointer;
+}
+
+.creditsBtn:hover,
+.creditsBtn[aria-expanded="true"] {
+  color: #111827;
+  border-color: #9ca3af;
+}
+
+.creditsPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-width: 340px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.97);
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  font-size: 11px;
+  line-height: 1.45;
+  color: #4b5563;
+}
+
+.creditsPanel a {
+  color: #15803d;
+}
+
+.creditsLicences {
+  margin-top: 3px;
+  padding-top: 4px;
+  border-top: 1px solid #f3f4f6;
+  font-size: 10.5px;
+}
+
+/* District card (opened from a district dot) */
+.card {
+  position: absolute;
+  top: 56px;
+  right: 12px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  width: 300px;
+  max-width: calc(100% - 24px);
+  max-height: calc(100% - 110px);
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.cardTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.cardSub {
+  margin-top: 1px;
+  font-size: 11.5px;
+  color: #6b7280;
+}
+
+.closeBtn {
+  padding: 0 4px;
+  border: none;
+  background: none;
+  font-size: 20px;
+  line-height: 1;
+  color: #6b7280;
+  cursor: pointer;
+}
+
+.closeBtn:hover {
+  color: #111827;
+}
+
+.cardBody {
+  overflow-y: auto;
+  padding: 4px 12px;
+}
+
+.cardGroup + .cardGroup {
+  border-top: 1px solid #e5e7eb;
+}
+
+.cardGroupTitle {
+  margin: 8px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #374151;
+}
+
+/* ─── Candidate rows (card and lists) ───────────────────────────────── */
+.rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.rowMain {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.rowName {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+  overflow-wrap: anywhere;
+}
+
+.rowDetail {
+  font-size: 11.5px;
+  color: #6b7280;
+  overflow-wrap: anywhere;
+}
+
+/* Candidate name: link to the profile page */
+.nameLink {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.nameLink:hover,
+.nameLink:focus-visible {
+  color: #15803d;
+  text-decoration: underline;
+}
+
+/* View Interview: opens Live Chats on this interview */
+.viewBtn {
+  flex-shrink: 0;
+  align-self: center;
+  padding: 5px 10px;
+  border: 1px solid #bbf7d0;
+  border-radius: 6px;
+  background: #f0fdf4;
+  font-size: 12px;
+  font-weight: 600;
+  color: #15803d;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.viewBtn:hover {
+  background: #dcfce7;
+  border-color: #86efac;
+}
+
+/* ─── Live Candidates panel ─────────────────────────────────────────── */
+.panel {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 300px);
+  min-height: 480px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.panelHeader {
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.panelTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.countPill {
+  padding: 2px 9px;
+  border-radius: 9999px;
+  background: #dcfce7;
+  color: #15803d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.filter {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.filter select {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #ffffff;
+  font-size: 13px;
+  color: #111827;
+}
+
+.filter select:disabled {
+  background: #f9fafb;
+  color: #9ca3af;
+}
+
+.panelBody {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 14px 12px;
+}
+
+.panelEmpty {
+  margin: 16px 0;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+/* ─── Narrower screens: panel below the map ─────────────────────────── */
+@media (max-width: 1100px) {
+  .container {
+    grid-template-columns: 1fr;
+  }
+
+  .panel {
+    height: auto;
+    min-height: 0;
+    max-height: 70vh;
+  }
+}
+
+/* ─── Phones ────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .filters {
+    grid-template-columns: 1fr;
+  }
+
+  .mapPane {
+    height: 420px;
+    min-height: 0;
+  }
+
+  /* Card along the bottom, clear of the credits button */
+  .card {
+    top: auto;
+    bottom: 40px;
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-height: 55%;
+  }
+}

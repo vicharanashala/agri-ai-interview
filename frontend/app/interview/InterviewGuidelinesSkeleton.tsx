@@ -21,7 +21,7 @@ const RULES: [string, string, string][] = [
   ['🚫', 'Right-Click', 'Right-click context menu is disabled'],
   ['🚫', 'Text Selection', 'Selecting text on the page is not allowed'],
   ['🚫', 'Multi-Monitor', 'Moving the browser to another display is not allowed'],
-  ['⏳', 'Idle Timeout', 'If no activity is detected for 10 seconds, a warning will be triggered'],
+  ['📹', 'Live Webcam Proctoring', 'Your camera must remain active throughout the assessment'],
 ];
 
 export default function InterviewGuidelinesSkeleton() {

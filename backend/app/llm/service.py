@@ -429,21 +429,20 @@ Return your evaluation as valid JSON only, no other text. Ensure all fields are 
             topic_sum = sum(ts[t].get("score", 0) for t in required_topics)
             core_avg_10 = topic_sum / len(required_topics)
 
-            if rapid_fire_qa:
-                # Option A: 70% Core Questions (out of 70) + 30% Rapid-Fire (12 MCQs * 2.5 marks = 30)
-                part1_score = round((core_avg_10 / 10.0) * 70.0, 1)
-                part2_score = round(rf_correct_count * 2.5, 1)
-                overall_score = int(round(part1_score + part2_score))
+            # Consistent 70/30 Assessment Weighting:
+            # Part 1 (Core Questions): weighted out of 70
+            # Part 2 (Rapid-Fire MCQs): 12 MCQs * 2.5 marks = 30
+            part1_score = round((core_avg_10 / 10.0) * 70.0, 1)
+            part2_score = round(rf_correct_count * 2.5, 1) if rapid_fire_qa else 0.0
+            overall_score = int(round(part1_score + part2_score))
 
-                evaluation["part1_score"] = part1_score
-                evaluation["part2_score"] = part2_score
-                evaluation["part1_max"] = 70
-                evaluation["part2_max"] = 30
-                evaluation["rapid_fire_correct"] = rf_correct_count
-                evaluation["rapid_fire_total"] = len(rapid_fire_qa)
-                evaluation["overall_score"] = min(100, max(0, overall_score))
-            else:
-                evaluation["overall_score"] = int((topic_sum / len(required_topics)) * 10)
+            evaluation["part1_score"] = part1_score
+            evaluation["part2_score"] = part2_score
+            evaluation["part1_max"] = 70
+            evaluation["part2_max"] = 30
+            evaluation["rapid_fire_correct"] = rf_correct_count
+            evaluation["rapid_fire_total"] = len(rapid_fire_qa)
+            evaluation["overall_score"] = min(100, max(0, overall_score))
 
             return evaluation
         except Exception as e:

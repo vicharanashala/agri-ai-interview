@@ -125,6 +125,13 @@ class InterviewState:
             entry["options"] = list(options)
         if image_url:
             entry["image_url"] = image_url
+
+        # Prevent duplicate consecutive messages with same role and content
+        if self.messages:
+            last = self.messages[-1]
+            if last.get("role") == role and (last.get("content") or "").strip() == (content or "").strip():
+                return
+
         self.messages.append(entry)
 
     def is_duplicate_or_similar(self, question: str) -> Tuple[bool, Optional[str], float]:
@@ -496,11 +503,19 @@ class InterviewWorkflow:
     ]
 
     def _is_valid_question(self, text: str) -> bool:
-        """Return True if text looks like an interview question, False if it's analysis/summary."""
+        """Return True if text looks like an interview question, False if it's analysis/summary or placeholder."""
         if not text or len(text.strip()) < 15:
             return False
         t = text.strip().lower()
-        if "no response" in t or "(no response)" in t or "error" in t:
+        if (
+            "no response" in t
+            or "(no response)" in t
+            or "error" in t
+            or t == "none"
+            or t == "n/a"
+            or "no answer" in t
+            or "thinking..." in t
+        ):
             return False
         if "?" not in text:
             return False
@@ -663,6 +678,8 @@ class InterviewWorkflow:
 
         if not question_text or not self._is_valid_question(question_text):
             question_text = self._fallback_core_question(state, target_topic, q_within_topic)
+            if not question_text or not self._is_valid_question(question_text):
+                question_text = self._fallback_question(state)
             state.add_question(question_text)
 
         return {"question": question_text, "topic": target_topic}

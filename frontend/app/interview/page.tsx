@@ -14,7 +14,7 @@ import CandidateNavbar from '@/components/CandidateNavbar';
 interface Message {
   role: 'ai' | 'user';
   phase?: 'core' | 'rapid_fire';
-  options?: string[];
+  options?: string[] | null;
   questionNumber?: number;
   totalQuestions?: number;
   topic?: string;
@@ -59,7 +59,6 @@ export default function InterviewPage() {
   const [showEvaluation, setShowEvaluation] = useState(false);
   const [showInstructions, setShowInstructions] = useState(true);
   const [showResumePrompt, setShowResumePrompt] = useState(false);
-  const [showStarting, setShowStarting] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [isResuming, setIsResuming] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
@@ -80,6 +79,18 @@ export default function InterviewPage() {
   const [idleThresholdMs, setIdleThresholdMs] = useState<number>(15_000);
   const [startTimeMs, setStartTimeMs] = useState<number | null>(null);
 
+  // Camera & Video Proctoring (Phase 1)
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [cameraActive, setCameraActive] = useState<boolean>(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [isCameraMuted, setIsCameraMuted] = useState<boolean>(false);
+  const [camPosition, setCamPosition] = useState<'top-right' | 'bottom-left'>('top-right');
+  const [isCamMinimized, setIsCamMinimized] = useState<boolean>(false);
+
+  const previewVideoRef = useRef<HTMLVideoElement | null>(null);
+  const interviewVideoRef = useRef<HTMLVideoElement | null>(null);
+  const cameraStreamRef = useRef<MediaStream | null>(null);
+
   // Structured Assessment (13 Core + 12 Rapid-Fire Questions = 25 Total)
   const [currentPhase, setCurrentPhase] = useState<'core' | 'rapid_fire'>('core');
   const [currentQuestionNumber, setCurrentQuestionNumber] = useState<number>(1);
@@ -97,7 +108,7 @@ export default function InterviewPage() {
   const isSubmittingRef = useRef(false);
 
   // Question countdown timer refs
-  const questionStartMsRef = useRef<number>(Date.now());
+  const questionStartMsRef = useRef<number>(0);
   const questionTimeLimitRef = useRef<number>(questionTimeLimit);
   const hasTimedOutRef = useRef<boolean>(false);
   const latestInputRef = useRef(input);
@@ -146,7 +157,7 @@ export default function InterviewPage() {
     onViolation: handleCheatViolation,
     onTerminate: handleCheatTerminate,
     onLogEvent: handleCheatLog,
-    enabled: !showInstructions && !isComplete && !isInterviewCompleted && !showClosingPage && !showStarting && !showResumePrompt && !isReconnecting,
+    enabled: !showInstructions && !isComplete && !isInterviewCompleted && !showClosingPage && !showResumePrompt && !isReconnecting,
     idleThresholdMs,
   })
 
@@ -246,6 +257,156 @@ export default function InterviewPage() {
     if (list.parentElement) list.parentElement.scrollTop = list.parentElement.scrollHeight;
   });
 
+  // ─── Camera & Video Proctoring Lifecycle (Phase 1) ────────────────────────
+  const isStreamAlive = (s: MediaStream | null): boolean => {
+    if (!s || !s.active) return false;
+    const tracks = s.getVideoTracks();
+    return tracks.length > 0 && tracks.some(t => t.readyState === 'live');
+  };
+
+  const startCamera = useCallback(async () => {
+    setCameraError(null);
+    try {
+      if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+        setCameraError('Webcam access is not supported by this browser.');
+        return;
+      }
+
+      // Stop existing tracks if any before requesting new stream
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach(t => t.stop());
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          facingMode: 'user',
+        },
+        audio: false,
+      });
+
+      cameraStreamRef.current = stream;
+      setCameraStream(stream);
+      setCameraActive(true);
+      setIsCameraMuted(false);
+
+      const track = stream.getVideoTracks()[0];
+      if (track) {
+        track.addEventListener('ended', () => {
+          setIsCameraMuted(true);
+          setCameraActive(false);
+          setCameraError('Camera stream disconnected. Please reconnect your camera.');
+        });
+        track.addEventListener('mute', () => {
+          setIsCameraMuted(true);
+        });
+        track.addEventListener('unmute', () => {
+          setIsCameraMuted(false);
+        });
+      }
+
+      if (previewVideoRef.current) {
+        previewVideoRef.current.muted = true;
+        previewVideoRef.current.srcObject = stream;
+        previewVideoRef.current.play().catch(() => {});
+      }
+      if (interviewVideoRef.current) {
+        interviewVideoRef.current.muted = true;
+        interviewVideoRef.current.defaultMuted = true;
+        interviewVideoRef.current.srcObject = stream;
+        interviewVideoRef.current.play().catch(() => {});
+      }
+    } catch (err: any) {
+      console.error('[Webcam] Access error:', err);
+      setCameraActive(false);
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        setCameraError('Camera permission denied. Please allow camera permissions in your browser address bar.');
+      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+        setCameraError('No webcam detected on your device. Please connect a working camera.');
+      } else if (err.name === 'NotReadableError') {
+        setCameraError('Camera is in use by another application. Please close other video apps.');
+      } else {
+        setCameraError('Unable to connect to camera. Please check your browser permissions.');
+      }
+    }
+  }, []);
+
+  // Auto-request camera when instructions screen is active
+  useEffect(() => {
+    if (showInstructions && !cameraActive) {
+      startCamera();
+    }
+  }, [showInstructions, cameraActive, startCamera]);
+
+  // Ensure preview video element attaches stream when it mounts
+  useEffect(() => {
+    if (previewVideoRef.current && cameraStream && isStreamAlive(cameraStream)) {
+      previewVideoRef.current.muted = true;
+      previewVideoRef.current.srcObject = cameraStream;
+      previewVideoRef.current.play().catch(() => {});
+    }
+  }, [cameraStream, cameraActive]);
+
+  const bindInterviewVideo = useCallback((el: HTMLVideoElement | null) => {
+    interviewVideoRef.current = el;
+    if (!el) return;
+    const stream = cameraStreamRef.current;
+    if (stream && isStreamAlive(stream)) {
+      el.muted = true;
+      el.defaultMuted = true;
+      if (el.srcObject !== stream) {
+        el.srcObject = stream;
+      }
+      el.onloadedmetadata = () => {
+        el.play().catch(() => {});
+      };
+      el.play().catch(() => {});
+    } else if (!cameraError) {
+      startCamera();
+    }
+  }, [cameraError, startCamera]);
+
+  // Connect stream to interview room video element once instructions screen closes
+  useEffect(() => {
+    if (!showInstructions) {
+      const stream = cameraStreamRef.current;
+      const vEl = interviewVideoRef.current;
+      if (vEl && stream && isStreamAlive(stream)) {
+        vEl.muted = true;
+        vEl.defaultMuted = true;
+        if (vEl.srcObject !== stream) {
+          vEl.srcObject = stream;
+        }
+        vEl.onloadedmetadata = () => {
+          vEl.play().catch(() => {});
+        };
+        vEl.play().catch(() => {});
+      } else if (!isStreamAlive(stream) && !cameraError) {
+        startCamera();
+      }
+    }
+  }, [showInstructions, isCamMinimized, cameraActive, startCamera, cameraError]);
+
+  // Stop camera stream when component unmounts
+  useEffect(() => {
+    return () => {
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach(t => t.stop());
+      }
+    };
+  }, []);
+
+  // Stop camera tracks when interview completes or closes
+  useEffect(() => {
+    if (isComplete || showClosingPage) {
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach(t => t.stop());
+        setCameraActive(false);
+      }
+    }
+  }, [isComplete, showClosingPage]);
+
   // Intercept fetch to log all interview API calls (debug)
   useEffect(() => {
     const origFetch = window.fetch.bind(window);
@@ -343,12 +504,19 @@ export default function InterviewPage() {
   };
 
   const handleBeginInterview = async () => {
+    if (!cameraActive || isCameraMuted) {
+      setError('A live webcam stream is required for this proctored interview. Please enable your camera above.');
+      return;
+    }
     setIsInterviewCompleted(false);
     setError(null);
     resetAntiCheat();
     setIsStarting(true);
-    setShowStarting(true);
-    setShowInstructions(false);
+
+    // Clear any previous stale interview session from localStorage before starting
+    try {
+      localStorage.removeItem('currentInterview');
+    } catch { /* non-fatal */ }
 
     // Resolve candidateId — try sessionStorage first (set by post-login),
     // then React state (from useEffect), then fall back to API call.
@@ -368,23 +536,24 @@ export default function InterviewPage() {
 
     if (!resolvedId) {
       setError('Candidate profile not found. Please complete onboarding first.');
-      setShowStarting(false);
       setShowInstructions(true);
       setIsStarting(false);
       return;
     }
 
     try {
-      // ── Step 1: Request an interview slot ─────────────────────────────────
+      // ── Step 1: Request an interview slot (force_fresh ensures clean session) ──
       const queueRes = await authFetch('/api/interview/queue/request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ candidate_id: resolvedId }),
+        body: JSON.stringify({ 
+          candidate_id: resolvedId,
+          force_fresh: true,
+        }),
       });
       const queueData = await queueRes.json();
 
       if (!queueRes.ok || !queueData || queueData.error) {
-        setShowStarting(false);
         setShowInstructions(true);
         const errMsg = queueData?.error || queueData?.detail || queueData?.message || 'Failed to start interview. Please try again.';
         setError(errMsg);
@@ -392,21 +561,18 @@ export default function InterviewPage() {
       }
 
       if (queueData.result === 'no_slot') {
-        setShowStarting(false);
         setShowInstructions(true);
         setError('All slots are full, please try after sometime.');
         return;
       }
 
       if (queueData.result === 'attempts_exhausted') {
-        setShowStarting(false);
         setShowInstructions(true);
         setError('You have used all 3 available interview attempts. No further interviews can be started.');
         return;
       }
 
       if (queueData.result === 'cooldown') {
-        setShowStarting(false);
         setShowInstructions(true);
         const until = queueData.cooldown_until
           ? new Date(queueData.cooldown_until).toLocaleString('en-IN')
@@ -423,8 +589,6 @@ export default function InterviewPage() {
             startedAt: new Date().toISOString(),
           }));
         }
-        setShowStarting(false);
-        setShowInstructions(false);
 
         const restoredPhase = (queueData.phase || 'core') as 'core' | 'rapid_fire';
         const restoredLimit = queueData.time_limit_seconds || queueData.timeLimitSeconds || 120;
@@ -444,12 +608,32 @@ export default function InterviewPage() {
         setCurrentTopic(restoredTop);
         setSelectedOption(null);
 
+        // Reset per-question timer for the active question
+        questionStartMsRef.current = Date.now();
+        hasTimedOutRef.current = false;
+        setQuestionTimeRemaining(restoredLimit);
+
         try {
           const histRes = await authFetch(`/api/interview/history/${queueData.interview_id}`);
           if (histRes.ok) {
             const histData = await histRes.json();
             if (histData.history?.length > 0) {
-              const restored: Message[] = histData.history.map(
+              // Sanitize history: ensure consecutive AI messages without candidate responses don't stack
+              const rawHistory = histData.history;
+              const sanitizedHistory: any[] = [];
+              for (let i = 0; i < rawHistory.length; i++) {
+                const item = rawHistory[i];
+                const isAi = (item.role === 'assistant' || item.role === 'ai');
+                const prev = sanitizedHistory[sanitizedHistory.length - 1];
+                if (isAi && prev && (prev.role === 'assistant' || prev.role === 'ai')) {
+                  // Replace previous un-answered AI question with the latest one
+                  sanitizedHistory[sanitizedHistory.length - 1] = item;
+                } else {
+                  sanitizedHistory.push(item);
+                }
+              }
+
+              const restored: Message[] = sanitizedHistory.map(
                 (m: { role: string; content: string; phase?: string; options?: string[]; topic?: string; image_url?: string; imageUrl?: string }) => ({
                   role: (m.role === 'assistant' || m.role === 'ai') ? 'ai' : 'user',
                   content: m.content || 'Please provide your answer to this question.',
@@ -460,6 +644,7 @@ export default function InterviewPage() {
                 })
               );
               setMessages(restored);
+              setShowInstructions(false);
               return;
             }
           }
@@ -479,11 +664,11 @@ export default function InterviewPage() {
           topic: restoredTop,
           imageUrl: restoredImg,
         }]);
+        setShowInstructions(false);
         return;
       }
 
       // ── Step 2: Slot acquired — start the interview ────────────────────────
-      setShowStarting(false);
       setInterviewId(queueData.interview_id);
       localStorage.setItem('currentInterview', JSON.stringify({
         interviewId: queueData.interview_id,
@@ -508,6 +693,11 @@ export default function InterviewPage() {
       setSelectedOption(null);
       setRapidFireTimeoutsCount(0);
 
+      // Question 1 countdown timer start - ensure full 2 minutes (120s)
+      questionStartMsRef.current = Date.now();
+      hasTimedOutRef.current = false;
+      setQuestionTimeRemaining(initialLimit);
+
       const firstQuestionText =
         (queueData.first_question && queueData.first_question.trim()) ||
         (queueData.question && queueData.question.trim()) ||
@@ -526,7 +716,6 @@ export default function InterviewPage() {
       setShowInstructions(false);
     } catch (error) {
       console.error('Failed to start interview:', error);
-      setShowStarting(false);
       setShowInstructions(true);
       setError('Network error. Please ensure the backend server is running on port 8000.');
     } finally {
@@ -711,6 +900,10 @@ export default function InterviewPage() {
         setCurrentTopic(nextTop);
         setSelectedOption(null);
 
+        const cleanResponse = (data.response && data.response.trim() && !data.response.toLowerCase().includes('no response'))
+          ? data.response
+          : 'Please describe the field management and agronomic practices you would implement in this situation.';
+
         setMessages(prev => [...prev, { 
           phase: nextPhase,
           options: nextOpts,
@@ -719,7 +912,7 @@ export default function InterviewPage() {
           topic: nextTop,
           imageUrl: nextImg,
           role: 'ai', 
-          content: data.response,
+          content: cleanResponse,
           evaluation: data.evaluation
         }]);
         // Show brief evaluation after each answer
@@ -746,7 +939,7 @@ export default function InterviewPage() {
   };
 
   const handleQuestionTimeout = useCallback(() => {
-    if (isSubmittingRef.current || isLoading || isComplete) return;
+    if (!interviewId || isSubmittingRef.current || isLoading || isComplete) return;
     if (hasTimedOutRef.current) return;
     hasTimedOutRef.current = true;
 
@@ -778,25 +971,27 @@ export default function InterviewPage() {
         handleSubmit(undefined, '[Time expired - No answer provided]');
       }
     }
-  }, [rapidFireTimeoutsCount, recordViolation, isLoading, isComplete]);
+  }, [interviewId, rapidFireTimeoutsCount, recordViolation, isLoading, isComplete]);
 
   const handleQuestionTimeoutRef = useRef(handleQuestionTimeout);
   handleQuestionTimeoutRef.current = handleQuestionTimeout;
 
   // Reset question timer start timestamp when question advances or starts
   useEffect(() => {
+    if (showInstructions || !interviewId) return;
     questionStartMsRef.current = Date.now();
     hasTimedOutRef.current = false;
     setQuestionTimeRemaining(questionTimeLimit);
-  }, [currentQuestionNumber, currentPhase, questionTimeLimit]);
+  }, [currentQuestionNumber, currentPhase, questionTimeLimit, showInstructions, interviewId]);
 
   // Per-question visible countdown timer (120s for core, 30s for rapid-fire)
   useEffect(() => {
-    if (showInstructions || isComplete || isInterviewCompleted || showClosingPage || isLoading) {
+    if (showInstructions || !interviewId || isComplete || isInterviewCompleted || showClosingPage || isLoading) {
       return;
     }
 
     const tick = () => {
+      if (!questionStartMsRef.current || questionStartMsRef.current === 0) return;
       const elapsed = Math.floor((Date.now() - questionStartMsRef.current) / 1000);
       const remaining = Math.max(0, questionTimeLimitRef.current - elapsed);
       setQuestionTimeRemaining(remaining);
@@ -917,25 +1112,6 @@ export default function InterviewPage() {
   }
 
   // 6.4 — Show resume prompt if interview was paused (interruption path)
-  // 6.5 — Show "Starting your interview soon" screen
-  if (showStarting) {
-    return (
-      <div className={styles.container}>
-        <div className={styles.completedScreen}>
-          <div className={styles.completedCard}>
-            <div className={styles.startingIcon}>🚀</div>
-            <h1 className={styles.completedTitle}>Starting your interview soon</h1>
-            <p className={styles.completedSubtitle}>
-              A slot is available. Setting everything up for you — this will only take a moment.
-            </p>
-            <div className={styles.startingDots}>
-              <span></span><span></span><span></span>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   if (showResumePrompt) {
     return (
@@ -991,7 +1167,7 @@ export default function InterviewPage() {
                 <li>🚫 <strong>Right-Click</strong> — Right-click context menu is disabled</li>
                 <li>🚫 <strong>Text Selection</strong> — Selecting text on the page is not allowed</li>
                 <li>🚫 <strong>Multi-Monitor</strong> — Moving the browser to another display is not allowed</li>
-                <li>🚫 <strong>Idle Timeout</strong> — If no activity is detected for 10 seconds, a warning will be triggered</li>
+                <li>📹 <strong>Live Webcam Proctoring</strong> — Your camera must remain active and your face clearly visible throughout the assessment</li>
                 <li>🚫 <strong>Unusual Text Replacement</strong> — Typing filler text and rapidly deleting large amounts to replace it may trigger a warning</li>
                 <li>🚫 <strong>Rapid-Fire Timeouts</strong> — Allowing 5 rapid-fire questions to expire without choosing an answer records an anti-cheat warning</li>
               </ul>
@@ -1000,12 +1176,69 @@ export default function InterviewPage() {
               </p>
             </div>
 
+            {/* Webcam Proctoring Pre-Check */}
+            <div className={styles.webcamPrecheckSection}>
+              <div className={styles.webcamPrecheckHeader}>
+                <div className={styles.webcamPrecheckTitleBox}>
+                  <span className={styles.webcamIcon}>📹</span>
+                  <div>
+                    <h3 className={styles.webcamPrecheckTitle}>Camera & Proctoring Check</h3>
+                    <p className={styles.webcamPrecheckSubtitle}>
+                      Live webcam monitoring is required throughout this assessment.
+                    </p>
+                  </div>
+                </div>
+                <div className={styles.webcamStatusBadge}>
+                  {cameraActive && !isCameraMuted ? (
+                    <span className={styles.cameraStatusReady}>● Camera Ready</span>
+                  ) : cameraError ? (
+                    <span className={styles.cameraStatusError}>⚠️ Action Required</span>
+                  ) : (
+                    <span className={styles.cameraStatusChecking}>⏳ Connecting Camera...</span>
+                  )}
+                </div>
+              </div>
+
+              <div className={styles.webcamPreviewBox}>
+                {cameraActive && !isCameraMuted ? (
+                  <div className={styles.webcamVideoWrapper}>
+                    <video
+                      ref={previewVideoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className={styles.precheckVideo}
+                    />
+                    <div className={styles.faceFramingGuide}>
+                      <div className={styles.faceOvalGuide} />
+                      <span className={styles.framingHint}>Position face inside the frame</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className={styles.webcamPlaceholder}>
+                    <span className={styles.webcamPlaceholderIcon}>📷</span>
+                    <p className={styles.webcamPlaceholderText}>
+                      {cameraError || 'Please allow camera access when prompted by your browser.'}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={startCamera}
+                      className={styles.enableCamBtn}
+                    >
+                      {cameraError ? 'Retry Camera Permission' : 'Enable Camera'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
             <button
+              type="button"
               className={styles.beginButton}
               onClick={handleBeginInterview}
-              disabled={isStarting}
+              disabled={isStarting || !cameraActive || isCameraMuted}
             >
-              {isStarting ? 'Starting...' : 'Begin Interview'}
+              {isStarting ? 'Starting Interview...' : (!cameraActive || isCameraMuted ? 'Enable Camera to Begin' : 'Begin Interview')}
             </button>
 
             {error && <p className={styles.errorMessage}>{error}</p>}
@@ -1014,6 +1247,62 @@ export default function InterviewPage() {
         </div>
       ) : (
         <div className={styles.container}>
+          {/* Live Floating Camera Proctoring Monitor (Phase 1) */}
+          {!isComplete && (
+            <div
+              className={`${styles.floatingCamCard} ${isCamMinimized ? styles.floatingCamMinimized : ''} ${camPosition === 'bottom-left' ? styles.floatingCamBottomLeft : styles.floatingCamTopRight}`}
+            >
+              <div className={styles.floatingCamHeader}>
+                <span className={styles.liveIndicator}>
+                  <span className={styles.liveDot} /> {isCameraMuted ? 'CAM OFF' : 'LIVE PROCTOR'}
+                </span>
+                <div className={styles.floatingCamControls}>
+                  <button
+                    type="button"
+                    title="Reconnect camera stream"
+                    className={styles.camControlBtn}
+                    onClick={() => startCamera()}
+                  >
+                    ↺
+                  </button>
+                  <button
+                    type="button"
+                    title="Switch corner position"
+                    className={styles.camControlBtn}
+                    onClick={() => setCamPosition(p => p === 'top-right' ? 'bottom-left' : 'top-right')}
+                  >
+                    ⇄
+                  </button>
+                  <button
+                    type="button"
+                    title={isCamMinimized ? 'Expand preview' : 'Minimize preview'}
+                    className={styles.camControlBtn}
+                    onClick={() => setIsCamMinimized(m => !m)}
+                  >
+                    {isCamMinimized ? '▢' : '—'}
+                  </button>
+                </div>
+              </div>
+
+              {!isCamMinimized && (
+                <div className={styles.floatingCamVideoWrapper}>
+                  <video
+                    ref={bindInterviewVideo}
+                    autoPlay
+                    playsInline
+                    muted
+                    className={styles.interviewCamVideo}
+                  />
+                  {isCameraMuted && (
+                    <div className={styles.cameraWarningOverlay}>
+                      <span>⚠️ Camera Disconnected</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className={styles.chatContainer}>
           <div className={styles.header}>
             <div className={styles.headerLeft}>
@@ -1167,7 +1456,14 @@ export default function InterviewPage() {
                   <div className={styles.messageContent}>{contentText}</div>
                   {message.imageUrl && (
                     <div className={styles.questionImageWrapper}>
-                      <img src={message.imageUrl} alt="Visual Identification Specimen" className={styles.questionImage} />
+                      <img
+                        src={message.imageUrl}
+                        alt="Visual Identification Specimen"
+                        className={styles.questionImage}
+                        onLoad={() => {
+                          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                        }}
+                      />
                     </div>
                   )}
                 {message.evaluation && (

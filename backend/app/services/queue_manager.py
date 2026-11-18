@@ -86,7 +86,7 @@ class SlotManager:
 
     # ── Start interview ───────────────────────────────────────────────────────
 
-    async def start_interview(self, candidate_id: str, candidate_data: dict) -> dict:
+    async def start_interview(self, candidate_id: str, candidate_data: dict, force_fresh: bool = False) -> dict:
         db = get_sync_db()
         
         # Merge candidate data from DB so we have eligible_role and other real attributes
@@ -145,6 +145,27 @@ class SlotManager:
                 "status": {"$in": ["active", "interviewing"]},
             })
             if existing:
+                qa_count = len((existing.get("interview_data") or {}).get("qa_pairs") or [])
+                # If force_fresh is requested OR the active session was never completed/has 0 answers,
+                # retire the stale/abandoned session and start fresh.
+                if force_fresh or qa_count == 0:
+                    logger.info(
+                        f"[queue_manager] Retiring uncompleted/stale session {existing['_id']} for candidate {candidate_id} "
+                        f"(qa_count={qa_count}, force_fresh={force_fresh}) to start a clean attempt."
+                    )
+                    db.interview_sessions.update_one(
+                        {"_id": existing["_id"]},
+                        {"$set": {
+                            "status": "abandoned",
+                            "end_reason": "restarted_from_instructions",
+                            "updated_at": _now(),
+                        }}
+                    )
+                    from app.workflows.interview_workflow import _interviews
+                    _interviews.pop(existing["_id"], None)
+                    existing = None
+
+            if existing:
                 self._resume_workflow_from_session(existing, candidate_data)
                 interview_id = existing["_id"]
                 current_q = None
@@ -153,6 +174,7 @@ class SlotManager:
                 curr_options = None
                 curr_q_num = 1
                 curr_topic = "agricultural_concepts"
+                curr_image_url = None
 
                 from app.workflows.interview_workflow import _interviews
                 state = _interviews.get(interview_id)
@@ -162,6 +184,7 @@ class SlotManager:
                     curr_limit = state._pending_question.get("time_limit_seconds", 120)
                     curr_options = state._pending_question.get("options")
                     curr_topic = state._pending_question.get("topic", "agricultural_concepts")
+                    curr_image_url = state._pending_question.get("image_url")
                     curr_q_num = state.question_count + 1
                 elif state and getattr(state, "messages", None):
                     for m in reversed(state.messages):
@@ -170,6 +193,7 @@ class SlotManager:
                             curr_phase = m.get("phase", "core")
                             curr_options = m.get("options")
                             curr_topic = m.get("topic", "agricultural_concepts")
+                            curr_image_url = m.get("image_url")
                             break
                     curr_q_num = state.question_count + 1
 
@@ -191,7 +215,7 @@ class SlotManager:
                     "question_number": curr_q_num,
                     "total_questions": 25,
                     "topic": curr_topic,
-                    "image_url": None,
+                    "image_url": curr_image_url,
                 }
 
             # 4. Slot check

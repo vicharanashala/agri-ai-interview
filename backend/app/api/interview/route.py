@@ -616,6 +616,7 @@ async def get_interview_evaluation(interview_id: str):
             update = {
                 "interview_data": interview_data,
                 "overall_score": score,
+                "score": score,
                 "result": result,
             }
             db.interview_sessions.update_one({"_id": interview_id}, {"$set": update})

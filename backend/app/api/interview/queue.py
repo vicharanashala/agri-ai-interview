@@ -49,6 +49,7 @@ def _fetch_candidate_data(candidate_id: str) -> dict:
 
 class SlotRequest(BaseModel):
     candidate_id: str
+    force_fresh: Optional[bool] = False
 
 
 class StartResponse(BaseModel):
@@ -90,6 +91,7 @@ async def queue_request(request: SlotRequest):
     result = await slot_manager.start_interview(
         candidate_id=request.candidate_id,
         candidate_data=candidate_data,
+        force_fresh=bool(request.force_fresh),
     )
     return StartResponse(**result)
 

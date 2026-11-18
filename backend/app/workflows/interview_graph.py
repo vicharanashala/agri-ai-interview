@@ -198,6 +198,7 @@ class InterviewGraphManager:
                         threshold = get_evaluation_settings(role)["pass_threshold"]
                         score = evaluation["overall_score"]
                         update["overall_score"] = score
+                        update["score"] = score
 
                         part1_score = evaluation.get("part1_score")
                         part2_score = evaluation.get("part2_score")

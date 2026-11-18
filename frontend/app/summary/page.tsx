@@ -406,7 +406,7 @@ export default function SummaryPage() {
         {activeSummaryTab === 'result' && (
           <>
             <div className={styles.resultSection}>
-              {hasResult ? (
+              {hasResult && !evaluating ? (
                 <div
                   className={styles.resultBadge}
                   style={{
@@ -422,7 +422,7 @@ export default function SummaryPage() {
                 </div>
               )}
 
-              {hasResult ? (
+              {hasResult && !evaluating ? (
                 <p className={styles.scoreText}>
                   Score: {score !== null ? `${score}/100` : (result === 'FAIL' ? '0/100' : '—')}
                 </p>

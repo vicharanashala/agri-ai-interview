@@ -178,9 +178,17 @@ function ChatHistory({ messages }: { messages: ChatMessage[] }) {
   if (!messages || messages.length === 0) {
     return <p className={styles.chatEmpty}>No chat messages recorded.</p>;
   }
+
+  // Deduplicate consecutive identical messages defensively
+  const displayMessages = messages.filter((msg, idx) => {
+    if (idx === 0) return true;
+    const prev = messages[idx - 1];
+    return !(prev.role === msg.role && prev.content?.trim() === msg.content?.trim());
+  });
+
   return (
     <div className={styles.chatHistory}>
-      {messages.map((msg, idx) => (
+      {displayMessages.map((msg, idx) => (
         <div key={idx} className={`${styles.chatMsg} ${msg.role === "assistant" ? styles.aiMsg : styles.userMsg}`}>
           <span className={styles.msgRole}>{msg.role === "assistant" ? "AI" : "Candidate"}</span>
           <p className={styles.msgText}>{msg.content}</p>

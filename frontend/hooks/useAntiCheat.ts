@@ -358,7 +358,7 @@ export const VIOLATION_LABELS: Record<ViolationType, string> = {
   right_click: 'Right-click is disabled during the interview.',
   text_selection: 'Selecting text is not permitted during the interview.',
   multi_monitor: 'Moving to another display is not permitted during the interview.',
-  idle: 'No activity detected for 10 seconds. Please stay active.',
+  idle: 'Inactivity detected. Please stay focused on the interview.',
   suspicious_text_replacement:
     'Unusual rapid deletion and replacement of text was detected. Please write your answers directly without clearing large blocks of text.',
   rapid_fire_timeout:

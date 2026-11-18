@@ -1,6 +1,7 @@
 import type { NextAuthOptions } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import bcrypt from 'bcryptjs'
+import { ACCOUNT_DEACTIVATED_CODE, isAccountDeactivatedBody } from './account-status'
 
 const BACKEND_URL = process.env.BACKEND_URL ?? ''
 
@@ -40,7 +41,10 @@ export const authOptions = {
 
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}))
-          const errorMsg = errData.detail || errData.error || 'Invalid email or password'
+          // Candidate in the Admin Trash Bin: pass the code through so the login page shows its message
+          if (isAccountDeactivatedBody(errData)) throw new Error(ACCOUNT_DEACTIVATED_CODE)
+          const detail = typeof errData.detail === 'string' ? errData.detail : ''
+          const errorMsg = detail || errData.error || 'Invalid email or password'
           throw new Error(errorMsg)
         }
         const user = await res.json()

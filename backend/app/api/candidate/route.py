@@ -13,6 +13,12 @@ import uuid
 from bson import ObjectId
 
 from app.core.session import get_session_store, _hash_token
+from app.core.candidate_status import (
+    STATE_DELETED,
+    account_deactivated_exception,
+    ensure_candidate_id_not_deleted,
+    resolve_candidate_account,
+)
 from app.db.mongodb import get_sync_db
 
 
@@ -53,9 +59,13 @@ def _get_candidate_id_with_email_fallback(request: Request) -> str:
     Returns candidate_id from candidate session token if present and valid.
     If token is expired, invalid, or missing, falls back to X-User-Email header
     to look up the user + candidate in MongoDB directly.
+
+    Candidates in the Admin Trash Bin get 403 ACCOUNT_DEACTIVATED on either path, and
+    no replacement candidate record is created for them.
     """
     auth = request.headers.get("authorization", "")
     token = auth[7:] if auth.startswith("Bearer ") else request.cookies.get("candidate_session")
+    session_candidate_id = None
     if token:
         try:
             store = get_session_store()
@@ -63,9 +73,13 @@ def _get_candidate_id_with_email_fallback(request: Request) -> str:
             if session:
                 candidate_id = session.get("candidate_id")
                 if candidate_id:
-                    return str(candidate_id)
+                    session_candidate_id = str(candidate_id)
         except Exception:
             pass
+    if session_candidate_id:
+        # Outside the try above so the 403 is not swallowed
+        ensure_candidate_id_not_deleted(get_sync_db(), session_candidate_id)
+        return session_candidate_id
     # Fallback: verified NextAuth user via X-User-Email header
     email = request.headers.get("x-user-email")
     if not email:
@@ -75,17 +89,9 @@ def _get_candidate_id_with_email_fallback(request: Request) -> str:
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
     user_id_str = str(user["_id"])
-    candidate = db.candidates.find_one({
-        "user_id": {"$in": [user_id_str, user["_id"]]},
-        "$or": [{"isdeleted": {"$ne": True}}, {"is_deleted": {"$ne": True}}]
-    })
-    if not candidate:
-        candidate = db.candidates.find_one({
-            "email": email.lower().strip(),
-            "$or": [{"isdeleted": {"$ne": True}}, {"is_deleted": {"$ne": True}}]
-        })
-    if not candidate:
-        candidate = db.candidates.find_one({"user_id": {"$in": [user_id_str, user["_id"]]}})
+    state, candidate = resolve_candidate_account(db, user=user, email=email)
+    if state == STATE_DELETED:
+        raise account_deactivated_exception()
     if not candidate:
         # New user — create candidate record first
         from bson import ObjectId
@@ -273,6 +279,11 @@ async def verify_password(request: Request, body: dict):
 
     if not bcrypt.checkpw(password.encode("utf-8"), user["password"].encode("utf-8")):
         raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    # Only after the password is verified: reject candidates in the Admin Trash Bin
+    state, _ = resolve_candidate_account(db, user=user)
+    if state == STATE_DELETED:
+        raise account_deactivated_exception()
 
     user_name = user.get("name") or user.get("fullName") or user.get("full_name") or ""
     return {"id": str(user["_id"]), "email": user["email"], "name": user_name}
@@ -564,19 +575,9 @@ async def get_candidate_profile(email: Optional[str] = Query(None)):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    cand = db.candidates.find_one({
-        "user_id": {"$in": [str(user["_id"]), user["_id"]]},
-        "$or": [{"isdeleted": {"$ne": True}}, {"is_deleted": {"$ne": True}}]
-    })
-    if not cand:
-        cand = db.candidates.find_one({
-            "email": email.lower().strip(),
-            "$or": [{"isdeleted": {"$ne": True}}, {"is_deleted": {"$ne": True}}]
-        })
-    if not cand:
-        cand = db.candidates.find_one({"user_id": {"$in": [str(user["_id"]), user["_id"]]}})
-    if not cand:
-        cand = db.candidates.find_one({"email": email.lower().strip()})
+    state, cand = resolve_candidate_account(db, user=user, email=email)
+    if state == STATE_DELETED:
+        raise account_deactivated_exception()
 
     has_all_declarations = check_all_declarations_accepted(user, cand)
     declarations_dict = user.get("declarations") or (cand.get("declarations") if cand else {}) or {}
@@ -974,7 +975,12 @@ async def forgot_password(body: ForgotPasswordRequest):
     # We return success regardless to prevent email enumeration
     if not user:
         return {"success": True, "message": "Your password reset link has been sent."}
-    
+
+    # Same generic response for candidates in the Admin Trash Bin, but no reset email
+    state, _ = resolve_candidate_account(db, user=user)
+    if state == STATE_DELETED:
+        return {"success": True, "message": "Your password reset link has been sent."}
+
     import secrets
     import hashlib
     import os
@@ -1040,6 +1046,11 @@ async def reset_password(body: ResetPasswordRequest):
     if not user:
         raise HTTPException(status_code=400, detail="Invalid or expired reset token.")
 
+    # A token issued before the candidate was moved to the Trash Bin must not work
+    state, _ = resolve_candidate_account(db, user=user)
+    if state == STATE_DELETED:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token.")
+
     # Hash new password
     salt = bcrypt.gensalt()
     hashed_pw = bcrypt.hashpw(new_password.encode('utf-8'), salt).decode('utf-8')
@@ -1088,6 +1099,10 @@ async def accept_declaration(request: Request, body: DeclarationRequest):
     user = db.users.find_one({'email': email.lower().strip()})
     if not user:
         raise HTTPException(404, 'User not found')
+
+    state, _ = resolve_candidate_account(db, user=user, email=email)
+    if state == STATE_DELETED:
+        raise account_deactivated_exception()
 
     now_iso = datetime.now(timezone.utc).isoformat()
     consents_data = body.consents or {}

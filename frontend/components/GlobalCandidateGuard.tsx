@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
+import { handleAccountDeactivated, isAccountDeactivatedResponse } from '@/lib/account-status';
 
 const PROTECTED_CANDIDATE_ROUTES = [
   '/dashboard',
@@ -31,6 +32,11 @@ export default function GlobalCandidateGuard({ children }: { children: React.Rea
     const checkDeclaration = async () => {
       try {
         const res = await fetch('/api/candidate', { cache: 'no-store' });
+        // Candidate moved to the Admin Trash Bin while signed in
+        if (await isAccountDeactivatedResponse(res)) {
+          handleAccountDeactivated();
+          return;
+        }
         if (res.ok) {
           const cand = await res.json();
           if (cand && !cand.declarationAccepted) {

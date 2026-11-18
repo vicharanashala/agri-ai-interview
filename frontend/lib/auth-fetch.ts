@@ -13,6 +13,8 @@
  *   // All fetch calls now auto-attach Authorization header
  *   // on cleanup: restore()
  */
+import { handleAccountDeactivated, isAccountDeactivatedResponse } from './account-status'
+
 const TOKEN_KEY = 'candidate_session_token'
 
 export function getAuthToken(): string | null {
@@ -73,6 +75,13 @@ export async function authFetch(
     return new Response(null, { status: 401 });
   }
 
+  // Candidate moved to the Admin Trash Bin: sign out of NextAuth and show the message on /login.
+  // Other 403 responses are returned to the caller unchanged.
+  if (await isAccountDeactivatedResponse(response)) {
+    console.warn('[authFetch] 403 ACCOUNT_DEACTIVATED — signing out.');
+    handleAccountDeactivated();
+  }
+
   return response
 }
 
@@ -120,6 +129,12 @@ export function interceptAuthFetch(): () => void {
         window.location.href = '/login'
       }
       return new Response(null, { status: 401 })
+    }
+
+    // Candidate moved to the Admin Trash Bin (other 403 responses pass through)
+    if (await isAccountDeactivatedResponse(response)) {
+      console.warn('[interceptFetch] 403 ACCOUNT_DEACTIVATED — signing out.');
+      handleAccountDeactivated();
     }
 
     return response

@@ -27,6 +27,7 @@ from datetime import datetime, timezone
 from bson import ObjectId
 
 from app.db.mongodb import get_sync_db
+from app.core.candidate_status import STATE_DELETED, account_deactivated_exception, resolve_candidate_account
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -77,6 +78,12 @@ async def register(request: Request, body: RegisterRequest):
             detail="Please verify your email before completing registration. "
                    "Check your inbox for the verification code.",
         )
+
+    # Registration must not reactivate (or change the password of) a candidate in
+    # the Admin Trash Bin — checked before anything is written.
+    state, _ = resolve_candidate_account(db, user=user, email=email)
+    if state == STATE_DELETED:
+        raise account_deactivated_exception()
 
     # 2. Update existing verified stub (or overwrite for Google users re-using email)
     password_hash = bcrypt.hashpw(body.password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")

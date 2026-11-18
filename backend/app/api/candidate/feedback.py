@@ -12,6 +12,12 @@ from bson import ObjectId
 from pymongo.errors import DuplicateKeyError
 
 from app.core.session import get_session_store, _hash_token
+from app.core.candidate_status import (
+    STATE_DELETED,
+    account_deactivated_exception,
+    ensure_candidate_id_not_deleted,
+    resolve_candidate_account,
+)
 from app.db.mongodb import get_sync_db
 from app.api.admin.candidates import _get_id_variants, _format_iso
 
@@ -41,6 +47,7 @@ def _get_existing_candidate(request: Request) -> dict:
             session = None
         candidate_id = session.get("candidate_id") if session else None
         if candidate_id:
+            ensure_candidate_id_not_deleted(db, candidate_id)
             candidate = db.candidates.find_one({"_id": {"$in": _get_id_variants(str(candidate_id))}, **_NOT_DELETED})
             if candidate:
                 return candidate
@@ -49,9 +56,9 @@ def _get_existing_candidate(request: Request) -> dict:
     if email:
         user = db.users.find_one({"email": email})
         if user:
-            candidate = db.candidates.find_one({"user_id": {"$in": [str(user["_id"]), user["_id"]]}, **_NOT_DELETED})
-            if not candidate:
-                candidate = db.candidates.find_one({"email": email, **_NOT_DELETED})
+            state, candidate = resolve_candidate_account(db, user=user, email=email)
+            if state == STATE_DELETED:
+                raise account_deactivated_exception()
             if candidate:
                 return candidate
 

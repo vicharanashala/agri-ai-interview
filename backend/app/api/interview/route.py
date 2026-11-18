@@ -43,6 +43,13 @@ class StartInterviewResponse(BaseModel):
     interview_id: str = Field(alias="interviewId")
     first_question: str = Field(alias="question")
     status: str = ""
+    phase: Optional[str] = "core"
+    time_limit_seconds: Optional[int] = Field(default=120, alias="timeLimitSeconds")
+    options: Optional[List[str]] = None
+    question_number: Optional[int] = Field(default=1, alias="questionNumber")
+    total_questions: Optional[int] = Field(default=25, alias="totalQuestions")
+    topic: Optional[str] = "agricultural_concepts"
+    image_url: Optional[str] = Field(default=None, alias="imageUrl")
 
     class Config:
         populate_by_name = True
@@ -61,6 +68,17 @@ class MessageResponse(BaseModel):
     evaluation: Optional[Dict[str, Any]] = None
     cumulative_evaluation: Optional[Dict[str, Any]] = None
     next_difficulty: Optional[str] = None
+    phase: Optional[str] = "core"
+    time_limit_seconds: Optional[int] = Field(default=120, alias="timeLimitSeconds")
+    options: Optional[List[str]] = None
+    question_number: Optional[int] = Field(default=1, alias="questionNumber")
+    total_questions: Optional[int] = Field(default=25, alias="totalQuestions")
+    topic: Optional[str] = None
+    image_url: Optional[str] = Field(default=None, alias="imageUrl")
+    rapid_fire_timeouts_count: Optional[int] = Field(default=0, alias="rapidFireTimeoutsCount")
+
+    class Config:
+        populate_by_name = True
 
 
 class StatusResponse(BaseModel):
@@ -181,6 +199,13 @@ async def start_interview(request: StartInterviewRequest):
             interview_id=result["interview_id"],
             first_question=result["first_question"],
             status="active",
+            phase=result.get("phase", "core"),
+            time_limit_seconds=result.get("time_limit_seconds", 120),
+            options=result.get("options"),
+            question_number=result.get("question_number", 1),
+            total_questions=result.get("total_questions", 25),
+            topic=result.get("topic", "agricultural_concepts"),
+            image_url=result.get("image_url"),
         )
 
     except HTTPException:
@@ -215,6 +240,14 @@ async def send_message(request: MessageRequest):
             evaluation=result.get("evaluation"),
             cumulative_evaluation=result.get("cumulative_evaluation"),
             next_difficulty=result.get("cumulative_evaluation", {}).get("difficulty_level"),
+            phase=result.get("phase", "core"),
+            time_limit_seconds=result.get("time_limit_seconds", 120),
+            options=result.get("options"),
+            question_number=result.get("question_number", 1),
+            total_questions=result.get("total_questions", 25),
+            topic=result.get("topic"),
+            image_url=result.get("image_url"),
+            rapid_fire_timeouts_count=result.get("rapid_fire_timeouts_count", 0),
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -499,8 +532,8 @@ async def get_interview_evaluation(interview_id: str):
             if candidate:
                 candidate_data = candidate
                 
-        # Move this down here so we can pass candidate_role
-        if evaluation and score is not None and score > 0:
+        # Check if already evaluated in DB (score may be 0, so check is not None)
+        if evaluation and score is not None:
             role = candidate_data.get("eligible_role")
             threshold = get_evaluation_settings(role)["pass_threshold"]
             if session.get("end_reason") == "voluntary_withdrawal" or end_reason_db == "voluntary_withdrawal":
@@ -508,6 +541,38 @@ async def get_interview_evaluation(interview_id: str):
             else:
                 result = session.get("result") or ("PASS" if score >= threshold else "FAIL")
             logger.info(f"[evaluation/{interview_id}] status=ready, score={score}, result={result}")
+            return {
+                "status": "ready",
+                "result": result,
+                "overall_score": score,
+                "end_reason": end_reason_db,
+                "evaluation": evaluation,
+            }
+
+        # Check if background task in interview_graph_manager has completed it
+        cached_status = interview_graph_manager._evaluation_status.get(interview_id)
+        if cached_status and cached_status.get("status") == "ready" and cached_status.get("evaluation"):
+            evaluation = cached_status["evaluation"]
+            score = evaluation.get("overall_score", 0)
+            role = candidate_data.get("eligible_role")
+            threshold = get_evaluation_settings(role)["pass_threshold"]
+            part1_score = evaluation.get("part1_score")
+            part2_score = evaluation.get("part2_score")
+            if part1_score is not None and part2_score is not None:
+                part1_cutoff = round((threshold / 100.0) * 70.0, 1)
+                part2_cutoff = 9.0 if threshold <= 35 else 10.0
+                evaluation["part1_cutoff"] = part1_cutoff
+                evaluation["part2_cutoff"] = part2_cutoff
+                evaluation["pass_threshold"] = threshold
+                is_pass = (score >= threshold) and (part1_score >= part1_cutoff) and (part2_score >= part2_cutoff)
+            else:
+                is_pass = score >= threshold
+
+            if session.get("end_reason") == "voluntary_withdrawal" or end_reason_db == "voluntary_withdrawal":
+                result = "WITHDRAWN"
+            else:
+                result = session.get("result") or ("PASS" if is_pass else "FAIL")
+            logger.info(f"[evaluation/{interview_id}] status=ready (from manager cache), score={score}, result={result}")
             return {
                 "status": "ready",
                 "result": result,
@@ -536,17 +601,29 @@ async def get_interview_evaluation(interview_id: str):
             score = evaluation.get("overall_score", 0)
             role = candidate_data.get("eligible_role")
             threshold = get_evaluation_settings(role)["pass_threshold"]
-            
+            part1_score = evaluation.get("part1_score")
+            part2_score = evaluation.get("part2_score")
+            if part1_score is not None and part2_score is not None:
+                part1_cutoff = round((threshold / 100.0) * 70.0, 1)
+                part2_cutoff = 9.0 if threshold <= 35 else 10.0
+                evaluation["part1_cutoff"] = part1_cutoff
+                evaluation["part2_cutoff"] = part2_cutoff
+                evaluation["pass_threshold"] = threshold
+                is_pass = (score >= threshold) and (part1_score >= part1_cutoff) and (part2_score >= part2_cutoff)
+            else:
+                is_pass = score >= threshold
+
             if session.get("end_reason") == "voluntary_withdrawal" or end_reason_db == "voluntary_withdrawal":
                 result = "WITHDRAWN"
             else:
-                result = "PASS" if score >= threshold else "FAIL"
+                result = "PASS" if is_pass else "FAIL"
 
             # Persist to database
             interview_data["evaluation"] = evaluation
             update = {
                 "interview_data": interview_data,
                 "overall_score": score,
+                "score": score,
                 "result": result,
             }
             db.interview_sessions.update_one({"_id": interview_id}, {"$set": update})

@@ -25,12 +25,16 @@ class InterviewGraphManager:
         interview_id: str,
         candidate_data: Dict[str, Any],
         resume_parsed: Optional[Dict[str, Any]] = None,
+        past_questions: Optional[List[str]] = None,
+        attempt_number: Optional[int] = None,
     ) -> str:
         """Start a new interview and return the first question."""
         return await self.workflow.initialize_interview(
             interview_id,
             candidate_data,
             resume_parsed=resume_parsed,
+            past_questions=past_questions,
+            attempt_number=attempt_number,
         )
 
     async def process_answer(self, interview_id: str, user_answer: str) -> Dict[str, Any]:
@@ -194,11 +198,25 @@ class InterviewGraphManager:
                         threshold = get_evaluation_settings(role)["pass_threshold"]
                         score = evaluation["overall_score"]
                         update["overall_score"] = score
-                        
+                        update["score"] = score
+
+                        part1_score = evaluation.get("part1_score")
+                        part2_score = evaluation.get("part2_score")
+
+                        if part1_score is not None and part2_score is not None:
+                            part1_cutoff = round((threshold / 100.0) * 70.0, 1)
+                            part2_cutoff = 9.0 if threshold <= 35 else 10.0
+                            evaluation["part1_cutoff"] = part1_cutoff
+                            evaluation["part2_cutoff"] = part2_cutoff
+                            evaluation["pass_threshold"] = threshold
+                            is_pass = (score >= threshold) and (part1_score >= part1_cutoff) and (part2_score >= part2_cutoff)
+                        else:
+                            is_pass = score >= threshold
+
                         if session.get("end_reason") == "voluntary_withdrawal":
                             update["result"] = "WITHDRAWN"
                         else:
-                            update["result"] = "PASS" if score >= threshold else "FAIL"
+                            update["result"] = "PASS" if is_pass else "FAIL"
                             
                         logger.info(f"[InterviewGraph] {interview_id}: writing result={update['result']} score={score} (threshold={threshold})")
                 else:

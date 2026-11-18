@@ -10,7 +10,7 @@ from app.db.mongodb import get_sync_db
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
 
-DEFAULT_MAX_QUESTIONS = 10
+DEFAULT_MAX_QUESTIONS = 25
 
 DEFAULT_GUIDELINES = {
     "question_guidelines": """# Question Generation Guidelines
@@ -162,7 +162,10 @@ Answer candidate questions about the company, role, and process.
 
 def _get_setting(db, key: str) -> Optional[str]:
     doc = db.settings.find_one({"key": key})
-    return doc.get("value") if doc else None
+    if isinstance(doc, dict):
+        val = doc.get("value")
+        return str(val) if val is not None else None
+    return None
 
 
 def _set_setting(db, key: str, value: str, category: str = "general") -> None:
@@ -218,11 +221,14 @@ def get_faq_system() -> str:
 # ── Interview settings ────────────────────────────────────────────────────────
 
 def get_interview_settings(role: str = None) -> dict:
+    role_str = (role or "").strip().lower()
+    is_yp = "yp" in role_str or "young professional" in role_str
+    default_thresh = 35 if is_yp else 40
     defaults = {
         "max_questions": DEFAULT_MAX_QUESTIONS,
         "max_duration_minutes": 30,
         "cooldown_days": 0,
-        "pass_threshold": 60,
+        "pass_threshold": default_thresh,
         "max_concurrent_interviews": 20,
     }
     try:
@@ -260,15 +266,22 @@ def get_interview_settings(role: str = None) -> dict:
 
 # ── First question ────────────────────────────────────────────────────────────
 
-def get_first_question(candidate_name: str = "") -> str:
+def get_first_question(candidate_name: str = "", attempt_number: int = 1) -> str:
     base = "Hello {name}, Welcome to the interview, please tell me about yourself."
     try:
         db = get_sync_db()
         val = _get_setting(db, "interview_first_question")
-        if val:
-            base = val
+        if val and isinstance(val, str) and val.strip():
+            base = val.strip()
+        elif attempt_number == 2:
+            base = "Hello {name}, Welcome back to your interview assessment. To begin, please give an overview of your practical experience and background in agriculture."
+        elif attempt_number >= 3:
+            base = "Hello {name}, Welcome to your assessment session. Let's start with a brief summary of the key agricultural projects or farming work you have been involved in."
     except Exception:
         pass
+
+    if not base or not base.strip():
+        base = "Hello {name}, Welcome to the interview, please tell me about yourself."
 
     if candidate_name:
         base = base.replace("{name}", candidate_name)
@@ -318,7 +331,10 @@ def get_cooldown_days(role: str = None) -> int:
 # ── Evaluation settings ───────────────────────────────────────────────────────
 
 def get_evaluation_settings(role: str = None) -> dict:
-    defaults = {"pass_threshold": 60}
+    role_str = (role or "").strip().lower()
+    is_yp = "yp" in role_str or "young professional" in role_str
+    default_thresh = 35 if is_yp else 40
+    defaults = {"pass_threshold": default_thresh}
     try:
         db = get_sync_db()
         val = _get_setting(db, "evaluation_pass_threshold")

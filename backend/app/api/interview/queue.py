@@ -6,7 +6,8 @@ Candidates either get a slot immediately or are told to try later.
 """
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
+from bson import ObjectId
 
 from app.db.mongodb import get_sync_db
 from app.services.queue_manager import slot_manager
@@ -17,7 +18,13 @@ router = APIRouter(prefix="/api/interview/queue", tags=["interview-queue"])
 def _fetch_candidate_data(candidate_id: str) -> dict:
     """Fetch candidate profile data from MongoDB to pass to the interview."""
     db = get_sync_db()
-    cand = db.candidates.find_one({"_id": candidate_id})
+    cand = None
+    try:
+        cand = db.candidates.find_one({"_id": ObjectId(candidate_id)})
+    except Exception:
+        pass
+    if not cand:
+        cand = db.candidates.find_one({"_id": candidate_id})
     if not cand:
         return {}
 
@@ -33,7 +40,8 @@ def _fetch_candidate_data(candidate_id: str) -> dict:
         "farming_background": cand.get("farming_background"),
         "crops_grown": cand.get("crops_grown"),
         "primary_expertise": cand.get("primary_expertise"),
-        "candidate_id": candidate_id,
+        "eligible_role": cand.get("eligible_role"),
+        "candidate_id": str(cand.get("_id", candidate_id)),
     }
 
 
@@ -41,6 +49,7 @@ def _fetch_candidate_data(candidate_id: str) -> dict:
 
 class SlotRequest(BaseModel):
     candidate_id: str
+    force_fresh: Optional[bool] = False
 
 
 class StartResponse(BaseModel):
@@ -53,6 +62,13 @@ class StartResponse(BaseModel):
     attempts_count: Optional[int] = None
     max_attempts: Optional[int] = None
     cooldown_until: Optional[str] = None
+    phase: Optional[str] = "core"
+    time_limit_seconds: Optional[int] = 120
+    options: Optional[List[str]] = None
+    question_number: Optional[int] = 1
+    total_questions: Optional[int] = 25
+    topic: Optional[str] = "agricultural_concepts"
+    image_url: Optional[str] = None
 
 
 class StatsResponse(BaseModel):
@@ -75,6 +91,7 @@ async def queue_request(request: SlotRequest):
     result = await slot_manager.start_interview(
         candidate_id=request.candidate_id,
         candidate_data=candidate_data,
+        force_fresh=bool(request.force_fresh),
     )
     return StartResponse(**result)
 

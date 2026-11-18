@@ -116,7 +116,7 @@ export default function SummaryPage() {
     setEvaluating(true);
     pollStartRef.current = Date.now();
 
-    pollTimerRef.current = setInterval(async () => {
+    const doPoll = async () => {
       // Timeout after 5 minutes
       if (Date.now() - pollStartRef.current > POLL_TIMEOUT_MS) {
         clearPolling();
@@ -145,6 +145,12 @@ export default function SummaryPage() {
           if (data.evaluation) {
             localStorage.setItem('interviewEvaluation', JSON.stringify(data.evaluation));
           }
+          // Clean up completed closing markers so subsequent visits don't re-poll
+          sessionStorage.removeItem('interviewJustCompleted');
+          localStorage.removeItem('interviewJustCompleted');
+          sessionStorage.removeItem('closingInterviewId');
+          localStorage.removeItem('closingInterviewId');
+
           await syncPhaseToDb(data.result === 'PASS' ? 4 : 3, { passedAndVisitedSummary: true });
           fetchAttemptsHistory();
           setEvaluating(false);
@@ -155,6 +161,10 @@ export default function SummaryPage() {
           setScore(0);
           localStorage.setItem('interviewResult', 'FAIL');
           localStorage.setItem('interviewScore', '0');
+          sessionStorage.removeItem('interviewJustCompleted');
+          localStorage.removeItem('interviewJustCompleted');
+          sessionStorage.removeItem('closingInterviewId');
+          localStorage.removeItem('closingInterviewId');
           await syncPhaseToDb(3, { passedAndVisitedSummary: true });
           fetchAttemptsHistory();
           setEvaluating(false);
@@ -163,7 +173,10 @@ export default function SummaryPage() {
       } catch {
         // Non-fatal — keep polling
       }
-    }, POLL_INTERVAL_MS);
+    };
+
+    doPoll();
+    pollTimerRef.current = setInterval(doPoll, POLL_INTERVAL_MS);
   };
 
   const clearPolling = () => {
@@ -211,10 +224,10 @@ export default function SummaryPage() {
       sessionStorage.getItem('closingInterviewId') ||
       '';
 
-    sessionStorage.removeItem('interviewJustCompleted');
-    localStorage.removeItem('interviewJustCompleted');
-    sessionStorage.removeItem('closingInterviewId');
-    localStorage.removeItem('closingInterviewId');
+    const justCompleted =
+      sessionStorage.getItem('interviewJustCompleted') === 'true' ||
+      localStorage.getItem('interviewJustCompleted') === 'true';
+
     localStorage.setItem('summaryVisited', 'true');
 
     const checkAndLoadResults = async () => {
@@ -234,11 +247,13 @@ export default function SummaryPage() {
           const latest = data.attempts?.[0];
 
           if (latest) {
-            const isLatestEvaluating = !latest.result;
+            // If the user just completed an interview with closingId, the latest attempt in DB
+            // MUST match closingId. If latest.id !== closingId, MongoDB has not updated
+            // the new session to completed yet, meaning latest is an OLD attempt!
+            const isTargetSession = !closingId || latest.id === closingId;
+            const isEvaluating = !latest.result || !isTargetSession;
 
-            if (isLatestEvaluating) {
-              // The latest interview is STILL being evaluated by LLM.
-              // Keep page in evaluating/loading state and poll until ready!
+            if (isEvaluating) {
               setEvaluating(true);
               setLoading(true);
               const targetId = closingId || latest.id;
@@ -247,6 +262,11 @@ export default function SummaryPage() {
             }
 
             // Evaluation is complete!
+            sessionStorage.removeItem('interviewJustCompleted');
+            localStorage.removeItem('interviewJustCompleted');
+            sessionStorage.removeItem('closingInterviewId');
+            localStorage.removeItem('closingInterviewId');
+
             setResult(latest.result);
             const resolvedScore = latest.overall_score ?? (latest.result === 'FAIL' ? 0 : null);
             setScore(resolvedScore);
@@ -282,12 +302,14 @@ export default function SummaryPage() {
         return;
       }
 
-      // Fallback from localStorage if available
-      const storedResult = localStorage.getItem('interviewResult');
-      const storedScore = localStorage.getItem('interviewScore');
-      if (storedResult) {
-        setResult(storedResult);
-        if (storedScore) setScore(Number(storedScore));
+      // Only fall back to localStorage if we are NOT in the middle of a newly completed interview
+      if (!justCompleted && !closingId) {
+        const storedResult = localStorage.getItem('interviewResult');
+        const storedScore = localStorage.getItem('interviewScore');
+        if (storedResult) {
+          setResult(storedResult);
+          if (storedScore) setScore(Number(storedScore));
+        }
       }
       fetchAttemptsHistory();
       setPhaseSynced(true);
@@ -384,7 +406,7 @@ export default function SummaryPage() {
         {activeSummaryTab === 'result' && (
           <>
             <div className={styles.resultSection}>
-              {hasResult ? (
+              {hasResult && !evaluating ? (
                 <div
                   className={styles.resultBadge}
                   style={{
@@ -400,7 +422,7 @@ export default function SummaryPage() {
                 </div>
               )}
 
-              {hasResult ? (
+              {hasResult && !evaluating ? (
                 <p className={styles.scoreText}>
                   Score: {score !== null ? `${score}/100` : (result === 'FAIL' ? '0/100' : '—')}
                 </p>

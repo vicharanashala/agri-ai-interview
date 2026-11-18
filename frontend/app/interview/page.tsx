@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import styles from './page.module.css';
 import { syncPhaseToDb } from '@/lib/phaseSync';
-import { useAntiCheat, type ViolationType } from '@/hooks/useAntiCheat';
+import { useAntiCheat, type ViolationType, type ViolationLogDetails } from '@/hooks/useAntiCheat';
 import { useVisualViewportVars } from '@/hooks/useVisualViewportVars';
 import { interceptAuthFetch, authFetch } from '@/lib/auth-fetch';
 import AntiCheatOverlay from '@/components/AntiCheatOverlay';
@@ -13,6 +13,12 @@ import CandidateNavbar from '@/components/CandidateNavbar';
 
 interface Message {
   role: 'ai' | 'user';
+  phase?: 'core' | 'rapid_fire';
+  options?: string[] | null;
+  questionNumber?: number;
+  totalQuestions?: number;
+  topic?: string;
+  imageUrl?: string | null;
   content: string;
   evaluation?: {
     score: number;
@@ -53,7 +59,6 @@ export default function InterviewPage() {
   const [showEvaluation, setShowEvaluation] = useState(false);
   const [showInstructions, setShowInstructions] = useState(true);
   const [showResumePrompt, setShowResumePrompt] = useState(false);
-  const [showStarting, setShowStarting] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [isResuming, setIsResuming] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
@@ -72,12 +77,48 @@ export default function InterviewPage() {
   const [closingInterviewId, setClosingInterviewId] = useState<string | null>(null);
   const [candidateId, setCandidateId] = useState<string>('');
   const [idleThresholdMs, setIdleThresholdMs] = useState<number>(15_000);
-  const [timeRemainingSeconds, setTimeRemainingSeconds] = useState<number>(-1);
   const [startTimeMs, setStartTimeMs] = useState<number | null>(null);
+
+  // Camera & Video Proctoring (Phase 1)
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [cameraActive, setCameraActive] = useState<boolean>(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [isCameraMuted, setIsCameraMuted] = useState<boolean>(false);
+  const [camPosition, setCamPosition] = useState<'top-right' | 'bottom-left'>('top-right');
+  const [isCamMinimized, setIsCamMinimized] = useState<boolean>(false);
+
+  const previewVideoRef = useRef<HTMLVideoElement | null>(null);
+  const interviewVideoRef = useRef<HTMLVideoElement | null>(null);
+  const cameraStreamRef = useRef<MediaStream | null>(null);
+
+  // Structured Assessment (13 Core + 12 Rapid-Fire Questions = 25 Total)
+  const [currentPhase, setCurrentPhase] = useState<'core' | 'rapid_fire'>('core');
+  const [currentQuestionNumber, setCurrentQuestionNumber] = useState<number>(1);
+  const [totalQuestions, setTotalQuestions] = useState<number>(25);
+  const [currentTopic, setCurrentTopic] = useState<string | null>('agricultural_concepts');
+  const [currentOptions, setCurrentOptions] = useState<string[] | null>(null);
+  const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(null);
+  const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  const [rapidFireTimeoutsCount, setRapidFireTimeoutsCount] = useState<number>(0);
+  const [questionTimeLimit, setQuestionTimeLimit] = useState<number>(120);
+  const [questionTimeRemaining, setQuestionTimeRemaining] = useState<number>(120);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const isSubmittingRef = useRef(false);
+
+  // Question countdown timer refs
+  const questionStartMsRef = useRef<number>(0);
+  const questionTimeLimitRef = useRef<number>(questionTimeLimit);
+  const hasTimedOutRef = useRef<boolean>(false);
+  const latestInputRef = useRef(input);
+  const latestSelectedOptionRef = useRef(selectedOption);
+  const latestPhaseRef = useRef(currentPhase);
+
+  latestInputRef.current = input;
+  latestSelectedOptionRef.current = selectedOption;
+  latestPhaseRef.current = currentPhase;
+  questionTimeLimitRef.current = questionTimeLimit;
 
   // Anti-cheat: warning callback
   const handleCheatViolation = useCallback((type: ViolationType, count: number) => {
@@ -97,7 +138,7 @@ export default function InterviewPage() {
   }, [interviewId, router])
 
   // Anti-cheat: log violation to backend (fire-and-forget)
-  const handleCheatLog = useCallback((type: ViolationType) => {
+  const handleCheatLog = useCallback((type: ViolationType, details?: ViolationLogDetails) => {
     authFetch('/api/anti-cheat/log', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -106,17 +147,17 @@ export default function InterviewPage() {
         interviewId: interviewId || null,
         eventType: type,
         severity: 'warning',
-        message: null,
-        metadata: null,
+        message: details?.message ?? null,
+        metadata: details?.metadata ? JSON.stringify(details.metadata) : null,
       }),
     }).catch(() => {})  // silently ignore errors — don't affect interview
   }, [interviewId, candidateId])
 
-  const { reset: resetAntiCheat } = useAntiCheat({
+  const { reset: resetAntiCheat, recordViolation } = useAntiCheat({
     onViolation: handleCheatViolation,
     onTerminate: handleCheatTerminate,
     onLogEvent: handleCheatLog,
-    enabled: !showInstructions && !isComplete,
+    enabled: !showInstructions && !isComplete && !isInterviewCompleted && !showClosingPage && !showResumePrompt && !isReconnecting,
     idleThresholdMs,
   })
 
@@ -125,6 +166,22 @@ export default function InterviewPage() {
     const restore = interceptAuthFetch()
     return restore
   }, [])
+
+  // Restore stored interview session and start time from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('currentInterview');
+      if (stored) {
+        const { interviewId: storedId, startedAt } = JSON.parse(stored);
+        if (storedId) {
+          setInterviewId((prev) => prev || storedId);
+        }
+        if (startedAt) {
+          setStartTimeMs((prev) => prev || new Date(startedAt).getTime());
+        }
+      }
+    } catch { /* ignore */ }
+  }, []);
 
   // Capture interview start time when interview begins
   useEffect(() => {
@@ -144,21 +201,6 @@ export default function InterviewPage() {
       setStartTimeMs(Date.now());
     }
   }, [interviewId, showInstructions]);
-
-  // Timer: compute remaining time from startTimeMs every second (whole seconds only)
-  useEffect(() => {
-    if (!startTimeMs || showInstructions) return;
-
-    const MAX_DURATION_SECONDS = 30 * 60; // 30 minutes — synced to backend default
-
-    const tick = () => {
-      const elapsed = Math.floor((Date.now() - startTimeMs) / 1000);
-      setTimeRemainingSeconds(Math.max(0, MAX_DURATION_SECONDS - elapsed));
-    };
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [startTimeMs, showInstructions]);
 
   // Auto-focus input whenever a new AI question arrives
   useEffect(() => {
@@ -214,6 +256,156 @@ export default function InterviewPage() {
     // On the shortest screens the whole panel scrolls instead of the message list
     if (list.parentElement) list.parentElement.scrollTop = list.parentElement.scrollHeight;
   });
+
+  // ─── Camera & Video Proctoring Lifecycle (Phase 1) ────────────────────────
+  const isStreamAlive = (s: MediaStream | null): boolean => {
+    if (!s || !s.active) return false;
+    const tracks = s.getVideoTracks();
+    return tracks.length > 0 && tracks.some(t => t.readyState === 'live');
+  };
+
+  const startCamera = useCallback(async () => {
+    setCameraError(null);
+    try {
+      if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+        setCameraError('Webcam access is not supported by this browser.');
+        return;
+      }
+
+      // Stop existing tracks if any before requesting new stream
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach(t => t.stop());
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          facingMode: 'user',
+        },
+        audio: false,
+      });
+
+      cameraStreamRef.current = stream;
+      setCameraStream(stream);
+      setCameraActive(true);
+      setIsCameraMuted(false);
+
+      const track = stream.getVideoTracks()[0];
+      if (track) {
+        track.addEventListener('ended', () => {
+          setIsCameraMuted(true);
+          setCameraActive(false);
+          setCameraError('Camera stream disconnected. Please reconnect your camera.');
+        });
+        track.addEventListener('mute', () => {
+          setIsCameraMuted(true);
+        });
+        track.addEventListener('unmute', () => {
+          setIsCameraMuted(false);
+        });
+      }
+
+      if (previewVideoRef.current) {
+        previewVideoRef.current.muted = true;
+        previewVideoRef.current.srcObject = stream;
+        previewVideoRef.current.play().catch(() => {});
+      }
+      if (interviewVideoRef.current) {
+        interviewVideoRef.current.muted = true;
+        interviewVideoRef.current.defaultMuted = true;
+        interviewVideoRef.current.srcObject = stream;
+        interviewVideoRef.current.play().catch(() => {});
+      }
+    } catch (err: any) {
+      console.error('[Webcam] Access error:', err);
+      setCameraActive(false);
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        setCameraError('Camera permission denied. Please allow camera permissions in your browser address bar.');
+      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+        setCameraError('No webcam detected on your device. Please connect a working camera.');
+      } else if (err.name === 'NotReadableError') {
+        setCameraError('Camera is in use by another application. Please close other video apps.');
+      } else {
+        setCameraError('Unable to connect to camera. Please check your browser permissions.');
+      }
+    }
+  }, []);
+
+  // Auto-request camera when instructions screen is active
+  useEffect(() => {
+    if (showInstructions && !cameraActive) {
+      startCamera();
+    }
+  }, [showInstructions, cameraActive, startCamera]);
+
+  // Ensure preview video element attaches stream when it mounts
+  useEffect(() => {
+    if (previewVideoRef.current && cameraStream && isStreamAlive(cameraStream)) {
+      previewVideoRef.current.muted = true;
+      previewVideoRef.current.srcObject = cameraStream;
+      previewVideoRef.current.play().catch(() => {});
+    }
+  }, [cameraStream, cameraActive]);
+
+  const bindInterviewVideo = useCallback((el: HTMLVideoElement | null) => {
+    interviewVideoRef.current = el;
+    if (!el) return;
+    const stream = cameraStreamRef.current;
+    if (stream && isStreamAlive(stream)) {
+      el.muted = true;
+      el.defaultMuted = true;
+      if (el.srcObject !== stream) {
+        el.srcObject = stream;
+      }
+      el.onloadedmetadata = () => {
+        el.play().catch(() => {});
+      };
+      el.play().catch(() => {});
+    } else if (!cameraError) {
+      startCamera();
+    }
+  }, [cameraError, startCamera]);
+
+  // Connect stream to interview room video element once instructions screen closes
+  useEffect(() => {
+    if (!showInstructions) {
+      const stream = cameraStreamRef.current;
+      const vEl = interviewVideoRef.current;
+      if (vEl && stream && isStreamAlive(stream)) {
+        vEl.muted = true;
+        vEl.defaultMuted = true;
+        if (vEl.srcObject !== stream) {
+          vEl.srcObject = stream;
+        }
+        vEl.onloadedmetadata = () => {
+          vEl.play().catch(() => {});
+        };
+        vEl.play().catch(() => {});
+      } else if (!isStreamAlive(stream) && !cameraError) {
+        startCamera();
+      }
+    }
+  }, [showInstructions, isCamMinimized, cameraActive, startCamera, cameraError]);
+
+  // Stop camera stream when component unmounts
+  useEffect(() => {
+    return () => {
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach(t => t.stop());
+      }
+    };
+  }, []);
+
+  // Stop camera tracks when interview completes or closes
+  useEffect(() => {
+    if (isComplete || showClosingPage) {
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach(t => t.stop());
+        setCameraActive(false);
+      }
+    }
+  }, [isComplete, showClosingPage]);
 
   // Intercept fetch to log all interview API calls (debug)
   useEffect(() => {
@@ -331,12 +523,19 @@ export default function InterviewPage() {
   };
 
   const handleBeginInterview = async () => {
+    if (!cameraActive || isCameraMuted) {
+      setError('A live webcam stream is required for this proctored interview. Please enable your camera above.');
+      return;
+    }
     setIsInterviewCompleted(false);
     setError(null);
     resetAntiCheat();
     setIsStarting(true);
-    setShowStarting(true);
-    setShowInstructions(false);
+
+    // Clear any previous stale interview session from localStorage before starting
+    try {
+      localStorage.removeItem('currentInterview');
+    } catch { /* non-fatal */ }
 
     // Resolve candidateId — try sessionStorage first (set by post-login),
     // then React state (from useEffect), then fall back to API call.
@@ -356,37 +555,43 @@ export default function InterviewPage() {
 
     if (!resolvedId) {
       setError('Candidate profile not found. Please complete onboarding first.');
-      setShowStarting(false);
       setShowInstructions(true);
       setIsStarting(false);
       return;
     }
 
     try {
-      // ── Step 1: Request an interview slot ─────────────────────────────────
+      // ── Step 1: Request an interview slot (force_fresh ensures clean session) ──
       const queueRes = await authFetch('/api/interview/queue/request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ candidate_id: resolvedId }),
+        body: JSON.stringify({ 
+          candidate_id: resolvedId,
+          force_fresh: true,
+        }),
       });
       const queueData = await queueRes.json();
 
+      if (!queueRes.ok || !queueData || queueData.error) {
+        setShowInstructions(true);
+        const errMsg = queueData?.error || queueData?.detail || queueData?.message || 'Failed to start interview. Please try again.';
+        setError(errMsg);
+        return;
+      }
+
       if (queueData.result === 'no_slot') {
-        setShowStarting(false);
         setShowInstructions(true);
         setError('All slots are full, please try after sometime.');
         return;
       }
 
       if (queueData.result === 'attempts_exhausted') {
-        setShowStarting(false);
         setShowInstructions(true);
         setError('You have used all 3 available interview attempts. No further interviews can be started.');
         return;
       }
 
       if (queueData.result === 'cooldown') {
-        setShowStarting(false);
         setShowInstructions(true);
         const until = queueData.cooldown_until
           ? new Date(queueData.cooldown_until).toLocaleString('en-IN')
@@ -397,42 +602,139 @@ export default function InterviewPage() {
 
       if (queueData.result === 'already_active') {
         setInterviewId(queueData.interview_id);
-        setShowStarting(false);
-        setShowInstructions(false);
+        if (queueData.interview_id) {
+          localStorage.setItem('currentInterview', JSON.stringify({
+            interviewId: queueData.interview_id,
+            startedAt: new Date().toISOString(),
+          }));
+        }
+
+        const restoredPhase = (queueData.phase || 'core') as 'core' | 'rapid_fire';
+        const restoredLimit = queueData.time_limit_seconds || queueData.timeLimitSeconds || 120;
+        const restoredQNum = queueData.question_number || queueData.questionNumber || 1;
+        const restoredTotal = queueData.total_questions || queueData.totalQuestions || 25;
+        const restoredOpts = queueData.options || null;
+        const restoredTop = queueData.topic || 'agricultural_concepts';
+        const restoredImg = queueData.image_url || queueData.imageUrl || null;
+
+        setCurrentPhase(restoredPhase);
+        setQuestionTimeLimit(restoredLimit);
+        setQuestionTimeRemaining(restoredLimit);
+        setCurrentQuestionNumber(restoredQNum);
+        setTotalQuestions(restoredTotal);
+        setCurrentOptions(restoredOpts);
+        setCurrentImageUrl(restoredImg);
+        setCurrentTopic(restoredTop);
+        setSelectedOption(null);
+
+        // Reset per-question timer for the active question
+        questionStartMsRef.current = Date.now();
+        hasTimedOutRef.current = false;
+        setQuestionTimeRemaining(restoredLimit);
+
         try {
           const histRes = await authFetch(`/api/interview/history/${queueData.interview_id}`);
           if (histRes.ok) {
             const histData = await histRes.json();
             if (histData.history?.length > 0) {
-              const restored: Message[] = histData.history.map(
-                (m: { role: string; content: string }) => ({
-                  role: m.role as 'ai' | 'user',
-                  content: m.content,
+              // Sanitize history: ensure consecutive AI messages without candidate responses don't stack
+              const rawHistory = histData.history;
+              const sanitizedHistory: any[] = [];
+              for (let i = 0; i < rawHistory.length; i++) {
+                const item = rawHistory[i];
+                const isAi = (item.role === 'assistant' || item.role === 'ai');
+                const prev = sanitizedHistory[sanitizedHistory.length - 1];
+                if (isAi && prev && (prev.role === 'assistant' || prev.role === 'ai')) {
+                  // Replace previous un-answered AI question with the latest one
+                  sanitizedHistory[sanitizedHistory.length - 1] = item;
+                } else {
+                  sanitizedHistory.push(item);
+                }
+              }
+
+              const restored: Message[] = sanitizedHistory.map(
+                (m: { role: string; content: string; phase?: string; options?: string[]; topic?: string; image_url?: string; imageUrl?: string }) => ({
+                  role: (m.role === 'assistant' || m.role === 'ai') ? 'ai' : 'user',
+                  content: m.content || 'Please provide your answer to this question.',
+                  phase: (m.phase as any) || restoredPhase,
+                  options: m.options || null,
+                  topic: m.topic || restoredTop,
+                  imageUrl: m.image_url || m.imageUrl || null,
                 })
               );
               setMessages(restored);
-            } else {
-              setMessages([{ role: 'ai', content: 'Welcome back! Please continue from where you left off.' }]);
+              setShowInstructions(false);
+              return;
             }
           }
-        } catch {
-          setMessages([{ role: 'ai', content: 'Welcome back! Please continue from where you left off.' }]);
-        }
+        } catch { /* fallback below */ }
+
+        const fallbackQ =
+          queueData.first_question ||
+          queueData.question ||
+          'Hello, welcome to your interview assessment. Please describe your agricultural background and experience with soil and crop management.';
+        setMessages([{
+          role: 'ai',
+          content: fallbackQ,
+          phase: restoredPhase,
+          options: restoredOpts,
+          questionNumber: restoredQNum,
+          totalQuestions: restoredTotal,
+          topic: restoredTop,
+          imageUrl: restoredImg,
+        }]);
+        setShowInstructions(false);
         return;
       }
 
       // ── Step 2: Slot acquired — start the interview ────────────────────────
-      setShowStarting(false);
       setInterviewId(queueData.interview_id);
       localStorage.setItem('currentInterview', JSON.stringify({
         interviewId: queueData.interview_id,
         startedAt: new Date().toISOString(),
       }));
-      setMessages([{ role: 'ai', content: queueData.first_question }]);
+      const initialPhase = (queueData.phase || 'core') as 'core' | 'rapid_fire';
+      const initialLimit = queueData.time_limit_seconds || queueData.timeLimitSeconds || 120;
+      const initialQNum = queueData.question_number || queueData.questionNumber || 1;
+      const initialTotal = queueData.total_questions || queueData.totalQuestions || 25;
+      const initialOpts = queueData.options || null;
+      const initialTop = queueData.topic || 'agricultural_concepts';
+      const initialImg = queueData.image_url || queueData.imageUrl || null;
+
+      setCurrentPhase(initialPhase);
+      setQuestionTimeLimit(initialLimit);
+      setQuestionTimeRemaining(initialLimit);
+      setCurrentQuestionNumber(initialQNum);
+      setTotalQuestions(initialTotal);
+      setCurrentOptions(initialOpts);
+      setCurrentImageUrl(initialImg);
+      setCurrentTopic(initialTop);
+      setSelectedOption(null);
+      setRapidFireTimeoutsCount(0);
+
+      // Question 1 countdown timer start - ensure full 2 minutes (120s)
+      questionStartMsRef.current = Date.now();
+      hasTimedOutRef.current = false;
+      setQuestionTimeRemaining(initialLimit);
+
+      const firstQuestionText =
+        (queueData.first_question && queueData.first_question.trim()) ||
+        (queueData.question && queueData.question.trim()) ||
+        'Hello, welcome to your interview assessment. Please describe your agricultural background and experience with soil and crop management.';
+
+      setMessages([{
+        role: 'ai',
+        content: firstQuestionText,
+        phase: initialPhase,
+        options: initialOpts,
+        questionNumber: initialQNum,
+        totalQuestions: initialTotal,
+        topic: initialTop,
+        imageUrl: initialImg,
+      }]);
       setShowInstructions(false);
     } catch (error) {
       console.error('Failed to start interview:', error);
-      setShowStarting(false);
       setShowInstructions(true);
       setError('Network error. Please ensure the backend server is running on port 8000.');
     } finally {
@@ -447,12 +749,22 @@ export default function InterviewPage() {
   // ── End interview helper (instant, no waiting) ────────────────────────
   // Calls /end and immediately shows the closing page.
   const endInterviewAndClose = async (effectiveInterviewId: string, endReason: string) => {
-    // Fire-and-forget — /end now returns instantly and triggers background eval
-    authFetch(`/api/interview/end/${effectiveInterviewId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ end_reason: endReason }),
-    }).catch(() => { /* non-fatal — backend will still process */ });
+    // Clear stale evaluation/score data from previous attempts so summary never displays old scores
+    localStorage.removeItem('interviewResult');
+    localStorage.removeItem('interviewScore');
+    localStorage.removeItem('interviewEvaluation');
+    sessionStorage.removeItem('interviewResult');
+    sessionStorage.removeItem('interviewScore');
+    sessionStorage.removeItem('interviewEvaluation');
+
+    // Notify backend
+    try {
+      await authFetch(`/api/interview/end/${effectiveInterviewId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ end_reason: endReason }),
+      });
+    } catch { /* non-fatal — backend will still process */ }
 
     // Mark completion flags so summary page knows to poll
     sessionStorage.setItem('interviewCompleted', 'true');
@@ -471,7 +783,7 @@ export default function InterviewPage() {
     setShowClosingPage(true);
   };
 
-  const handleSubmit = async (e?: React.FormEvent) => {
+  const handleSubmit = async (e?: React.FormEvent, overrideAnswer?: string) => {
     // Prevent double submission
     if (isSubmittingRef.current || isLoading) {
       return;
@@ -481,18 +793,34 @@ export default function InterviewPage() {
       e.preventDefault();
     }
     
-    if (!input.trim()) {
+    const userMessage = (overrideAnswer !== undefined ? overrideAnswer : input).trim();
+    if (!userMessage) {
       return;
     }
     
-    if (!interviewId) {
-      console.error('Interview not started');
+    let effectiveInterviewId = interviewId;
+    if (!effectiveInterviewId) {
+      try {
+        const stored = localStorage.getItem('currentInterview');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed.interviewId) {
+            effectiveInterviewId = parsed.interviewId;
+            setInterviewId(parsed.interviewId);
+          }
+        }
+      } catch {}
+    }
+
+    if (!effectiveInterviewId) {
+      console.error('Interview not started - no active interview session found');
+      setError('Interview session not active. Please refresh the page to restart or resume.');
       return;
     }
 
     isSubmittingRef.current = true;
     
-    const userMessage = input;
+    setSelectedOption(null);
     setInput('');
     setIsLoading(true);
     setShowEvaluation(false);
@@ -505,7 +833,8 @@ export default function InterviewPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          interviewId: interviewId,
+          interviewId: effectiveInterviewId,
+          interview_id: effectiveInterviewId,
           message: userMessage
         }),
       });
@@ -556,11 +885,53 @@ export default function InterviewPage() {
         setMessages(prev => [...prev, { role: 'ai', content: data.response }]);
         setShowEvaluation(true);
 
+        // Clear stale cached results before navigating to summary
+        localStorage.removeItem('interviewResult');
+        localStorage.removeItem('interviewScore');
+        localStorage.removeItem('interviewEvaluation');
+        sessionStorage.removeItem('interviewResult');
+        sessionStorage.removeItem('interviewScore');
+        sessionStorage.removeItem('interviewEvaluation');
+        if (effectiveInterviewId) {
+          sessionStorage.setItem('closingInterviewId', effectiveInterviewId);
+          localStorage.setItem('closingInterviewId', effectiveInterviewId);
+        }
+        sessionStorage.setItem('interviewJustCompleted', 'true');
+        localStorage.setItem('interviewJustCompleted', 'true');
+
         setTimeout(() => { router.push('/summary'); }, 20000);
       } else {
+        const nextPhase = (data.phase || 'core') as 'core' | 'rapid_fire';
+        const nextLimit = data.time_limit_seconds || data.timeLimitSeconds || (nextPhase === 'core' ? 120 : 30);
+        const nextQNum = data.question_number || data.questionNumber || (currentQuestionNumber + 1);
+        const nextTotal = data.total_questions || data.totalQuestions || 25;
+        const nextOpts = data.options || null;
+        const nextTop = data.topic || null;
+        const nextImg = data.image_url || data.imageUrl || null;
+
+        setCurrentPhase(nextPhase);
+        setQuestionTimeLimit(nextLimit);
+        setQuestionTimeRemaining(nextLimit);
+        setCurrentQuestionNumber(nextQNum);
+        setTotalQuestions(nextTotal);
+        setCurrentOptions(nextOpts);
+        setCurrentImageUrl(nextImg);
+        setCurrentTopic(nextTop);
+        setSelectedOption(null);
+
+        const cleanResponse = (data.response && data.response.trim() && !data.response.toLowerCase().includes('no response'))
+          ? data.response
+          : 'Please describe the field management and agronomic practices you would implement in this situation.';
+
         setMessages(prev => [...prev, { 
+          phase: nextPhase,
+          options: nextOpts,
+          questionNumber: nextQNum,
+          totalQuestions: nextTotal,
+          topic: nextTop,
+          imageUrl: nextImg,
           role: 'ai', 
-          content: data.response,
+          content: cleanResponse,
           evaluation: data.evaluation
         }]);
         // Show brief evaluation after each answer
@@ -585,6 +956,74 @@ export default function InterviewPage() {
       isSubmittingRef.current = false;
     }
   };
+
+  const handleQuestionTimeout = useCallback(() => {
+    if (!interviewId || isSubmittingRef.current || isLoading || isComplete) return;
+    if (hasTimedOutRef.current) return;
+    hasTimedOutRef.current = true;
+
+    const phase = latestPhaseRef.current;
+    const opt = latestSelectedOptionRef.current;
+    const currInput = latestInputRef.current;
+
+    if (phase === 'rapid_fire') {
+      if (opt) {
+        handleSubmit(undefined, opt);
+      } else {
+        const newTimeouts = rapidFireTimeoutsCount + 1;
+        setRapidFireTimeoutsCount(newTimeouts);
+
+        // Anti-cheating trigger: If a candidate allows 5 rapid-fire questions to expire without choosing an answer, record warning
+        if (newTimeouts === 5) {
+          recordViolation('rapid_fire_timeout', {
+            message: 'Candidate allowed 5 rapid-fire questions to expire without choosing an answer.',
+            metadata: { timeoutsCount: newTimeouts },
+          });
+        }
+
+        handleSubmit(undefined, '[Time expired - No answer selected]');
+      }
+    } else {
+      if (currInput && currInput.trim()) {
+        handleSubmit(undefined, currInput.trim());
+      } else {
+        handleSubmit(undefined, '[Time expired - No answer provided]');
+      }
+    }
+  }, [interviewId, rapidFireTimeoutsCount, recordViolation, isLoading, isComplete]);
+
+  const handleQuestionTimeoutRef = useRef(handleQuestionTimeout);
+  handleQuestionTimeoutRef.current = handleQuestionTimeout;
+
+  // Reset question timer start timestamp when question advances or starts
+  useEffect(() => {
+    if (showInstructions || !interviewId) return;
+    questionStartMsRef.current = Date.now();
+    hasTimedOutRef.current = false;
+    setQuestionTimeRemaining(questionTimeLimit);
+  }, [currentQuestionNumber, currentPhase, questionTimeLimit, showInstructions, interviewId]);
+
+  // Per-question visible countdown timer (120s for core, 30s for rapid-fire)
+  useEffect(() => {
+    if (showInstructions || !interviewId || isComplete || isInterviewCompleted || showClosingPage || isLoading) {
+      return;
+    }
+
+    const tick = () => {
+      if (!questionStartMsRef.current || questionStartMsRef.current === 0) return;
+      const elapsed = Math.floor((Date.now() - questionStartMsRef.current) / 1000);
+      const remaining = Math.max(0, questionTimeLimitRef.current - elapsed);
+      setQuestionTimeRemaining(remaining);
+
+      if (remaining <= 0 && !hasTimedOutRef.current) {
+        handleQuestionTimeoutRef.current();
+      }
+    };
+
+    tick();
+    const timer = setInterval(tick, 500);
+    return () => clearInterval(timer);
+  }, [showInstructions, isComplete, isInterviewCompleted, showClosingPage, isLoading, currentQuestionNumber]);
 
   const getScoreColor = (score: number) => {
     if (score >= 80) return '#22c55e';
@@ -692,25 +1131,6 @@ export default function InterviewPage() {
   }
 
   // 6.4 — Show resume prompt if interview was paused (interruption path)
-  // 6.5 — Show "Starting your interview soon" screen
-  if (showStarting) {
-    return (
-      <div className={styles.container}>
-        <div className={styles.completedScreen}>
-          <div className={styles.completedCard}>
-            <div className={styles.startingIcon}>🚀</div>
-            <h1 className={styles.completedTitle}>Starting your interview soon</h1>
-            <p className={styles.completedSubtitle}>
-              A slot is available. Setting everything up for you — this will only take a moment.
-            </p>
-            <div className={styles.startingDots}>
-              <span></span><span></span><span></span>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   if (showResumePrompt) {
     return (
@@ -751,9 +1171,9 @@ export default function InterviewPage() {
 
             <div className={styles.guidelines}>
               <ul>
-                <li>This is an AI powered chat interview.</li>
-                <li>The interview will adapt based on your responses and evaluate accordingly.</li>
-                <li>Try to answer the questions in depth to get better results.</li>
+                <li><strong>Part 1: 13 Core Questions</strong> — 1 greeting question followed by 12 technical questions (2 minutes per question).</li>
+                <li><strong>Part 2: 12 Rapid-Fire Questions</strong> — Four-option multiple-choice questions (30 seconds per question).</li>
+                <li><strong>Auto-Advance Timers</strong> — Visible countdown timers automatically advance to the next question when time expires.</li>
               </ul>
 
               <h3 className={styles.antiCheatTitle}>⚠️ Anti-Cheating Rules</h3>
@@ -766,19 +1186,78 @@ export default function InterviewPage() {
                 <li>🚫 <strong>Right-Click</strong> — Right-click context menu is disabled</li>
                 <li>🚫 <strong>Text Selection</strong> — Selecting text on the page is not allowed</li>
                 <li>🚫 <strong>Multi-Monitor</strong> — Moving the browser to another display is not allowed</li>
-                <li>⏳ <strong>Idle Timeout</strong> — If no activity is detected for 10 seconds, a warning will be triggered</li>
+                <li>📹 <strong>Live Webcam Proctoring</strong> — Your camera must remain active and your face clearly visible throughout the assessment</li>
+                <li>🚫 <strong>Unusual Text Replacement</strong> — Typing filler text and rapidly deleting large amounts to replace it may trigger a warning</li>
+                <li>🚫 <strong>Rapid-Fire Timeouts</strong> — Allowing 5 rapid-fire questions to expire without choosing an answer records an anti-cheat warning</li>
               </ul>
               <p className={styles.antiCheatNote}>
                 🔒 All violations are logged and reported to the review team. Please stay focused throughout the interview.
               </p>
             </div>
 
+            {/* Webcam Proctoring Pre-Check */}
+            <div className={styles.webcamPrecheckSection}>
+              <div className={styles.webcamPrecheckHeader}>
+                <div className={styles.webcamPrecheckTitleBox}>
+                  <span className={styles.webcamIcon}>📹</span>
+                  <div>
+                    <h3 className={styles.webcamPrecheckTitle}>Camera & Proctoring Check</h3>
+                    <p className={styles.webcamPrecheckSubtitle}>
+                      Live webcam monitoring is required throughout this assessment.
+                    </p>
+                  </div>
+                </div>
+                <div className={styles.webcamStatusBadge}>
+                  {cameraActive && !isCameraMuted ? (
+                    <span className={styles.cameraStatusReady}>● Camera Ready</span>
+                  ) : cameraError ? (
+                    <span className={styles.cameraStatusError}>⚠️ Action Required</span>
+                  ) : (
+                    <span className={styles.cameraStatusChecking}>⏳ Connecting Camera...</span>
+                  )}
+                </div>
+              </div>
+
+              <div className={styles.webcamPreviewBox}>
+                {cameraActive && !isCameraMuted ? (
+                  <div className={styles.webcamVideoWrapper}>
+                    <video
+                      ref={previewVideoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className={styles.precheckVideo}
+                    />
+                    <div className={styles.faceFramingGuide}>
+                      <div className={styles.faceOvalGuide} />
+                      <span className={styles.framingHint}>Position face inside the frame</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className={styles.webcamPlaceholder}>
+                    <span className={styles.webcamPlaceholderIcon}>📷</span>
+                    <p className={styles.webcamPlaceholderText}>
+                      {cameraError || 'Please allow camera access when prompted by your browser.'}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={startCamera}
+                      className={styles.enableCamBtn}
+                    >
+                      {cameraError ? 'Retry Camera Permission' : 'Enable Camera'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
             <button
+              type="button"
               className={styles.beginButton}
               onClick={handleBeginInterview}
-              disabled={isStarting}
+              disabled={isStarting || !cameraActive || isCameraMuted}
             >
-              {isStarting ? 'Starting...' : 'Begin Interview'}
+              {isStarting ? 'Starting Interview...' : (!cameraActive || isCameraMuted ? 'Enable Camera to Begin' : 'Begin Interview')}
             </button>
 
             {error && <p className={styles.errorMessage}>{error}</p>}
@@ -787,6 +1266,62 @@ export default function InterviewPage() {
         </div>
       ) : (
         <div className={styles.container}>
+          {/* Live Floating Camera Proctoring Monitor (Phase 1) */}
+          {!isComplete && (
+            <div
+              className={`${styles.floatingCamCard} ${isCamMinimized ? styles.floatingCamMinimized : ''} ${camPosition === 'bottom-left' ? styles.floatingCamBottomLeft : styles.floatingCamTopRight}`}
+            >
+              <div className={styles.floatingCamHeader}>
+                <span className={styles.liveIndicator}>
+                  <span className={styles.liveDot} /> {isCameraMuted ? 'CAM OFF' : 'LIVE PROCTOR'}
+                </span>
+                <div className={styles.floatingCamControls}>
+                  <button
+                    type="button"
+                    title="Reconnect camera stream"
+                    className={styles.camControlBtn}
+                    onClick={() => startCamera()}
+                  >
+                    ↺
+                  </button>
+                  <button
+                    type="button"
+                    title="Switch corner position"
+                    className={styles.camControlBtn}
+                    onClick={() => setCamPosition(p => p === 'top-right' ? 'bottom-left' : 'top-right')}
+                  >
+                    ⇄
+                  </button>
+                  <button
+                    type="button"
+                    title={isCamMinimized ? 'Expand preview' : 'Minimize preview'}
+                    className={styles.camControlBtn}
+                    onClick={() => setIsCamMinimized(m => !m)}
+                  >
+                    {isCamMinimized ? '▢' : '—'}
+                  </button>
+                </div>
+              </div>
+
+              {!isCamMinimized && (
+                <div className={styles.floatingCamVideoWrapper}>
+                  <video
+                    ref={bindInterviewVideo}
+                    autoPlay
+                    playsInline
+                    muted
+                    className={styles.interviewCamVideo}
+                  />
+                  {isCameraMuted && (
+                    <div className={styles.cameraWarningOverlay}>
+                      <span>⚠️ Camera Disconnected</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className={styles.chatContainer}>
           <div className={styles.header}>
             <div className={styles.headerLeft}>
@@ -883,24 +1418,73 @@ export default function InterviewPage() {
             </div>
           )}
 
-          {/* Live time-remaining badge */}
-          {timeRemainingSeconds >= 0 && !showInstructions && (
-            <div style={{
-              display: 'flex',
-              justifyContent: 'flex-end',
-              padding: '4px 16px 0',
-              fontSize: '13px',
-              color: timeRemainingSeconds < 60 ? '#dc2626' : '#6b7280',
-              fontFamily: 'monospace',
-            }}>
-              ⏱ {Math.floor(timeRemainingSeconds / 60)}:{String(timeRemainingSeconds % 60).padStart(2, '0')} remaining
-            </div>
+          {/* Structured Assessment Question Header & Timer Banner */}
+          {!showInstructions && !isComplete && (
+            <>
+              <div className={styles.questionHeaderBar}>
+                <div className={styles.questionMeta}>
+                  <span className={currentPhase === 'core' ? styles.phaseBadgeCore : styles.phaseBadgeRapid}>
+                    {currentPhase === 'core' ? 'Part 1: Core Question' : 'Part 2: Rapid-Fire MCQ'}
+                  </span>
+                  <span style={{ fontWeight: 600, fontSize: '13px', color: '#1e293b' }}>
+                    Question {currentQuestionNumber} of {totalQuestions}
+                  </span>
+                </div>
+                <div className={styles.questionTimerContainer}>
+                  <div className={`${styles.questionTimerBadge} ${
+                    questionTimeRemaining / questionTimeLimit > 0.4
+                      ? styles.timerGreen
+                      : questionTimeRemaining / questionTimeLimit > 0.15
+                      ? styles.timerYellow
+                      : styles.timerRed
+                  }`}>
+                    <span>⏱</span>
+                    <span>
+                      {Math.floor(questionTimeRemaining / 60)}:
+                      {String(questionTimeRemaining % 60).padStart(2, '0')}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className={styles.timerProgressBar}>
+                <div
+                  className={styles.timerProgressFill}
+                  style={{
+                    width: `${Math.max(0, Math.min(100, (questionTimeRemaining / questionTimeLimit) * 100))}%`,
+                    backgroundColor:
+                      questionTimeRemaining / questionTimeLimit > 0.4
+                        ? '#16a34a'
+                        : questionTimeRemaining / questionTimeLimit > 0.15
+                        ? '#ca8a04'
+                        : '#dc2626',
+                  }}
+                />
+              </div>
+            </>
           )}
 
           <div className={styles.messages}>
-            {messages.map((message, index) => (
-              <div key={index} className={`${styles.message} ${styles[message.role]}`}>
-                <div className={styles.messageContent}>{message.content}</div>
+            {messages.map((message, index) => {
+              const roleClass = message.role === 'user' ? styles.user : styles.ai;
+              const contentText = (message.content && message.content.trim())
+                ? message.content
+                : (message.role === 'user' ? '(No response provided)' : 'Hello, welcome to your interview assessment. Please describe your agricultural background and practical experience.');
+
+              return (
+                <div key={index} className={`${styles.message} ${roleClass}`}>
+                  <div className={styles.messageContent}>{contentText}</div>
+                  {message.imageUrl && (
+                    <div className={styles.questionImageWrapper}>
+                      <img
+                        src={message.imageUrl}
+                        alt="Visual Identification Specimen"
+                        className={styles.questionImage}
+                        onLoad={() => {
+                          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                        }}
+                      />
+                    </div>
+                  )}
                 {message.evaluation && (
                   <div className={styles.evaluationCard}>
                     <div className={styles.score} style={{ color: getScoreColor(message.evaluation.score) }}>
@@ -932,7 +1516,8 @@ export default function InterviewPage() {
                   </div>
                 )}
               </div>
-            ))}
+            );
+          })}
             {isLoading && (
               <div className={`${styles.message} ${styles.ai}`}>
                 <div className={styles.messageContent}>Thinking...</div>
@@ -979,7 +1564,59 @@ export default function InterviewPage() {
             </div>
           )}
 
-          {!isComplete && (
+          {!isComplete && currentPhase === 'rapid_fire' && currentOptions && currentOptions.length === 4 ? (
+            <div className={styles.rapidFireContainer}>
+              <div className={styles.rapidFireHint}>
+                <span>⚡ Rapid-Fire MCQ: Select ONE option (30s limit)</span>
+                {rapidFireTimeoutsCount > 0 && (
+                  <span className={styles.timeoutWarningBadge}>
+                    ⚠️ Unanswered timeouts: {rapidFireTimeoutsCount}/5
+                  </span>
+                )}
+              </div>
+              <div className={styles.optionsGrid}>
+                {currentOptions.map((opt, idx) => {
+                  const letter = String.fromCharCode(65 + idx);
+                  const displayText = opt.startsWith(`${letter})`) || opt.startsWith(`${letter}.`) 
+                    ? opt.substring(2).trim() 
+                    : opt;
+                  const isSelected = selectedOption === opt;
+
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      className={`${styles.optionCard} ${isSelected ? styles.optionCardSelected : ''}`}
+                      onClick={() => setSelectedOption(opt)}
+                      disabled={isLoading}
+                    >
+                      <span className={`${styles.optionLetter} ${isSelected ? styles.optionLetterSelected : ''}`}>
+                        {letter}
+                      </span>
+                      <span className={styles.optionText}>{displayText}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className={styles.rapidFireActions}>
+                <span style={{ fontSize: '13px', color: '#64748b' }}>
+                  {selectedOption ? `Selected: Option ${selectedOption.substring(0, 1)}` : 'Click an option to select'}
+                </span>
+                <button
+                  type="button"
+                  className={styles.rapidFireSubmitBtn}
+                  disabled={!selectedOption || isLoading}
+                  onClick={() => {
+                    if (selectedOption) {
+                      handleSubmit(undefined, selectedOption);
+                    }
+                  }}
+                >
+                  {isLoading ? 'Submitting...' : 'Submit Answer'}
+                </button>
+              </div>
+            </div>
+          ) : !isComplete && (
             <form onSubmit={handleSubmit} className={styles.inputForm}>
               <textarea
                 ref={inputRef}
@@ -997,7 +1634,7 @@ export default function InterviewPage() {
                     requestAnimationFrame(() => el.setSelectionRange(selectionStart + 1, selectionStart + 1));
                     return;
                   }
-                  if (input.trim() && !isLoading && interviewId) {
+                  if (input.trim() && !isLoading) {
                     handleSubmit(e as unknown as React.FormEvent);
                   }
                 }}

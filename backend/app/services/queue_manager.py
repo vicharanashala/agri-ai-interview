@@ -4,12 +4,15 @@ Slot Manager — MongoDB-backed interview slot management.
 No queue, no positions, no wait times. Just a max-concurrent threshold.
 """
 import json
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from app.db.mongodb import get_sync_db
 from app.services.settings_service import get_cooldown_days, get_interview_settings
+
+logger = logging.getLogger(__name__)
 
 # ── Config ────────────────────────────────────────────────────────────────────
 # Cached value; refreshed once when the module loads.
@@ -83,7 +86,7 @@ class SlotManager:
 
     # ── Start interview ───────────────────────────────────────────────────────
 
-    async def start_interview(self, candidate_id: str, candidate_data: dict) -> dict:
+    async def start_interview(self, candidate_id: str, candidate_data: dict, force_fresh: bool = False) -> dict:
         db = get_sync_db()
         
         # Merge candidate data from DB so we have eligible_role and other real attributes
@@ -142,10 +145,77 @@ class SlotManager:
                 "status": {"$in": ["active", "interviewing"]},
             })
             if existing:
+                qa_count = len((existing.get("interview_data") or {}).get("qa_pairs") or [])
+                # If force_fresh is requested OR the active session was never completed/has 0 answers,
+                # retire the stale/abandoned session and start fresh.
+                if force_fresh or qa_count == 0:
+                    logger.info(
+                        f"[queue_manager] Retiring uncompleted/stale session {existing['_id']} for candidate {candidate_id} "
+                        f"(qa_count={qa_count}, force_fresh={force_fresh}) to start a clean attempt."
+                    )
+                    db.interview_sessions.update_one(
+                        {"_id": existing["_id"]},
+                        {"$set": {
+                            "status": "abandoned",
+                            "end_reason": "restarted_from_instructions",
+                            "updated_at": _now(),
+                        }}
+                    )
+                    from app.workflows.interview_workflow import _interviews
+                    _interviews.pop(existing["_id"], None)
+                    existing = None
+
+            if existing:
                 self._resume_workflow_from_session(existing, candidate_data)
+                interview_id = existing["_id"]
+                current_q = None
+                curr_phase = "core"
+                curr_limit = 120
+                curr_options = None
+                curr_q_num = 1
+                curr_topic = "agricultural_concepts"
+                curr_image_url = None
+
+                from app.workflows.interview_workflow import _interviews
+                state = _interviews.get(interview_id)
+                if state and getattr(state, "_pending_question", None):
+                    current_q = state._pending_question.get("question")
+                    curr_phase = state._pending_question.get("phase", "core")
+                    curr_limit = state._pending_question.get("time_limit_seconds", 120)
+                    curr_options = state._pending_question.get("options")
+                    curr_topic = state._pending_question.get("topic", "agricultural_concepts")
+                    curr_image_url = state._pending_question.get("image_url")
+                    curr_q_num = state.question_count + 1
+                elif state and getattr(state, "messages", None):
+                    for m in reversed(state.messages):
+                        if m.get("role") in ("assistant", "ai"):
+                            current_q = m.get("content")
+                            curr_phase = m.get("phase", "core")
+                            curr_options = m.get("options")
+                            curr_topic = m.get("topic", "agricultural_concepts")
+                            curr_image_url = m.get("image_url")
+                            break
+                    curr_q_num = state.question_count + 1
+
+                if not current_q:
+                    int_data = existing.get("interview_data", {})
+                    current_q = int_data.get("first_question")
+
+                if not current_q:
+                    cand_name = (candidate_data or {}).get("name", "")
+                    current_q = get_first_question(candidate_name=cand_name, attempt_number=existing.get("attempt_number", 1))
+
                 return {
                     "result": "already_active",
-                    "interview_id": existing["_id"],
+                    "interview_id": interview_id,
+                    "first_question": current_q,
+                    "phase": curr_phase,
+                    "time_limit_seconds": curr_limit,
+                    "options": curr_options,
+                    "question_number": curr_q_num,
+                    "total_questions": 25,
+                    "topic": curr_topic,
+                    "image_url": curr_image_url,
                 }
 
             # 4. Slot check
@@ -160,6 +230,16 @@ class SlotManager:
             # ── Create new interview ─────────────────────────────────────────
             interview_id = str(uuid.uuid4())
             now = _now()
+
+            # Retrieve past questions & attempt number for cross-attempt deduplication
+            from app.services.past_questions_service import get_candidate_attempt_info
+            attempt_number, past_questions = get_candidate_attempt_info(
+                db, candidate_id, current_interview_id=interview_id
+            )
+            logger.info(
+                f"[queue_manager] Starting interview {interview_id} for candidate {candidate_id} "
+                f"(Attempt #{attempt_number}, {len(past_questions)} past questions collected for deduplication)"
+            )
 
             resume_parsed = None
             resume = db.resumes.find_one({"candidate_id": candidate_id})
@@ -178,8 +258,11 @@ class SlotManager:
                 "end_reason": None,
                 "score": None,
                 "current_phase": "interview",
+                "attempt_number": attempt_number,
                 "interview_data": {
                     "candidate_data": candidate_data,
+                    "attempt_number": attempt_number,
+                    "past_questions": past_questions,
                 },
                 "started_at": now,
                 "completed_at": None,
@@ -214,6 +297,8 @@ class SlotManager:
                 interview_id=interview_id,
                 candidate_data=candidate_data,
                 resume_parsed=resume_parsed,
+                past_questions=past_questions,
+                attempt_number=attempt_number,
             )
 
             # Get the initial messages from workflow (e.g. the first question message)
@@ -227,6 +312,8 @@ class SlotManager:
                         "candidate_data": candidate_data,
                         "first_question": first_question,
                         "messages": messages,
+                        "attempt_number": attempt_number,
+                        "past_questions": past_questions,
                     },
                     "updated_at": _now(),
                 }}
@@ -238,6 +325,13 @@ class SlotManager:
                 "result": "started",
                 "interview_id": interview_id,
                 "first_question": first_question,
+                "phase": "core",
+                "time_limit_seconds": 120,
+                "options": None,
+                "question_number": 1,
+                "total_questions": 25,
+                "topic": "agricultural_concepts",
+                "image_url": None,
             }
         finally:
             pass
@@ -265,14 +359,56 @@ class SlotManager:
             except Exception:
                 pass
 
-        state = InterviewState(interview_id, candidate_data, resume_parsed=resume_parsed)
+        past_questions = interview_data.get("past_questions", []) if interview_data else []
+        attempt_number = (interview_data.get("attempt_number") if interview_data else None) or session.get("attempt_number", 1)
+
+        state = InterviewState(
+            interview_id,
+            candidate_data,
+            resume_parsed=resume_parsed,
+            past_questions=past_questions,
+            attempt_number=attempt_number,
+        )
         for msg in messages:
             role = msg.get("role")
             content = msg.get("content")
             if role and content:
                 state.messages.append({"role": role, "content": content, "timestamp": msg.get("timestamp", "")})
         state.status = session.get("status", "active")
-        state.qa_pairs = qa_pairs
+        state.qa_pairs = list(qa_pairs) if qa_pairs else []
+        state.question_count = len(state.qa_pairs)
+
+        # Restore recent and pending question from messages or first_question
+        for msg in messages:
+            if msg.get("role") in ("assistant", "ai"):
+                q_text = msg.get("content", "")
+                if q_text:
+                    state.add_question(q_text)
+                    q_num = state.question_count + 1
+                    phase = msg.get("phase") or state.get_phase(q_num)
+                    topic = msg.get("topic") or state.get_topic_for_question(q_num)
+                    limit = state.get_time_limit_seconds(q_num)
+                    options = msg.get("options")
+                    state._pending_question = {
+                        "question": q_text,
+                        "topic": topic,
+                        "phase": phase,
+                        "options": options,
+                        "time_limit_seconds": limit,
+                    }
+
+        if not state._pending_question:
+            first_q = (interview_data.get("first_question") or "").strip()
+            if first_q:
+                state.add_question(first_q)
+                state._pending_question = {
+                    "question": first_q,
+                    "topic": state.get_topic_for_question(1),
+                    "phase": "core",
+                    "options": None,
+                    "time_limit_seconds": 120,
+                }
+
         _interviews[interview_id] = state
 
         try:

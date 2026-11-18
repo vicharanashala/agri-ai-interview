@@ -80,10 +80,14 @@ class LLMService:
 
         # Only apply truncation guard when explicitly required (question generation).
         # Evaluation responses are raw JSON ending in } — this check would discard them.
-        if require_ending_punctuation and content and content[-1] not in '.!?':
-            content = ""
+        content = (content or "").strip()
+        clean_content = content.strip(' "”\'`')
+        if require_ending_punctuation and clean_content:
+            if clean_content[-1] not in '.!?':
+                clean_content += "?"
+            content = clean_content
 
-        return content or "(No response)"
+        return content or ""
 
     async def generate_interview_question(
         self,
@@ -275,10 +279,39 @@ Questions MUST relate to agriculture, crops, soil, irrigation, or farming practi
                     last_question = None
             qa_pairs = reconstructed_qa
 
+        # Separate Part 1 (Core) and Part 2 (Rapid-Fire)
+        core_qa = []
+        rapid_fire_qa = []
+        for qa in (qa_pairs or []):
+            if qa.get("phase") == "rapid_fire" or qa.get("options"):
+                rapid_fire_qa.append(qa)
+            else:
+                core_qa.append(qa)
+
+        def is_mcq_correct(user_ans: str, correct_opt: str, opts: list) -> bool:
+            if not user_ans or not correct_opt:
+                return False
+            ans = str(user_ans).strip().upper()
+            corr = str(correct_opt).strip().upper()
+            if ans == corr or ans.startswith(f"{corr})") or ans.startswith(f"{corr}:") or ans.startswith(f"{corr} "):
+                return True
+            for opt in (opts or []):
+                opt_str = opt.strip()
+                if opt_str.upper().startswith(f"{corr})"):
+                    text_val = opt_str[2:].strip().lower()
+                    if text_val and text_val in str(user_ans).strip().lower():
+                        return True
+            return False
+
+        rf_correct_count = 0
+        for rf_item in rapid_fire_qa:
+            if is_mcq_correct(rf_item.get("answer"), rf_item.get("correct_option"), rf_item.get("options")):
+                rf_correct_count += 1
+
         if qa_pairs:
             qa_lines = []
             for qa in qa_pairs:
-                qa_lines.append(f"Topic: {qa.get('topic', 'unknown')}")
+                qa_lines.append(f"Topic: {qa.get('topic', 'unknown')} (Phase: {qa.get('phase', 'core')})")
                 qa_lines.append(f"Q: {qa.get('question', '')}")
                 qa_lines.append(f"A: {qa.get('answer', '')}\n")
             qa_text = "\n".join(qa_lines)
@@ -286,8 +319,16 @@ Questions MUST relate to agriculture, crops, soil, irrigation, or farming practi
         system_prompt = (
             "You are an expert agricultural HR evaluator.\n"
             + evaluation_system
-            + "\nEvaluate the candidate's interview performance. Return a JSON object with:\n"
-            + "- overall_score: integer 0-100\n"
+            + "\nEvaluate the candidate's interview performance for Part 1 (Core Questions) of the assessment.\n"
+            + "TIME-AWARE CALIBRATION (2-Minute Limit per Core Question):\n"
+            + "- The candidate had a strict 2-minute (120-second) countdown timer per question.\n"
+            + "- Do NOT expect lengthy essays or complete procedural manuals. Any concise response of 2 to 4 sentences (30–60 words) or structured bullet points that accurately identifies the core principle/causal factor and at least one practical field remedy MUST be awarded full depth marks.\n"
+            + "- Do NOT deduct marks for brevity if the essential technical answer is present.\n"
+            + "- Do NOT penalize minor typos or spelling slips if the technical meaning is identifiable.\n"
+            + "- Completely wrong facts, off-topic ramblings, 'I don't know', or meaningless text must receive 0 for that question.\n"
+            + "- Partially correct answers receive partial credit (e.g. 4-6 out of 10).\n"
+            + "- STRICT LANGUAGE PENALTY: The candidate MUST answer in English. If the candidate answers in Hinglish, Malayalam, Hindi, etc., assign a score of 0 for those answers.\n\n"
+            + "Return a JSON object with:\n"
             + '- topic_scores: {\n'
             + '    "agricultural_concepts": {"score": 0-10, "details": "extremely concise 1-2 sentence explanation"},\n'
             + '    "crop_management_practices": {"score": 0-10, "details": "extremely concise 1-2 sentence explanation"},\n'
@@ -301,13 +342,8 @@ Questions MUST relate to agriculture, crops, soil, irrigation, or farming practi
             + '"areas_for_improvement": ["area 1", "area 2"],\n'
             + '"recommendation": "pass/consider/reject with brief explanation"\n'
             + "}\n\n"
-            + "Score each topic on a scale of 0-10. CRITICAL: If a topic is NOT explicitly present in the provided Q&A pairs below, you MUST assign it a score of 0. Do not guess or hallucinate scores for unasked topics. "
-            + "Compute overall_score as: (sum of 6 topic scores / 6) * 10.\n"
-            + "CRITICAL CONSTRAINTS:\n"
-            + "1. Keep all text descriptions (details, summary) extremely concise to prevent output truncation.\n"
-            + "2. Never use unescaped double quotes inside JSON string values. Use single quotes if necessary.\n"
-            + "3. Output ONLY the JSON block, starting with { and ending with }.\n"
-            + "4. STRICT LANGUAGE PENALTY: The candidate MUST answer in English. If the candidate answers in a non-English language (like Hinglish, Manglish, Hindi, etc.), you MUST give them a score of 0 for those answers. If they use it for all questions, their overall score MUST be 0. State this clearly in the summary."
+            + "Score each topic on a scale of 0-10. CRITICAL: If a topic is NOT explicitly present in the provided Q&A pairs, you MUST assign it a score of 0.\n"
+            + "Keep all text descriptions extremely concise. Output ONLY the JSON block, starting with { and ending with }."
         )
 
         evaluation_prompt = f"""Evaluate this agricultural interview candidate comprehensively:
@@ -391,7 +427,22 @@ Return your evaluation as valid JSON only, no other text. Ensure all fields are 
 
             ts = evaluation["topic_scores"]
             topic_sum = sum(ts[t].get("score", 0) for t in required_topics)
-            evaluation["overall_score"] = int((topic_sum / len(required_topics)) * 10)
+            core_avg_10 = topic_sum / len(required_topics)
+
+            # Consistent 70/30 Assessment Weighting:
+            # Part 1 (Core Questions): weighted out of 70
+            # Part 2 (Rapid-Fire MCQs): 12 MCQs * 2.5 marks = 30
+            part1_score = round((core_avg_10 / 10.0) * 70.0, 1)
+            part2_score = round(rf_correct_count * 2.5, 1) if rapid_fire_qa else 0.0
+            overall_score = int(round(part1_score + part2_score))
+
+            evaluation["part1_score"] = part1_score
+            evaluation["part2_score"] = part2_score
+            evaluation["part1_max"] = 70
+            evaluation["part2_max"] = 30
+            evaluation["rapid_fire_correct"] = rf_correct_count
+            evaluation["rapid_fire_total"] = len(rapid_fire_qa)
+            evaluation["overall_score"] = min(100, max(0, overall_score))
 
             return evaluation
         except Exception as e:

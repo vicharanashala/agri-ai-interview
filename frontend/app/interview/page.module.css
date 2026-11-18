@@ -72,7 +72,8 @@
   flex-direction: column;
 }
 
-.ai {
+.ai,
+.assistant {
   align-items: flex-start;
 }
 
@@ -88,7 +89,8 @@
   font-size: 15px;
 }
 
-.ai .messageContent {
+.ai .messageContent,
+.assistant .messageContent {
   background: #f1f5f9;
   color: #1e293b;
   border-bottom-left-radius: 4px;
@@ -1248,4 +1250,585 @@
   position: sticky;
   bottom: 0;
   z-index: 1;
+}
+
+
+/* Structured Assessment & Rapid-Fire Styles */
+.questionHeaderBar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 20px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  gap: 12px;
+}
+
+.questionMeta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.phaseBadgeCore {
+  background: #e0f2fe;
+  color: #0369a1;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.phaseBadgeRapid {
+  background: #fef3c7;
+  color: #b45309;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.questionTopicBadge {
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 12px;
+}
+
+.questionTimerContainer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.questionTimerBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: monospace;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 8px;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #1e293b;
+}
+
+.timerGreen {
+  color: #15803d;
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.timerYellow {
+  color: #a16207;
+  background: #fefce8;
+  border-color: #fef08a;
+}
+
+.timerRed {
+  color: #b91c1c;
+  background: #fef2f2;
+  border-color: #fecaca;
+  animation: pulseTimer 1s infinite alternate;
+}
+
+@keyframes pulseTimer {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.04); }
+}
+
+.timerProgressBar {
+  width: 100%;
+  height: 4px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+.timerProgressFill {
+  height: 100%;
+  transition: width 1s linear, background-color 0.5s ease;
+}
+
+/* Rapid Fire Option Card styles */
+.rapidFireContainer {
+  padding: 8px 16px;
+  background: #ffffff;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.rapidFireHint {
+  font-size: 13px;
+  color: #64748b;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.rapidFireQuestionBox {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-left: 4px solid #16a34a;
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
+.rapidFireQuestionText {
+  font-size: 14px;
+  line-height: 1.45;
+  color: #1e293b;
+  font-weight: 500;
+  margin: 0;
+}
+
+.optionsGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .optionsGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.optionCard {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+  text-align: left;
+  user-select: none;
+}
+
+.optionCard:hover {
+  border-color: #94a3b8;
+  background: #f8fafc;
+  transform: translateY(-1px);
+}
+
+.optionCardSelected {
+  border-color: #16a34a !important;
+  background: #f0fdf4 !important;
+  box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.2);
+}
+
+.optionLetter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  font-weight: 700;
+  font-size: 13px;
+  color: #334155;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.optionLetterSelected {
+  background: #16a34a;
+  color: #ffffff;
+}
+
+.optionText {
+  font-size: 13.5px;
+  line-height: 1.35;
+  color: #1e293b;
+  flex-grow: 1;
+}
+
+.rapidFireActions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding-top: 4px;
+  position: sticky;
+  bottom: 0;
+  background: #ffffff;
+}
+
+.rapidFireSubmitBtn {
+  background: #16a34a;
+  color: white;
+  padding: 10px 24px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.rapidFireSubmitBtn:hover:not(:disabled) {
+  background: #15803d;
+}
+
+.rapidFireSubmitBtn:disabled {
+  background: #94a3b8;
+  cursor: not-allowed;
+}
+
+.timeoutWarningBadge {
+  font-size: 12px;
+  color: #dc2626;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Visual Identification Question Images */
+.questionImageWrapper {
+  margin-top: 6px;
+  margin-bottom: 6px;
+  border-radius: 8px;
+  overflow: hidden;
+  max-width: 250px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+.questionImage {
+  width: 100%;
+  height: auto;
+  max-height: 135px;
+  object-fit: contain;
+  display: block;
+}
+
+.rapidFireImageWrapper {
+  margin: 4px 0 8px 0;
+  display: flex;
+  justify-content: center;
+}
+
+.rapidFireImage {
+  max-width: 260px;
+  max-height: 140px;
+  width: auto;
+  height: auto;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+  object-fit: contain;
+}
+
+/* ─── Webcam Proctoring Pre-Check (Instructions Screen) ─── */
+.webcamPrecheckSection {
+  margin: 22px 0 18px;
+  padding: 16px 18px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.webcamPrecheckHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.webcamPrecheckTitleBox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.webcamIcon {
+  font-size: 22px;
+}
+
+.webcamPrecheckTitle {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.webcamPrecheckSubtitle {
+  font-size: 12.5px;
+  color: #64748b;
+  margin: 2px 0 0;
+}
+
+.cameraStatusReady {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  background: #dcfce7;
+  color: #15803d;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.cameraStatusError {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  background: #fee2e2;
+  color: #b91c1c;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.cameraStatusChecking {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.webcamPreviewBox {
+  width: 100%;
+  max-width: 400px;
+  height: 230px;
+  margin: 0 auto;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #0f172a;
+  position: relative;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  border: 2px solid #cbd5e1;
+}
+
+.webcamVideoWrapper {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.precheckVideo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+  display: block;
+}
+
+.faceFramingGuide {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.faceOvalGuide {
+  width: 130px;
+  height: 160px;
+  border: 2px dashed rgba(255, 255, 255, 0.65);
+  border-radius: 50%;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.2);
+}
+
+.framingHint {
+  margin-top: 8px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #ffffff;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.webcamPlaceholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 20px;
+  text-align: center;
+  color: #94a3b8;
+}
+
+.webcamPlaceholderIcon {
+  font-size: 34px;
+  margin-bottom: 8px;
+}
+
+.webcamPlaceholderText {
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 0 0 12px;
+  max-width: 320px;
+  color: #cbd5e1;
+}
+
+.enableCamBtn {
+  background: #16a34a;
+  color: white;
+  border: none;
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.enableCamBtn:hover {
+  background: #15803d;
+}
+
+/* ─── Floating Webcam Monitor in Interview Room ─── */
+.floatingCamCard {
+  position: fixed;
+  z-index: 45;
+  width: 175px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #0f172a;
+  border: 2px solid #16a34a;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  transition: all 0.2s ease-in-out;
+}
+
+.floatingCamTopRight {
+  top: 135px;
+  right: 24px;
+}
+
+.floatingCamBottomLeft {
+  bottom: 90px;
+  left: 24px;
+}
+
+.floatingCamMinimized {
+  width: 145px !important;
+  border-color: #64748b;
+}
+
+.floatingCamHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 8px;
+  background: rgba(15, 23, 42, 0.95);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.liveIndicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #22c55e;
+  letter-spacing: 0.4px;
+}
+
+.liveDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ef4444;
+  display: inline-block;
+  animation: pulseDot 1.5s infinite;
+}
+
+@keyframes pulseDot {
+  0% { transform: scale(0.9); opacity: 0.8; }
+  50% { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(0.9); opacity: 0.8; }
+}
+
+.floatingCamControls {
+  display: flex;
+  gap: 3px;
+}
+
+.camControlBtn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 1px 4px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.camControlBtn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+}
+
+.floatingCamVideoWrapper {
+  width: 100%;
+  height: 122px;
+  background: #000000;
+  position: relative;
+}
+
+.interviewCamVideo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+  display: block;
+}
+
+.cameraWarningOverlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(185, 28, 28, 0.88);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  padding: 8px;
+}
+
+@media (max-width: 640px) {
+  .floatingCamCard {
+    width: 130px;
+  }
+  .floatingCamVideoWrapper {
+    height: 95px;
+  }
+  .webcamPreviewBox {
+    height: 190px;
+  }
 }

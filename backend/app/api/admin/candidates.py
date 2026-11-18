@@ -678,9 +678,16 @@ def get_active_interviews(_admin=Depends(require_admin_auth)):
             except Exception:
                 interview_data = {}
 
-        messages = interview_data.get("messages", [])
-        if not isinstance(messages, list):
-            messages = []
+        raw_messages = interview_data.get("messages", [])
+        if not isinstance(raw_messages, list):
+            raw_messages = []
+        messages = []
+        for m in raw_messages:
+            if messages:
+                last_m = messages[-1]
+                if last_m.get("role") == m.get("role") and (last_m.get("content") or "").strip() == (m.get("content") or "").strip():
+                    continue
+            messages.append(m)
 
         cid = s.get("candidate_id")
         candidate = cand_map.get(str(cid)) if cid else None
@@ -1551,9 +1558,16 @@ def get_all_evaluations(
             if sl not in candidate_name.lower() and sl not in (candidate_email or "").lower():
                 continue
 
-        messages = interview_data.get("messages", [])
-        if not isinstance(messages, list):
-            messages = []
+        raw_messages = interview_data.get("messages", [])
+        if not isinstance(raw_messages, list):
+            raw_messages = []
+        messages = []
+        for m in raw_messages:
+            if messages:
+                last_m = messages[-1]
+                if last_m.get("role") == m.get("role") and (last_m.get("content") or "").strip() == (m.get("content") or "").strip():
+                    continue
+            messages.append(m)
 
         if candidate_id:
             c_sessions = sess_by_cand.get(str(candidate_id), [])
@@ -1703,9 +1717,16 @@ def get_all_re_evaluations(
             if sl not in candidate_name.lower() and sl not in candidate_email.lower():
                 continue
 
-        messages = interview_data.get("messages", [])
-        if not isinstance(messages, list):
-            messages = []
+        raw_messages = interview_data.get("messages", [])
+        if not isinstance(raw_messages, list):
+            raw_messages = []
+        messages = []
+        for m in raw_messages:
+            if messages:
+                last_m = messages[-1]
+                if last_m.get("role") == m.get("role") and (last_m.get("content") or "").strip() == (m.get("content") or "").strip():
+                    continue
+            messages.append(m)
 
         if candidate_id:
             c_sessions = sess_by_cand.get(str(candidate_id), [])

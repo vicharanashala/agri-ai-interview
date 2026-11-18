@@ -123,7 +123,6 @@ jobs:
           image: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }}
           project_id: ${{ env.GCP_PROJECT_ID }}
           env_vars: |
-            TAILSCALE_AUTHKEY=${{ secrets.TAILSCALE_AUTHKEY }}
             MONGO_DB_NAME=${{ vars.MONGO_DB_NAME_PROD }}
             CORS_ORIGINS=${{ vars.CORS_ORIGINS_PROD }}
             LLM_BASE_URL=${{ vars.LLM_BASE_URL }}

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, Suspense } from "react";
 import { createPoller, isAbortError, startPolling, type Poller } from "../../../lib/polling";
 import styles from "./dashboard.module.css";
 import { serialNumber } from "@/lib/serial-number";
+import { currentLiveInterviews } from "@/lib/live-map";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import LiveTab from "../../../components/admin/LiveTab";
@@ -56,6 +57,9 @@ interface ActiveInterview {
   messagesCount: number;
   messages: { role: string; content: string; timestamp: string }[];
   currentPhase: string;
+  candidateState?: string;
+  candidateDistrict?: string;
+  status?: string;
 }
 
 interface EvaluationCriteria {
@@ -256,7 +260,8 @@ function AdminDashboard() {
     try {
       const res = await withAuth("/api/admin/interviews/active", { signal });
       if (res.ok) {
-        const interviews = (await res.json()).interviews || [];
+        // Live Chats and the Live Map share this list: ongoing sessions only, one per candidate
+        const interviews: ActiveInterview[] = currentLiveInterviews((await res.json()).interviews || []);
         // Unchanged polls skip the state update, so the dashboard does not re-render every 5s
         const json = JSON.stringify(interviews);
         if (json !== activeInterviewsJsonRef.current) {

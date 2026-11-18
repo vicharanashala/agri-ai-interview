@@ -52,6 +52,6 @@ export const config = {
      * - /admin (admin portal)
      * - static files
      */
-    '/((?!api|_next/static|_next/image|favicon.ico|admin).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|admin|.*\\.[a-zA-Z0-9]+$).*)',
   ],
 };

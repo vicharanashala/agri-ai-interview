@@ -629,21 +629,37 @@ async def reset_candidate_cooldown(candidate_id: str, _admin=Depends(require_adm
 
 # ── Active Interviews ─────────────────────────────────────────────────────────
 
+# Sessions that hold an interview slot; the Live tab narrows these to ongoing ones (frontend lib/live-map.ts)
+LIVE_SESSION_STATUSES = ["active", "interviewing", "paused"]
+
+
+def _registered_district(candidate: dict) -> str:
+    """District from the candidate profile; the typed-in name when "Others" was chosen."""
+    district = (candidate.get("district") or "").strip()
+    custom = (candidate.get("district_custom") or candidate.get("districtCustom") or "").strip()
+    if district.lower() in ("others", "other") and custom:
+        return custom
+    return district
+
+
 @router.get("/interviews/active")
 def get_active_interviews(_admin=Depends(require_admin_auth)):
     from bson import ObjectId
 
     db = get_sync_db()
-    # Polled every few seconds by the Live tab, so only the fields the response uses are loaded
+    # Read-only: polled every few seconds by the Live tab, so only the fields the response uses are loaded
     sessions = list(db.interview_sessions.find(
-        {"status": {"$in": ["active", "interviewing", "paused"]}},
-        {"candidate_id": 1, "started_at": 1, "current_phase": 1, "interview_data": 1},
+        {"status": {"$in": LIVE_SESSION_STATUSES}},
+        {"candidate_id": 1, "status": 1, "started_at": 1, "updated_at": 1, "current_phase": 1, "interview_data": 1},
     ).sort("started_at", -1).limit(100))
 
     cand_ids = [s.get("candidate_id") for s in sessions if s.get("candidate_id")]
     cand_vars = []
     for cid in cand_ids: cand_vars.extend(_get_id_variants(cid))
-    candidates = list(db.candidates.find({"_id": {"$in": cand_vars}}, {"full_name": 1, "user_id": 1}))
+    candidates = list(db.candidates.find(
+        {"_id": {"$in": cand_vars}},
+        {"full_name": 1, "user_id": 1, "state": 1, "district": 1, "district_custom": 1, "districtCustom": 1},
+    ))
     cand_map = {str(c["_id"]): c for c in candidates}
 
     user_ids = [c.get("user_id") for c in candidates if c.get("user_id")]
@@ -687,7 +703,11 @@ def get_active_interviews(_admin=Depends(require_admin_auth)):
             "id": s["_id"],
             "candidateId": s.get("candidate_id", ""),
             "candidateName": candidate_name,
+            "candidateState": (candidate.get("state") or "").strip(),
+            "candidateDistrict": _registered_district(candidate),
+            "status": s.get("status") or "active",
             "startedAt": s.get("started_at", ""),
+            "updatedAt": s.get("updated_at", ""),
             "messagesCount": len(messages),
             "messages": messages[-50:] if len(messages) > 50 else messages,
             "currentPhase": s.get("current_phase", "interview"),

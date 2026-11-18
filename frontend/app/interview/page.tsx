@@ -286,6 +286,25 @@ export default function InterviewPage() {
     return () => window.removeEventListener('popstate', handleBackButton);
   }, [interviewId, isComplete]);
 
+  // Periodic heartbeat keep-alive while candidate is actively attending the interview
+  useEffect(() => {
+    if (!interviewId || isComplete || showInstructions) return;
+    authFetch('/api/interview/heartbeat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ interview_id: interviewId, candidate_id: candidateId }),
+    }).catch(() => {});
+
+    const interval = setInterval(() => {
+      authFetch('/api/interview/heartbeat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ interview_id: interviewId, candidate_id: candidateId }),
+      }).catch(() => {});
+    }, 25_000);
+    return () => clearInterval(interval);
+  }, [interviewId, isComplete, showInstructions, candidateId]);
+
   // 6.4 — Handle resume from a paused interview state
   const handleResumeInterview = async () => {
     setIsResuming(true);
